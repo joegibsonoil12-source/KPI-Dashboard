@@ -19,7 +19,19 @@ import {
 } from "recharts";
 
 /** =========================================================
- *  Constants & Fallback Sample Data (used if no data.json)
+ *  Brand Theme (extracted from site-logo.svg)
+ * =======================================================*/
+const theme = {
+  primary: "#21253F",   // dark brand color (.st2)
+  accent:  "#B6BE82",   // green brand color (.st1)
+  background: "#F7F8FA",// subtle light bg
+  textMuted: "#6B7280",
+  border: "rgba(0,0,0,0.08)",
+};
+const logoUrl = "/site-logo.svg"; // put site-logo.svg in /public
+
+/** =========================================================
+ *  Constants & Fallback Sample Data (if no data.json)
  * =======================================================*/
 const STORAGE_KEY = "kpiDashboardState:v1";
 const DATA_JSON_URL = "/data.json"; // served from /public/data.json on GitHub Pages
@@ -59,7 +71,7 @@ const defaultTargets = {
 };
 
 /** =========================
- *  Helper functions
+ *  Helpers
  * ========================*/
 function formatPct(n) {
   if (n == null || Number.isNaN(n)) return "—";
@@ -83,17 +95,14 @@ function computeWorkingCapital(currentAssets, currentLiabilities) {
 // Deep-merge: fill any missing fields from repo history into local history, matching by month.
 function mergeHistory(localHist = [], repoHist = []) {
   const byMonth = new Map();
-  // seed with repo (acts as base truth)
   for (const r of repoHist || []) {
     if (r && r.month) byMonth.set(r.month, { ...r });
   }
-  // overlay local (local wins for conflicts; repo fills gaps)
   for (const l of localHist || []) {
     if (!l || !l.month) continue;
     const base = byMonth.get(l.month) || {};
-    byMonth.set(l.month, { ...base, ...l });
+    byMonth.set(l.month, { ...base, ...l }); // local wins; repo fills gaps
   }
-  // keep repo order, then any extra local months
   const ordered = [];
   const seen = new Set();
   for (const r of repoHist || []) {
@@ -111,13 +120,39 @@ function mergeHistory(localHist = [], repoHist = []) {
 /** =========================
  *  Small UI components
  * ========================*/
+function Btn({ children, onClick, variant = "primary" }) {
+  const base =
+    "rounded-xl px-3 py-2 text-sm transition border";
+  const style =
+    variant === "primary"
+      ? { background: theme.primary, color: "#fff", borderColor: theme.primary }
+      : variant === "ghost"
+      ? { background: "transparent", color: theme.primary, borderColor: theme.border }
+      : { background: theme.accent, color: "#1f2937", borderColor: theme.accent };
+  return (
+    <button onClick={onClick} className={base} style={style}>
+      {children}
+    </button>
+  );
+}
+
+function Card({ title, children, subtitle }) {
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm" style={{ border: `1px solid ${theme.border}` }}>
+      <h3 className="text-sm font-semibold" style={{ color: theme.primary }}>{title}</h3>
+      {subtitle && <div className="mt-0.5 text-xs" style={{ color: theme.textMuted }}>{subtitle}</div>}
+      <div className="mt-4">{children}</div>
+    </div>
+  );
+}
+
 function KpiCard({ title, value, target, formatter = (v) => v, children }) {
   return (
-    <div className="rounded-2xl border bg-white p-4 shadow-sm">
-      <h3 className="text-sm font-semibold text-slate-600">{title}</h3>
-      <div className="mt-2 text-2xl font-bold text-slate-900">{formatter(value)}</div>
+    <div className="rounded-2xl bg-white p-4 shadow-sm" style={{ border: `1px solid ${theme.border}` }}>
+      <h3 className="text-sm font-semibold" style={{ color: theme.primary }}>{title}</h3>
+      <div className="mt-2 text-2xl font-bold" style={{ color: theme.primary }}>{formatter(value)}</div>
       {target != null && (
-        <div className="mt-1 text-xs text-slate-500">Target: {formatter(target)}</div>
+        <div className="mt-1 text-xs" style={{ color: theme.textMuted }}>Target: {formatter(target)}</div>
       )}
       {children && <div className="mt-4">{children}</div>}
     </div>
@@ -284,17 +319,23 @@ export default function App() {
     { name: "SG&A", value: kpi.sgaPct },
     { name: "EBITDA", value: kpi.ebitdaPct },
   ];
-  const colors = ["#10b981", "#ef4444", "#3b82f6", "#f59e0b"];
+  const pieColors = [theme.accent, "#9BAA6E", "#D5DFB0", theme.primary];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white p-4">
+    <div style={{ minHeight: "100vh", background: theme.background }}>
+      <header className="border-b bg-white p-4" style={{ borderColor: theme.border }}>
         <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <h1 className="text-lg font-semibold">Company KPI Dashboard</h1>
+          <div className="flex items-center gap-3">
+            <img src={logoUrl} alt="Gibson Oil & Gas" className="h-10" />
+            <h1 className="text-lg font-bold" style={{ color: theme.primary }}>
+              Gibson Oil & Gas — KPI Dashboard
+            </h1>
+          </div>
           <div className="flex items-center gap-2">
             <select
               onChange={(e) => setViewOnly(e.target.value === "View")}
-              className="rounded-xl border px-2 py-1 text-sm"
+              className="rounded-xl px-2 py-2 text-sm"
+              style={{ border: `1px solid ${theme.border}`, color: theme.primary }}
               defaultValue="View"
               title="Switch between view-only and edit"
             >
@@ -302,22 +343,12 @@ export default function App() {
               <option value="Edit">Edit</option>
             </select>
 
-            {[
-              ["Save", saveState],
-              ["Load", loadState],
-              ["Reset", resetDefaults],
-              ["Import", () => fileInputRef.current?.click()],
-              ["Export", exportJson],
-              ["Reload Repo Data", loadRepoData],
-            ].map(([label, fn]) => (
-              <button
-                key={label}
-                onClick={fn}
-                className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50"
-              >
-                {label}
-              </button>
-            ))}
+            <Btn variant="ghost" onClick={saveState}>Save</Btn>
+            <Btn variant="ghost" onClick={loadState}>Load</Btn>
+            <Btn variant="ghost" onClick={resetDefaults}>Reset</Btn>
+            <Btn variant="ghost" onClick={() => fileInputRef.current?.click()}>Import</Btn>
+            <Btn variant="ghost" onClick={exportJson}>Export</Btn>
+            <Btn onClick={loadRepoData}>Reload Repo Data</Btn>
 
             <input
               ref={fileInputRef}
@@ -333,24 +364,34 @@ export default function App() {
       <main className="mx-auto max-w-7xl px-4 py-6">
         {/* KPI Cards */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <KpiCard title="Gross Margin %" value={kpi.grossMargin} target={kpiTargets.grossMargin} formatter={formatPct}>
+          <KpiCard
+            title="Gross Margin %"
+            value={kpi.grossMargin}
+            target={kpiTargets.grossMargin}
+            formatter={formatPct}
+          >
             <ResponsiveContainer width="100%" height={120}>
               <AreaChart data={marginSeries}>
                 <XAxis dataKey="month" hide />
                 <YAxis hide domain={["auto", "auto"]} />
                 <Tooltip formatter={(v) => formatPct(v)} />
-                <Area type="monotone" dataKey="value" />
+                <Area type="monotone" dataKey="value" stroke={theme.accent} fill={theme.accent} />
               </AreaChart>
             </ResponsiveContainer>
           </KpiCard>
 
-          <KpiCard title="EBITDA %" value={kpi.ebitdaPct} target={kpiTargets.ebitdaPct} formatter={formatPct}>
+          <KpiCard
+            title="EBITDA %"
+            value={kpi.ebitdaPct}
+            target={kpiTargets.ebitdaPct}
+            formatter={formatPct}
+          >
             <ResponsiveContainer width="100%" height={120}>
               <LineChart data={ebitdaSeries}>
                 <XAxis dataKey="month" hide />
                 <YAxis hide domain={["auto", "auto"]} />
                 <Tooltip formatter={(v) => formatPct(v)} />
-                <Line type="monotone" dataKey="value" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="value" stroke={theme.primary} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </KpiCard>
@@ -366,7 +407,7 @@ export default function App() {
                 <XAxis dataKey="month" hide />
                 <YAxis hide />
                 <Tooltip formatter={(v) => formatMoney(v)} />
-                <Bar dataKey="value" />
+                <Bar dataKey="value" fill={theme.accent} />
               </BarChart>
             </ResponsiveContainer>
           </KpiCard>
@@ -374,105 +415,113 @@ export default function App() {
 
         {/* Trends & Breakdown */}
         <section className="mt-8 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold">Profitability Trend</h3>
+          <Card title="Profitability Trend" subtitle="Gross Margin %, EBITDA %, and SG&A % over time">
             <ResponsiveContainer width="100%" height={260}>
               <LineChart data={history}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
-                {/* auto domain handles negatives and >100% cases */}
                 <YAxis domain={["auto", "auto"]} />
                 <Tooltip formatter={(v) => formatPct(v)} />
                 <Legend />
-                <Line type="monotone" dataKey="grossMargin" name="Gross Margin %" stroke="#0ea5e9" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="ebitdaPct"   name="EBITDA %"      stroke="#22c55e" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="sgaPct"      name="SG&A %"        stroke="#f59e0b" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="grossMargin" name="Gross Margin %" stroke={theme.accent} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="ebitdaPct"   name="EBITDA %"      stroke={theme.primary} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="sgaPct"      name="SG&A %"        stroke="#9BAA6E" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
-          </div>
+          </Card>
 
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h3 className="text-sm font-semibold">Cost Breakdown</h3>
+          <Card title="Cost Breakdown" subtitle="Training, Poor Quality, SG&A, EBITDA (share of revenue)">
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
-                <Pie data={[
-                    { name: "Training", value: kpi.trainingPct },
-                    { name: "Poor Quality", value: kpi.poorQualityPct },
-                    { name: "SG&A", value: kpi.sgaPct },
-                    { name: "EBITDA", value: kpi.ebitdaPct },
-                  ]}
+                <Pie
+                  data={pieData}
                   dataKey="value"
                   nameKey="name"
                   outerRadius={100}
                 >
-                  {[0,1,2,3].map((i) => <Cell key={i} fill={colors[i % colors.length]} />)}
+                  {pieData.map((_, i) => (
+                    <Cell key={i} fill={pieColors[i % pieColors.length]} />
+                  ))}
                 </Pie>
                 <Tooltip formatter={(v) => formatPct(v)} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
-          </div>
+          </Card>
         </section>
 
         {/* Working Capital Trend */}
-        <section className="mt-8 rounded-2xl border bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold">Working Capital Trend</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={history}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={(v) => formatMoney(v)} />
-              <Area type="monotone" dataKey="workingCapital" name="Working Capital" />
-            </AreaChart>
-          </ResponsiveContainer>
+        <section className="mt-8">
+          <Card title="Working Capital Trend" subtitle="Current Assets − Current Liabilities">
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={history}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip formatter={(v) => formatMoney(v)} />
+                <Area type="monotone" dataKey="workingCapital" name="Working Capital" stroke={theme.primary} fill={theme.accent} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Card>
         </section>
 
         {/* Manual Data Entry */}
-        <section className="mt-8 rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-700">Manual Data Entry</h3>
-            <span className="text-xs text-slate-500">{viewOnly ? "Toggle Edit to enable changes" : "Editing enabled"}</span>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Object.entries(kpi).map(([key, val]) => (
-              <div key={key} className="flex items-center justify-between gap-3 rounded-xl border p-3">
-                <label className="text-sm font-medium capitalize text-slate-700">{key}</label>
-                <input
-                  type="number"
-                  value={val ?? ""}
-                  disabled={viewOnly}
-                  onChange={(e) => updateKpiField(key, e.target.value)}
-                  className="w-40 rounded-lg border px-2 py-1 text-sm"
-                />
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-xs text-slate-500">Percentages are decimals (e.g., 0.53 = 53%). Money as plain numbers.</p>
+        <section className="mt-8">
+          <Card
+            title="Manual Data Entry"
+            subtitle={viewOnly ? "Toggle Edit to enable changes" : "Editing enabled"}
+          >
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Object.entries(kpi).map(([key, val]) => (
+                <div key={key} className="flex items-center justify-between gap-3 rounded-xl p-3"
+                     style={{ border: `1px solid ${theme.border}` }}>
+                  <label className="text-sm font-medium capitalize" style={{ color: theme.primary }}>
+                    {key}
+                  </label>
+                  <input
+                    type="number"
+                    value={val ?? ""}
+                    disabled={viewOnly}
+                    onChange={(e) => updateKpiField(key, e.target.value)}
+                    className="w-40 rounded-lg px-2 py-1 text-sm"
+                    style={{ border: `1px solid ${theme.border}` }}
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="mt-2 text-xs" style={{ color: theme.textMuted }}>
+              Percentages are decimals (e.g., 0.53 = 53%). Money as plain numbers.
+            </p>
+          </Card>
         </section>
 
-        {/* Targets & Settings */}
-        <section className="mt-8 rounded-2xl border bg-white p-4 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-700">Targets & Settings</h3>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Object.entries(kpiTargets).map(([key, val]) => (
-              <div key={key} className="flex items-center justify-between gap-3 rounded-xl border p-3">
-                <label className="text-sm font-semibold capitalize text-slate-700">{key}</label>
-                <input
-                  type="number"
-                  value={val ?? ""}
-                  disabled={viewOnly}
-                  onChange={(e) => setKpiTargets((t) => ({ ...t, [key]: Number(e.target.value) }))}
-                  className="w-40 rounded-lg border px-2 py-1 text-sm"
-                />
-              </div>
-            ))}
-          </div>
+        {/* Targets */}
+        <section className="mt-8">
+          <Card title="Targets & Settings">
+            <div className="mt-2 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {Object.entries(kpiTargets).map(([key, val]) => (
+                <div key={key} className="flex items-center justify-between gap-3 rounded-xl p-3"
+                     style={{ border: `1px solid ${theme.border}` }}>
+                  <label className="text-sm font-semibold capitalize" style={{ color: theme.primary }}>
+                    {key}
+                  </label>
+                  <input
+                    type="number"
+                    value={val ?? ""}
+                    disabled={viewOnly}
+                    onChange={(e) => setKpiTargets((t) => ({ ...t, [key]: Number(e.target.value) }))}
+                    className="w-40 rounded-lg px-2 py-1 text-sm"
+                    style={{ border: `1px solid ${theme.border}` }}
+                  />
+                </div>
+              ))}
+            </div>
+          </Card>
         </section>
       </main>
 
-      <footer className="mt-10 border-t py-6 text-center text-xs text-slate-500">
-        Built for Joe's Workspace — on-page storage + repo data.json. Refresh-safe.
+      <footer className="mt-10 py-6 text-center text-xs" style={{ color: theme.textMuted }}>
+        Built for Joe&apos;s Workspace — brand-themed (green + dark), refresh-safe with repo data.
       </footer>
     </div>
   );
