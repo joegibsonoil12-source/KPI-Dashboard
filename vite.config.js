@@ -1,10 +1,8 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
-// vite.config.js
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-const repo = process.env.GITHUB_REPOSITORY ? process.env.GITHUB_REPOSITORY.split('/')[1] : ''
+// IMPORTANT: match your GitHub repo name here
 export default defineConfig({
+  base: "/KPI-Dashboard/",
   plugins: [react()],
-  base: repo ? `/${repo}/` : '/',
-})
+});
