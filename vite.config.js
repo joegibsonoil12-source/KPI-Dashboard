@@ -1,8 +1,8 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-// IMPORTANT: match your GitHub repo name here
+// https://vitejs.dev/config/
 export default defineConfig({
-  base: "/KPI-Dashboard/",
   plugins: [react()],
-});
+  base: '/KPI-Dashboard/', // IMPORTANT: match your repo name exactly
+})
