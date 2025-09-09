@@ -1,21 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  AreaChart, Area, BarChart, Bar, Legend, CartesianGrid, PieChart, Pie, Cell,
+  AreaChart, Area, BarChart, Bar, Legend, CartesianGrid,
+  PieChart, Pie, Cell,
 } from "recharts";
 
-/* ===== Brand ===== */
+/** ================= Brand ================= */
 const BRAND = {
-  primary: "#21253F",
-  secondary: "#B6BE82",
-  accent: "#B6BE82",
+  primary: "#21253F",   // navy from logo
+  secondary: "#B6BE82", // green from logo
   neutral: "#111827",
   surface: "#FFFFFF",
-  bg: "#F6F8FB",
+  border: "#E5E7EB",
 };
-const LOGO_URL = "/site-logo.svg"; // optional
+const LOGO_URL = "/site-logo.svg"; // keep in /public
 
-/* ===== Safe defaults (used as fallbacks) ===== */
+/** ================ Data Defaults ================= */
 const sampleHistory = [
   { month: "Jan", grossMargin: 0.43, ebitdaPct: 0.11, sgaPct: 0.22, workingCapital: 180000 },
   { month: "Feb", grossMargin: 0.46, ebitdaPct: 0.12, sgaPct: 0.215, workingCapital: 192000 },
@@ -59,414 +59,150 @@ const defaultTargets = {
 const STORAGE_KEY = "kpiDashboardState:v1";
 const DATA_JSON_URL = "/data.json";
 
-/* ===== Helpers (safe) ===== */
-const formatPct = (n) => (typeof n === "number" ? `${(n * 100).toFixed(1)}%` : "—");
-const formatMoney = (n) =>
-  typeof n === "number"
-    ? n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })
-    : "—";
-
-function computeRevenuePerEmployee(revenue, headcount) {
-  return typeof revenue === "number" && typeof headcount === "number" && headcount !== 0
-    ? revenue / headcount
-    : null;
+/** ================ Helpers ================= */
+function formatPct(n) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return `${(n * 100).toFixed(1)}%`;
 }
-function computeCAC(spend, newCustomers) {
-  return typeof spend === "number" && typeof newCustomers === "number" && newCustomers !== 0
-    ? spend / newCustomers
-    : null;
-}
-function computeWorkingCapital(currentAssets, currentLiabilities) {
-  if (typeof currentAssets !== "number" || typeof currentLiabilities !== "number") return null;
-  return currentAssets - currentLiabilities;
+function formatMoney(n) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
 function mergeHistory(localHist = [], repoHist = []) {
-  const l = Array.isArray(localHist) ? localHist : [];
-  const r = Array.isArray(repoHist) ? repoHist : [];
   const byMonth = new Map();
-  for (const row of r) if (row && row.month) byMonth.set(row.month, { ...row });
-  for (const row of l) if (row && row.month) byMonth.set(row.month, { ...(byMonth.get(row.month) || {}), ...row });
-  const ordered = [];
+  for (const r of repoHist) if (r?.month) byMonth.set(r.month, { ...r });
+  for (const l of localHist) if (l?.month) byMonth.set(l.month, { ...(byMonth.get(l.month) || {}), ...l });
+  const order = [];
   const seen = new Set();
-  for (const row of r) if (row && row.month && !seen.has(row.month)) { ordered.push(byMonth.get(row.month)); seen.add(row.month); }
-  for (const [m, v] of byMonth) if (!seen.has(m)) ordered.push(v);
-  return ordered;
+  for (const r of repoHist) if (r?.month && !seen.has(r.month)) { order.push(byMonth.get(r.month)); seen.add(r.month); }
+  for (const [m, v] of byMonth.entries()) if (!seen.has(m)) order.push(v);
+  return order;
 }
 
-/* ===== Minimal styles for the shell + inputs ===== */
-const styles = `
-  .app-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh;background:${BRAND.bg}}
-  .sidebar{background:${BRAND.primary};color:#fff;display:flex;flex-direction:column}
-  .brand{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.15)}
-  .nav a{display:flex;align-items:center;gap:10px;padding:10px 16px;color:#dbeafe;text-decoration:none;border-left:4px solid transparent}
-  .nav a.active{background:rgba(255,255,255,.08);border-left-color:${BRAND.secondary};color:#fff}
-  .topbar{background:#fff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;justify-content:space-between;padding:10px 16px}
-  .page{padding:16px}
-  .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .grid{display:grid;gap:16px}
-  .grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
-  @media (max-width: 1100px){.grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}}
-  @media (max-width: 800px){.app-shell{grid-template-columns:1fr}.sidebar{display:none}.grid-3,.grid-2{grid-template-columns:1fr}}
-  .btn{border:1px solid #e5e7eb;border-radius:12px;padding:8px 12px;background:#fff;cursor:pointer}
-  .btn:active{transform:translateY(1px)}
-  .muted{color:#6b7280;font-size:12px}
-  .headline{font-weight:600;margin-bottom:8px}
-  .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}
-  .input{width:140px;border:1px solid #e5e7eb;border-radius:10px;padding:6px 8px}
-  .pill{font-size:12px;border:1px solid #e5e7eb;border-radius:999px;padding:4px 8px;background:#fff}
-`;
+function computeRevenuePerEmployee(revenue, headcount) {
+  return revenue && headcount ? revenue / headcount : null;
+}
+function computeCAC(spend, newCustomers) {
+  return spend && newCustomers ? spend / newCustomers : null;
+}
+function computeWorkingCapital(currentAssets, currentLiabilities) {
+  if (currentAssets == null || currentLiabilities == null) return null;
+  return currentAssets - currentLiabilities;
+}
 
-/* ===== Reusable card ===== */
+/** ================ Small UI bits ================= */
 function KpiCard({ title, value, target, formatter = (v) => v, children }) {
   return (
-    <div className="card">
-      <div className="muted">{title}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>{formatter(value)}</div>
-      {typeof target === "number" && <div className="muted">Target: {formatter(target)}</div>}
-      {children && <div style={{ marginTop: 12 }}>{children}</div>}
+    <div className="rounded-2xl border p-4 shadow-sm" style={{ backgroundColor: BRAND.surface, borderColor: BRAND.border }}>
+      <h3 className="text-sm font-semibold" style={{ color: "#475569" }}>{title}</h3>
+      <div className="mt-2 text-2xl font-bold" style={{ color: "#0f172a" }}>{formatter(value)}</div>
+      {target != null && <div className="mt-1 text-xs" style={{ color: "#64748b" }}>Target: {formatter(target)}</div>}
+      {children && <div className="mt-4">{children}</div>}
     </div>
   );
 }
 
-/* ===== Editable sections ===== */
-function ManualEntry({ kpi, setKpi, viewOnly }) {
-  const updateKpiField = (key, raw) => {
-    const v = raw === "" ? "" : Number(raw);
-    const next = { ...kpi, [key]: raw === "" ? "" : (Number.isFinite(v) ? v : null) };
-
-    // recompute dependents
-    const rev = key === "revenue" ? v : kpi.revenue;
-    const hc = key === "headcount" ? v : kpi.headcount;
-    next.revenuePerEmployee = computeRevenuePerEmployee(rev, hc);
-
-    const spend = key === "salesMktgSpend" ? v : kpi.salesMktgSpend;
-    const newc = key === "newCustomers" ? v : kpi.newCustomers;
-    next.cac = computeCAC(spend, newc);
-
-    const ca = key === "currentAssets" ? v : kpi.currentAssets;
-    const cl = key === "currentLiabilities" ? v : kpi.currentLiabilities;
-    next.workingCapital = computeWorkingCapital(ca, cl);
-
-    setKpi(next);
-  };
-
-  const field = (label, key) => (
-    <div className="row">
-      <label className="muted" style={{ textTransform: "capitalize" }}>{label}</label>
-      <input
-        className="input"
-        type="number"
-        value={kpi?.[key] ?? ""}
-        disabled={viewOnly}
-        onChange={(e) => updateKpiField(key, e.target.value)}
-      />
-    </div>
-  );
-
+function Section({ title, children, right }) {
   return (
-    <div className="card">
-      <div className="headline">Manual Data Entry</div>
-      <div className="grid grid-3">
-        {field("revenue", "revenue")}
-        {field("headcount", "headcount")}
-        <div className="row">
-          <label className="muted">RevenuePerEmployee</label>
-          <input className="input" type="number" value={kpi?.revenuePerEmployee ?? ""} disabled />
-        </div>
-
-        {field("newCustomers", "newCustomers")}
-        {field("salesMktgSpend", "salesMktgSpend")}
-        <div className="row">
-          <label className="muted">CAC</label>
-          <input className="input" type="number" value={kpi?.cac ?? ""} disabled />
-        </div>
-
-        {field("currentAssets", "currentAssets")}
-        {field("currentLiabilities", "currentLiabilities")}
-        <div className="row">
-          <label className="muted">WorkingCapital</label>
-          <input className="input" type="number" value={kpi?.workingCapital ?? ""} disabled />
-        </div>
-
-        {field("grossMargin (decimal)", "grossMargin")}
-        {field("ebitdaPct (decimal)", "ebitdaPct")}
-        {field("sgaPct (decimal)", "sgaPct")}
-
-        {field("trainingPct (decimal)", "trainingPct")}
-        {field("poorQualityPct (decimal)", "poorQualityPct")}
+    <section className="rounded-2xl border p-4 shadow-sm" style={{ background: BRAND.surface, borderColor: BRAND.border }}>
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold" style={{ color: "#334155" }}>{title}</h3>
+        {right}
       </div>
-      <div className="muted" style={{ marginTop: 8 }}>Percentages are decimals (e.g., 0.53 = 53%). Money as plain numbers.</div>
-    </div>
+      {children}
+    </section>
   );
 }
 
-function TargetsEditor({ targets, setTargets, viewOnly }) {
-  const field = (label, key) => (
-    <div className="row">
-      <label className="muted" style={{ textTransform: "capitalize" }}>{label}</label>
-      <input
-        className="input"
-        type="number"
-        value={targets?.[key] ?? ""}
-        disabled={viewOnly}
-        onChange={(e) => {
-          const v = e.target.value === "" ? "" : Number(e.target.value);
-          setTargets((t) => ({ ...t, [key]: e.target.value === "" ? "" : (Number.isFinite(v) ? v : null) }));
-        }}
-      />
-    </div>
-  );
-
-  return (
-    <div className="card">
-      <div className="headline">Targets & Settings</div>
-      <div className="grid grid-3">
-        {field("grossMargin", "grossMargin")}
-        {field("ebitdaPct", "ebitdaPct")}
-        {field("sgaPct", "sgaPct")}
-        {field("revenuePerEmployee", "revenuePerEmployee")}
-        {field("cac", "cac")}
-        {field("workingCapital", "workingCapital")}
-        {field("trainingPct", "trainingPct")}
-        {field("poorQualityPct", "poorQualityPct")}
-      </div>
-    </div>
-  );
-}
-
-/* ===== Pages ===== */
-function DashboardPage({ kpi, kpiTargets, history, setKpi, setKpiTargets, viewOnly }) {
-  const safeHistory = Array.isArray(history) ? history : [];
-
-  const revPerEmpSeries = useMemo(
-    () => safeHistory.map((d) => ({ month: d.month, value: kpi?.revenuePerEmployee ?? null })),
-    [safeHistory, kpi?.revenuePerEmployee]
-  );
-  const marginSeries = useMemo(
-    () => safeHistory.map((d) => ({ month: d.month, value: d?.grossMargin ?? null })),
-    [safeHistory]
-  );
-  const ebitdaSeries = useMemo(
-    () => safeHistory.map((d) => ({ month: d.month, value: d?.ebitdaPct ?? null })),
-    [safeHistory]
-  );
-  const pieData = [
-    { name: "Training", value: kpi?.trainingPct ?? 0 },
-    { name: "Poor Quality", value: kpi?.poorQualityPct ?? 0 },
-    { name: "SG&A", value: kpi?.sgaPct ?? 0 },
-    { name: "EBITDA", value: kpi?.ebitdaPct ?? 0 },
-  ];
-  const colors = [BRAND.secondary, "#ef4444", BRAND.primary, BRAND.accent];
-
-  return (
-    <div className="page">
-      <div className="grid grid-3">
-        <KpiCard title="Gross Margin %" value={kpi?.grossMargin} target={kpiTargets?.grossMargin} formatter={formatPct}>
-          <ResponsiveContainer width="100%" height={120}>
-            <AreaChart data={marginSeries}>
-              <XAxis dataKey="month" hide />
-              <YAxis hide domain={[0, 1]} />
-              <Tooltip formatter={formatPct} />
-              <Area type="monotone" dataKey="value" stroke={BRAND.primary} fill={BRAND.secondary} fillOpacity={0.35} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </KpiCard>
-
-        <KpiCard title="EBITDA %" value={kpi?.ebitdaPct} target={kpiTargets?.ebitdaPct} formatter={formatPct}>
-          <ResponsiveContainer width="100%" height={120}>
-            <LineChart data={ebitdaSeries}>
-              <XAxis dataKey="month" hide />
-              <YAxis hide domain={[0, 1]} />
-              <Tooltip formatter={formatPct} />
-              <Line type="monotone" dataKey="value" stroke={BRAND.primary} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </KpiCard>
-
-        <KpiCard title="Revenue per Employee" value={kpi?.revenuePerEmployee} target={kpiTargets?.revenuePerEmployee} formatter={formatMoney}>
-          <ResponsiveContainer width="100%" height={120}>
-            <BarChart data={revPerEmpSeries}>
-              <XAxis dataKey="month" hide />
-              <YAxis hide />
-              <Tooltip formatter={formatMoney} />
-              <Bar dataKey="value" fill={BRAND.secondary} />
-            </BarChart>
-          </ResponsiveContainer>
-        </KpiCard>
-      </div>
-
-      <div className="grid grid-3" style={{ marginTop: 16 }}>
-        <div className="card">
-          <div className="headline">Profitability Trend</div>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={safeHistory}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis domain={["auto", "auto"]} />
-              <Tooltip formatter={formatPct} />
-              <Legend />
-              <Line type="monotone" dataKey="grossMargin" name="Gross Margin %" stroke={BRAND.primary} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="ebitdaPct" name="EBITDA %" stroke={BRAND.secondary} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="sgaPct" name="SG&A %" stroke="#9CA3AF" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="card">
-          <div className="headline">Cost Breakdown</div>
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={100}>
-                {pieData.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
-              </Pie>
-              <Tooltip formatter={formatPct} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="card">
-          <div className="headline">Working Capital Trend</div>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={safeHistory}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={formatMoney} />
-              <Legend />
-              <Line type="monotone" dataKey="workingCapital" name="Working Capital" stroke={BRAND.primary} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="muted" style={{ marginTop: 8 }}>
-            Latest WC comes from your Balance Sheet import. Months without values will show a gap until provided.
-          </div>
-        </div>
-      </div>
-
-      {/* Editable sections */}
-      <div className="grid" style={{ marginTop: 16 }}>
-        <ManualEntry kpi={kpi} setKpi={setKpi} viewOnly={viewOnly} />
-        <TargetsEditor targets={kpiTargets} setTargets={setKpiTargets} viewOnly={viewOnly} />
-      </div>
-    </div>
-  );
-}
-
-function BudgetPage() {
-  return (
-    <div className="page">
-      <div className="card">
-        <div className="headline">Budget Planner</div>
-        <div className="muted">Budget planning module coming soon. (We’ll add uploads, categories, and variance tracking here.)</div>
-      </div>
-    </div>
-  );
-}
-
-function OpsKpisPage() {
-  return (
-    <div className="page">
-      <div className="grid grid-2">
-        <div className="card">
-          <div className="headline">Revenue per Employee vs Cost per Employee</div>
-          <div className="muted">Hook up payroll/employee cost data here; we’ll chart Rev/Emp vs Cost/Emp and a margin.</div>
-          <div className="pill" style={{ marginTop: 8 }}>Next: connect payroll export</div>
-        </div>
-        <div className="card">
-          <div className="headline">Truck Cost per Delivery / per Stop</div>
-          <div className="muted">Wire to Geotab, Suburban, Housecall Pro: cost per mile, per route, per stop.</div>
-          <div className="pill" style={{ marginTop: 8 }}>Next: connect Geotab & job data</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ===== Shell + App ===== */
+/** ================ Main App ================= */
 export default function App() {
-  const [active, setActive] = useState("dashboard"); // 'dashboard' | 'budget' | 'ops'
-  const [kpiTargets, setKpiTargets] = useState({ ...defaultTargets });
-  const [kpi, setKpi] = useState({ ...sampleKpis });
-  const [history, setHistory] = useState([...sampleHistory]);
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [kpiTargets, setKpiTargets] = useState(defaultTargets);
+  const [kpi, setKpi] = useState(sampleKpis);
+  const [history, setHistory] = useState(sampleHistory);
   const [viewOnly, setViewOnly] = useState(true);
   const [storageError, setStorageError] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Restore + fetch
+  // restore & hydrate from repo data.json
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed?.kpi) setKpi((k) => ({ ...k, ...parsed.kpi }));
-        if (parsed?.kpiTargets) setKpiTargets((t) => ({ ...t, ...parsed.kpiTargets }));
-        if (Array.isArray(parsed?.history)) setHistory((h) => mergeHistory(h, parsed.history));
+        if (parsed.kpi) setKpi(parsed.kpi);
+        if (parsed.kpiTargets) setKpiTargets(parsed.kpiTargets);
+        if (parsed.history) setHistory(parsed.history);
       }
     } catch {
-      setStorageError("Could not read saved data (localStorage).");
+      setStorageError("Could not read saved data (localStorage blocked).");
     }
     (async () => {
       try {
         const res = await fetch(DATA_JSON_URL, { cache: "no-store" });
-        if (res.ok) {
-          const base = await res.json().catch(() => null);
-          if (base?.kpi) setKpi((k) => ({ ...base.kpi, ...k }));
-          if (base?.kpiTargets) setKpiTargets((t) => ({ ...base.kpiTargets, ...t }));
-          if (Array.isArray(base?.history)) setHistory((h) => mergeHistory(h, base.history));
-        }
+        if (!res.ok) return;
+        const base = await res.json();
+        if (base.kpi) setKpi((k) => ({ ...base.kpi, ...k }));
+        if (base.kpiTargets) setKpiTargets((t) => ({ ...base.kpiTargets, ...t }));
+        if (Array.isArray(base.history)) setHistory((h) => mergeHistory(h, base.history));
       } catch {}
     })();
   }, []);
 
-  // Auto-save
+  // persist
   useEffect(() => {
     try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          kpi: kpi || {},
-          kpiTargets: kpiTargets || {},
-          history: Array.isArray(history) ? history : [],
-          savedAt: new Date().toISOString(),
-        })
-      );
+      const payload = { kpi, kpiTargets, history, savedAt: new Date().toISOString() };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
-      setStorageError("Saving is blocked by your browser (localStorage unavailable).");
+      setStorageError("Saving blocked (localStorage).");
     }
   }, [kpi, kpiTargets, history]);
 
+  // actions
+  const saveState = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi, kpiTargets, history, savedAt: new Date().toISOString() }));
+      alert("Saved.");
+    } catch { alert("Save failed."); }
+  };
+  const loadState = () => {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return alert("No saved data.");
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.kpi) setKpi(parsed.kpi);
+      if (parsed.kpiTargets) setKpiTargets(parsed.kpiTargets);
+      if (parsed.history) setHistory(parsed.history);
+      alert("Loaded.");
+    } catch { alert("Could not load."); }
+  };
+  const resetDefaults = () => {
+    if (!confirm("Reset to defaults?")) return;
+    setKpi({ ...sampleKpis });
+    setKpiTargets({ ...defaultTargets });
+    setHistory([...sampleHistory]);
+  };
   const exportJson = () => {
-    const payload = { kpi: kpi || {}, kpiTargets: kpiTargets || {}, history: Array.isArray(history) ? history : [] };
+    const payload = { kpi, kpiTargets, history };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "kpi-dashboard-data.json";
-    a.click();
+    a.href = url; a.download = "kpi-dashboard-data.json"; a.click();
     URL.revokeObjectURL(url);
   };
-
   const loadRepoData = async () => {
     try {
       const res = await fetch(DATA_JSON_URL, { cache: "no-store" });
-      if (!res.ok) return alert("No data.json found in repo. Add public/data.json and redeploy.");
-      const base = await res.json().catch(() => null);
-      if (!base) return alert("Invalid data.json");
+      if (!res.ok) return alert("No data.json found (add public/data.json).");
+      const base = await res.json();
       if (base.kpi) setKpi(base.kpi);
       if (base.kpiTargets) setKpiTargets(base.kpiTargets);
       if (base.history) setHistory(base.history);
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          kpi: base.kpi || {}, kpiTargets: base.kpiTargets || {}, history: base.history || [], savedAt: new Date().toISOString(),
-        }));
-      } catch {}
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: base.kpi, kpiTargets: base.kpiTargets, history: base.history, savedAt: new Date().toISOString() })); } catch {}
       alert("Loaded from repo data.json");
-    } catch {
-      alert("Could not fetch data.json");
-    }
+    } catch { alert("Could not fetch data.json"); }
   };
-
   const onImportFile = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -477,105 +213,362 @@ export default function App() {
         if (parsed.kpi) setKpi(parsed.kpi);
         if (parsed.kpiTargets) setKpiTargets(parsed.kpiTargets);
         if (parsed.history) setHistory(parsed.history);
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            kpi: parsed.kpi ?? kpi,
-            kpiTargets: parsed.kpiTargets ?? kpiTargets,
-            history: parsed.history ?? history,
-            savedAt: new Date().toISOString(),
-          }));
-        } catch {}
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: parsed.kpi ?? kpi, kpiTargets: parsed.kpiTargets ?? kpiTargets, history: parsed.history ?? history, savedAt: new Date().toISOString() })); } catch {}
         alert("Imported and saved.");
-      } catch {
-        alert("Invalid JSON.");
-      } finally {
-        e.target.value = "";
-      }
+      } catch { alert("Invalid JSON."); }
+      e.target.value = "";
     };
     reader.readAsText(f);
   };
 
-  const content =
-    active === "dashboard" ? (
-      <DashboardPage
-        kpi={kpi}
-        kpiTargets={kpiTargets}
-        history={history}
-        setKpi={setKpi}
-        setKpiTargets={setKpiTargets}
-        viewOnly={viewOnly}
-      />
-    ) : active === "budget" ? (
-      <BudgetPage />
-    ) : (
-      <OpsKpisPage />
-    );
+  // derived series
+  const revPerEmpSeries = useMemo(
+    () => history.map((d) => ({ month: d.month, value: kpi.revenuePerEmployee })),
+    [history, kpi.revenuePerEmployee]
+  );
+  const marginSeries = useMemo(() => history.map((d) => ({ month: d.month, value: d.grossMargin })), [history]);
+  const ebitdaSeries = useMemo(() => history.map((d) => ({ month: d.month, value: d.ebitdaPct })), [history]);
 
-  return (
-    <>
-      <style>{styles}</style>
-      <div className="app-shell">
-        {/* Sidebar */}
-        <aside className="sidebar">
-          <div className="brand">
-            <img
-              src={LOGO_URL}
-              alt=""
-              width="28"
-              height="28"
-              onError={(e) => (e.currentTarget.style.display = "none")}
-              style={{ borderRadius: 6 }}
-            />
-            <div style={{ fontWeight: 600 }}>Gibson Oil & Gas</div>
-          </div>
-          <nav className="nav">
-            <a className={active === "dashboard" ? "active" : ""} href="#" onClick={(e) => { e.preventDefault(); setActive("dashboard"); }}>
-              Dashboard
-            </a>
-            <a className={active === "budget" ? "active" : ""} href="#" onClick={(e) => { e.preventDefault(); setActive("budget"); }}>
-              Budget
-            </a>
-            <a className={active === "ops" ? "active" : ""} href="#" onClick={(e) => { e.preventDefault(); setActive("ops"); }}>
-              Operational KPIs
-            </a>
-          </nav>
-          <div style={{ marginTop: "auto", padding: 12, fontSize: 12, color: "#cbd5e1" }}>
-            © {new Date().getFullYear()}
-          </div>
-        </aside>
+  // field updater (recompute dependents)
+  const updateKpiField = (key, val) => {
+    const v = Number(val);
+    const next = { ...kpi, [key]: Number.isNaN(v) ? null : v };
+    if (key === "revenue" || key === "headcount") {
+      const rev = key === "revenue" ? v : kpi.revenue;
+      const hc  = key === "headcount" ? v : kpi.headcount;
+      next.revenuePerEmployee = computeRevenuePerEmployee(rev, hc);
+    }
+    if (key === "salesMktgSpend" || key === "newCustomers") {
+      const spend = key === "salesMktgSpend" ? v : kpi.salesMktgSpend;
+      const newc  = key === "newCustomers"  ? v : kpi.newCustomers;
+      next.cac = computeCAC(spend, newc);
+    }
+    if (key === "currentAssets" || key === "currentLiabilities") {
+      const ca = key === "currentAssets" ? v : kpi.currentAssets;
+      const cl = key === "currentLiabilities" ? v : kpi.currentLiabilities;
+      next.workingCapital = computeWorkingCapital(ca, cl);
+    }
+    setKpi(next);
+  };
 
-        {/* Main column */}
-        <div style={{ display: "grid", gridTemplateRows: "auto 1fr", minHeight: "100vh" }}>
-          {/* Top bar */}
-          <div className="topbar">
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ fontWeight: 600 }}>
-                {active === "dashboard" ? "KPI Dashboard" : active === "budget" ? "Budget Planner" : "Operational KPIs"}
-              </div>
-              <div className="muted">— View-only:&nbsp;</div>
-              <label className="muted" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <input type="checkbox" checked={viewOnly} onChange={(e) => setViewOnly(e.target.checked)} /> {viewOnly ? "on" : "off"}
-              </label>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button className="btn" onClick={() => fileInputRef.current?.click()}>Import</button>
-              <button className="btn" onClick={exportJson}>Export</button>
-              <button className="btn" onClick={loadRepoData}>Reload Repo Data</button>
-              <input ref={fileInputRef} type="file" accept="application/json" onChange={onImportFile} style={{ display: "none" }} />
-            </div>
-          </div>
+  const scenarios = {
+    Baseline: { ...kpi },
+    Stretch:  { ...kpi, grossMargin: 0.58, ebitdaPct: 0.20, sgaPct: 0.18 },
+    Downside: { ...kpi, grossMargin: 0.45, ebitdaPct: 0.12, sgaPct: 0.25 },
+  };
 
-          {/* Page content */}
-          {storageError && (
-            <div className="page">
-              <div className="card" style={{ background: "#FEF3C7", borderColor: "#FCD34D" }}>
-                <div style={{ color: "#92400E", fontSize: 14 }}>{storageError}</div>
-              </div>
-            </div>
-          )}
-          {content}
+  const pieData = [
+    { name: "Training", value: kpi.trainingPct },
+    { name: "Poor Quality", value: kpi.poorQualityPct },
+    { name: "SG&A", value: kpi.sgaPct },
+    { name: "EBITDA", value: kpi.ebitdaPct },
+  ];
+  const colors = [BRAND.secondary, "#ef4444", BRAND.primary, "#94a3b8"];
+
+  /** =============== Views ================= */
+
+  const TopBar = (
+    <header className="border-b p-3" style={{ backgroundColor: BRAND.primary, color: "white", borderColor: BRAND.primary }}>
+      <div className="mx-auto flex max-w-7xl items-center justify-between">
+        <div className="flex items-center gap-3">
+          <img src={LOGO_URL} alt="Company Logo" className="h-8 w-8 rounded" onError={(e)=>{e.currentTarget.style.display='none';}} />
+          <h1 className="text-base font-semibold">Gibson Oil & Gas — Operations Portal</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            onChange={(e) => { const s = scenarios[e.target.value]; if (s) setKpi({ ...s }); }}
+            className="rounded-xl border px-2 py-1 text-sm"
+            style={{ backgroundColor: BRAND.surface, color: BRAND.neutral, borderColor: BRAND.surface }}
+            defaultValue="Baseline"
+            title="Scenario"
+          >
+            <option>Baseline</option>
+            <option>Stretch</option>
+            <option>Downside</option>
+          </select>
+          <label className="inline-flex items-center gap-2 text-xs" title="Toggle editing" style={{ color: "#E5E7EB" }}>
+            <input type="checkbox" checked={viewOnly} onChange={(e) => setViewOnly(e.target.checked)} />
+            View-only
+          </label>
+
+          <button onClick={saveState}  className="rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "rgba(255,255,255,0.5)" }}>Save</button>
+          <button onClick={loadState}  className="rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "rgba(255,255,255,0.5)" }}>Load</button>
+          <button onClick={resetDefaults} className="rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "rgba(255,255,255,0.5)" }}>Reset</button>
+          <button onClick={() => fileInputRef.current?.click()} className="rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "rgba(255,255,255,0.5)" }}>Import</button>
+          <button onClick={exportJson} className="rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "rgba(255,255,255,0.5)" }}>Export</button>
+          <button onClick={loadRepoData} className="rounded-xl border px-3 py-2 text-sm" style={{ borderColor: "rgba(255,255,255,0.5)" }}>Reload Repo Data</button>
+          <input ref={fileInputRef} type="file" accept="application/json" onChange={onImportFile} className="hidden" />
         </div>
       </div>
-    </>
+      {storageError && (
+        <div className="mx-auto mt-2 max-w-7xl rounded-lg px-3 py-2 text-xs" style={{ background: "#FDE68A", color: "#78350F" }}>
+          {storageError}
+        </div>
+      )}
+    </header>
+  );
+
+  const Sidebar = (
+    <aside className="h-[calc(100vh-60px)] w-64 shrink-0 border-r" style={{ borderColor: BRAND.border, background: "#f8fafc" }}>
+      <nav className="p-3">
+        {[
+          { id: "dashboard", label: "Dashboard" },
+          { id: "finops", label: "Financial Operations" },
+          { id: "budget", label: "Budget" },
+          { id: "ops", label: "Ops KPIs" },
+          { id: "settings", label: "Settings" },
+        ].map(item => (
+          <button
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
+            className="mb-2 w-full rounded-lg px-3 py-2 text-left text-sm font-medium"
+            style={{
+              background: activeTab === item.id ? BRAND.secondary : "transparent",
+              color: activeTab === item.id ? "#0f172a" : "#334155",
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
+    </aside>
+  );
+
+  /** ---------- TAB: Dashboard ---------- */
+  const ViewDashboard = (
+    <div className="mx-auto grid max-w-7xl gap-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard title="Revenue" value={kpi.revenue} formatter={formatMoney} />
+        <KpiCard title="Headcount" value={kpi.headcount} formatter={(v)=>v?.toLocaleString() ?? "—"} />
+        <KpiCard title="Rev / Employee" value={kpi.revenuePerEmployee} formatter={formatMoney} target={kpiTargets.revenuePerEmployee} />
+        <KpiCard title="Working Capital" value={kpi.workingCapital} formatter={formatMoney} target={kpiTargets.workingCapital} />
+      </div>
+
+      <Section title="At a Glance">
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border p-4" style={{ borderColor: BRAND.border }}>
+            <h4 className="text-sm font-semibold mb-2">Profitability Trend</h4>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={history}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" />
+                <YAxis domain={["auto", "auto"]} />
+                <Tooltip formatter={(v)=>typeof v==="number"?formatPct(v):v} />
+                <Legend />
+                <Line type="monotone" dataKey="grossMargin" name="Gross Margin %" stroke={BRAND.primary} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="ebitdaPct"   name="EBITDA %"       stroke={BRAND.secondary} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="sgaPct"       name="SG&A %"         stroke="#9CA3AF" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="rounded-xl border p-4" style={{ borderColor: BRAND.border }}>
+            <h4 className="text-sm font-semibold mb-2">Cost Breakdown</h4>
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={100}>
+                  {pieData.map((e,i)=> <Cell key={i} fill={colors[i%colors.length]} />)}
+                </Pie>
+                <Tooltip formatter={(v)=>typeof v==="number"?formatPct(v):v} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Shortcuts">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={()=>setActiveTab("finops")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Go to Financial Operations</button>
+          <button onClick={()=>setActiveTab("budget")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Open Budget</button>
+          <button onClick={()=>setActiveTab("ops")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Ops KPIs</button>
+        </div>
+      </Section>
+    </div>
+  );
+
+  /** ---------- TAB: Financial Operations (your old content) ---------- */
+  const ViewFinOps = (
+    <div className="mx-auto grid max-w-7xl gap-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <KpiCard title="Gross Margin %" value={kpi.grossMargin} target={kpiTargets.grossMargin} formatter={formatPct}>
+          <ResponsiveContainer width="100%" height={120}>
+            <AreaChart data={marginSeries}>
+              <XAxis dataKey="month" hide />
+              <YAxis hide domain={[0, 1]} />
+              <Tooltip formatter={(v)=>formatPct(v)} />
+              <Area type="monotone" dataKey="value" stroke={BRAND.primary} fill={BRAND.secondary} fillOpacity={0.35} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </KpiCard>
+
+        <KpiCard title="EBITDA %" value={kpi.ebitdaPct} target={kpiTargets.ebitdaPct} formatter={formatPct}>
+          <ResponsiveContainer width="100%" height={120}>
+            <LineChart data={ebitdaSeries}>
+              <XAxis dataKey="month" hide />
+              <YAxis hide domain={[0, 1]} />
+              <Tooltip formatter={(v)=>formatPct(v)} />
+              <Line type="monotone" dataKey="value" stroke={BRAND.primary} strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </KpiCard>
+
+        <KpiCard title="Revenue per Employee" value={kpi.revenuePerEmployee} target={kpiTargets.revenuePerEmployee} formatter={formatMoney}>
+          <ResponsiveContainer width="100%" height={120}>
+            <BarChart data={revPerEmpSeries}>
+              <XAxis dataKey="month" hide />
+              <YAxis hide />
+              <Tooltip formatter={(v)=>formatMoney(v)} />
+              <Bar dataKey="value" fill={BRAND.secondary} />
+            </BarChart>
+          </ResponsiveContainer>
+        </KpiCard>
+      </div>
+
+      <Section title="Profitability Trend">
+        <ResponsiveContainer width="100%" height={260}>
+          <LineChart data={history}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="month" />
+            <YAxis domain={["auto","auto"]} />
+            <Tooltip formatter={(v)=>formatPct(v)} />
+            <Legend />
+            <Line type="monotone" dataKey="grossMargin" name="Gross Margin %" stroke={BRAND.primary} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="ebitdaPct"   name="EBITDA %"       stroke={BRAND.secondary} strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="sgaPct"       name="SG&A %"         stroke="#9CA3AF" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </Section>
+
+      <Section title="Working Capital Trend">
+        <ResponsiveContainer width="100%" height={240}>
+          <LineChart data={history}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="month" />
+            <YAxis />
+            <Tooltip formatter={(v)=>formatMoney(v)} />
+            <Legend />
+            <Line type="monotone" dataKey="workingCapital" name="Working Capital" stroke={BRAND.primary} strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+        <p className="mt-2 text-xs" style={{ color: "#64748b" }}>
+          Latest WC comes from your Balance Sheet import. Months without values will be empty until provided.
+        </p>
+      </Section>
+
+      <Section
+        title="Manual Data Entry"
+        right={<span className="text-xs" style={{ color: "#64748b" }}>{viewOnly ? "Toggle off View-only to edit" : "Editing enabled"}</span>}
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Object.entries(kpi).map(([key, val]) => (
+            <div key={key} className="flex items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: BRAND.border }}>
+              <label className="text-sm font-medium capitalize" style={{ color: "#334155" }}>{key}</label>
+              <input
+                type="number"
+                value={val ?? ""}
+                disabled={viewOnly}
+                onChange={(e) => updateKpiField(key, e.target.value)}
+                className="w-36 rounded-lg border px-2 py-1 text-sm"
+                style={{ borderColor: BRAND.border }}
+              />
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-xs" style={{ color: "#64748b" }}>Percentages are decimals (e.g., 0.53 = 53%). Money as plain numbers.</p>
+      </Section>
+
+      <Section title="Targets & Settings">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Object.entries(kpiTargets).map(([key, val]) => (
+            <div key={key} className="flex items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: BRAND.border }}>
+              <label className="text-sm font-semibold capitalize" style={{ color: "#334155" }}>{key}</label>
+              <input
+                type="number"
+                value={val ?? ""}
+                disabled={viewOnly}
+                onChange={(e) => setKpiTargets((t) => ({ ...t, [key]: Number(e.target.value) }))}
+                className="w-36 rounded-lg border px-2 py-1 text-sm"
+                style={{ borderColor: BRAND.border }}
+              />
+            </div>
+          ))}
+        </div>
+      </Section>
+    </div>
+  );
+
+  /** ---------- TAB: Budget (placeholder) ---------- */
+  const ViewBudget = (
+    <div className="mx-auto grid max-w-7xl gap-4">
+      <Section title="Budget Planner">
+        <p className="text-sm" style={{ color: "#475569" }}>
+          We’ll attach a CSV/JSON uploader and monthly budget grid here (Revenue, COGS, SG&A, CapEx).
+        </p>
+      </Section>
+    </div>
+  );
+
+  /** ---------- TAB: Ops KPIs (placeholders for trucks/employees) ---------- */
+  const ViewOps = (
+    <div className="mx-auto grid max-w-7xl gap-4">
+      <Section title="Operational KPIs">
+        <ul className="list-disc pl-5 text-sm" style={{ color: "#475569" }}>
+          <li>Employee cost vs. Revenue per employee (by role)</li>
+          <li>Truck operating cost per delivery/stop (fuel, maintenance, driver)</li>
+          <li>Service tech productivity (calls/day, first-time fix rate)</li>
+        </ul>
+        <p className="mt-2 text-xs" style={{ color: "#64748b" }}>
+          Next step: we’ll add uploaders for Housecall Pro/Suburban exports and calculate these KPIs.
+        </p>
+      </Section>
+    </div>
+  );
+
+  /** ---------- TAB: Settings ---------- */
+  const ViewSettings = (
+    <div className="mx-auto grid max-w-7xl gap-4">
+      <Section title="Brand & Data">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border p-4" style={{ borderColor: BRAND.border }}>
+            <h4 className="text-sm font-semibold mb-2">Logo Preview</h4>
+            <img src={LOGO_URL} alt="Logo" className="h-12 w-12 rounded border" style={{ borderColor: BRAND.border }}
+                 onError={(e)=>{e.currentTarget.style.display='none';}} />
+            <p className="mt-2 text-xs" style={{ color: "#64748b" }}>Place file at <code>/public/site-logo.svg</code>.</p>
+          </div>
+          <div className="rounded-xl border p-4" style={{ borderColor: BRAND.border }}>
+            <h4 className="text-sm font-semibold mb-2">Data Controls</h4>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={saveState} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Save</button>
+              <button onClick={loadState} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Load</button>
+              <button onClick={resetDefaults} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Reset</button>
+              <button onClick={()=>fileInputRef.current?.click()} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Import</button>
+              <button onClick={exportJson} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Export</button>
+              <button onClick={loadRepoData} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Reload Repo Data</button>
+            </div>
+            <input ref={fileInputRef} type="file" accept="application/json" onChange={onImportFile} className="hidden" />
+          </div>
+        </div>
+      </Section>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen" style={{ background: "#f1f5f9" }}>
+      {TopBar}
+      <div className="flex">
+        {Sidebar}
+        <main className="flex-1 p-4">
+          {activeTab === "dashboard" && ViewDashboard}
+          {activeTab === "finops" && ViewFinOps}
+          {activeTab === "budget" && ViewBudget}
+          {activeTab === "ops" && ViewOps}
+          {activeTab === "settings" && ViewSettings}
+          <footer className="mt-8 text-center text-xs" style={{ color: "#94a3b8" }}>
+            Built for Joe’s Workspace • Editable data, charts, scenarios & persistence
+          </footer>
+        </main>
+      </div>
+    </div>
   );
 }
