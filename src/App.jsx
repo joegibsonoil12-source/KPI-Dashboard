@@ -56,19 +56,20 @@ const defaultTargets = {
   poorQualityPct: 0.015,
 };
 
-/** NEW: starter rows so the forms aren’t empty on first load */
+/** seed rows so screens aren’t empty */
 const sampleStationReports = [
   { id: cryptoId(), date: todayStr(), store: "Corner Pantry #1", unleadedLvl: 38, midLvl: 21, premiumLvl: 19, dieselLvl: 42, uPrice: 3.19, mPrice: 3.49, pPrice: 3.79, dPrice: 3.59, comments: "Normal usage" },
 ];
 const sampleDriverLogs = [
   { id: cryptoId(), date: todayStr(), truck: "LP-7", route: "North", stopName: "123 Farm Rd", product: "Propane", gallons: 450, miles: 62, hours: 3.2, notes: "No issues" },
 ];
-const sampleCustomers = [
-  { id: cryptoId(), name: "Acme Farms", type: "Commercial", city: "Laurel Hill", product: "Propane", tankSize: 1000, typicalOrder: 600, active: true },
-  { id: cryptoId(), name: "Smith Residence", type: "Residential", city: "Rockingham", product: "Propane", tankSize: 250, typicalOrder: 150, active: true },
+
+/** NEW: Delivery Tickets sample */
+const sampleTickets = [
+  { id: cryptoId(), date: todayStr(), ticketNo: "T-1001", customer: "Acme Farms", address: "123 Farm Rd, Laurel Hill", product: "Propane", gallons: 450, pricePerGal: 2.49, total: 450*2.49, driver: "J. Doe", truck: "LP-7", paid: false, notes: "" },
 ];
 
-const STORAGE_KEY = "kpiDashboardState:v2"; // bump to v2 to avoid mixing with very old
+const STORAGE_KEY = "kpiDashboardState:v3"; // bump version to avoid clashes
 const DATA_JSON_URL = "/data.json";
 
 /** ================ Helpers ================= */
@@ -85,9 +86,9 @@ function todayStr() {
   return d.toISOString().slice(0, 10);
 }
 function cryptoId() {
-  // good-enough id for client app
   return (crypto?.randomUUID?.() || Math.random().toString(36).slice(2)) + "-" + Date.now().toString(36);
 }
+function numOr(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 
 function mergeHistory(localHist = [], repoHist = []) {
   const byMonth = new Map();
@@ -151,10 +152,7 @@ function TextInput({ label, value, onChange, type="text", disabled=false, placeh
     </label>
   );
 }
-
-function NumberInput(props) {
-  return <TextInput {...props} type="number" />;
-}
+function NumberInput(props) { return <TextInput {...props} type="number" />; }
 
 /** ================ Main App ================= */
 export default function App() {
@@ -166,12 +164,14 @@ export default function App() {
   const [storageError, setStorageError] = useState(null);
   const fileInputRef = useRef(null);
 
-  /** NEW: operational state */
-  const [stationReports, setStationReports] = useState(sampleStationReports);
+  /** Operational state */
+  const [stationReports, setStationReports] = useState(sampleStationReports); // will be used in Store Invoicing until we reshape fields
   const [driverLogs, setDriverLogs] = useState(sampleDriverLogs);
-  const [customers, setCustomers] = useState(sampleCustomers);
 
-  // restore & hydrate from repo data.json
+  /** NEW: Delivery Tickets state */
+  const [tickets, setTickets] = useState(sampleTickets);
+
+  // restore & hydrate
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -182,7 +182,7 @@ export default function App() {
         if (parsed.history) setHistory(parsed.history);
         if (Array.isArray(parsed.stationReports)) setStationReports(parsed.stationReports);
         if (Array.isArray(parsed.driverLogs)) setDriverLogs(parsed.driverLogs);
-        if (Array.isArray(parsed.customers)) setCustomers(parsed.customers);
+        if (Array.isArray(parsed.tickets)) setTickets(parsed.tickets);
       }
     } catch {
       setStorageError("Could not read saved data (localStorage blocked).");
@@ -195,7 +195,6 @@ export default function App() {
         if (base.kpi) setKpi((k) => ({ ...base.kpi, ...k }));
         if (base.kpiTargets) setKpiTargets((t) => ({ ...base.kpiTargets, ...t }));
         if (Array.isArray(base.history)) setHistory((h) => mergeHistory(h, base.history));
-        // optional: if you later add ops data to data.json, merge here the same way
       } catch {}
     })();
   }, []);
@@ -203,17 +202,17 @@ export default function App() {
   // persist
   useEffect(() => {
     try {
-      const payload = { kpi, kpiTargets, history, stationReports, driverLogs, customers, savedAt: new Date().toISOString() };
+      const payload = { kpi, kpiTargets, history, stationReports, driverLogs, tickets, savedAt: new Date().toISOString() };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       setStorageError("Saving blocked (localStorage).");
     }
-  }, [kpi, kpiTargets, history, stationReports, driverLogs, customers]);
+  }, [kpi, kpiTargets, history, stationReports, driverLogs, tickets]);
 
   // actions
   const saveState = () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi, kpiTargets, history, stationReports, driverLogs, customers, savedAt: new Date().toISOString() }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi, kpiTargets, history, stationReports, driverLogs, tickets, savedAt: new Date().toISOString() }));
       alert("Saved.");
     } catch { alert("Save failed."); }
   };
@@ -227,7 +226,7 @@ export default function App() {
       if (parsed.history) setHistory(parsed.history);
       if (Array.isArray(parsed.stationReports)) setStationReports(parsed.stationReports);
       if (Array.isArray(parsed.driverLogs)) setDriverLogs(parsed.driverLogs);
-      if (Array.isArray(parsed.customers)) setCustomers(parsed.customers);
+      if (Array.isArray(parsed.tickets)) setTickets(parsed.tickets);
       alert("Loaded.");
     } catch { alert("Could not load."); }
   };
@@ -238,10 +237,10 @@ export default function App() {
     setHistory([...sampleHistory]);
     setStationReports([...sampleStationReports]);
     setDriverLogs([...sampleDriverLogs]);
-    setCustomers([...sampleCustomers]);
+    setTickets([...sampleTickets]);
   };
   const exportJson = () => {
-    const payload = { kpi, kpiTargets, history, stationReports, driverLogs, customers };
+    const payload = { kpi, kpiTargets, history, stationReports, driverLogs, tickets };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -256,8 +255,7 @@ export default function App() {
       if (base.kpi) setKpi(base.kpi);
       if (base.kpiTargets) setKpiTargets(base.kpiTargets);
       if (base.history) setHistory(base.history);
-      // optionally set ops data when you add it to data.json in the future
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: base.kpi, kpiTargets: base.kpiTargets, history: base.history, stationReports, driverLogs, customers, savedAt: new Date().toISOString() })); } catch {}
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: base.kpi, kpiTargets: base.kpiTargets, history: base.history, stationReports, driverLogs, tickets, savedAt: new Date().toISOString() })); } catch {}
       alert("Loaded from repo data.json");
     } catch { alert("Could not fetch data.json"); }
   };
@@ -273,8 +271,8 @@ export default function App() {
         if (parsed.history) setHistory(parsed.history);
         if (Array.isArray(parsed.stationReports)) setStationReports(parsed.stationReports);
         if (Array.isArray(parsed.driverLogs)) setDriverLogs(parsed.driverLogs);
-        if (Array.isArray(parsed.customers)) setCustomers(parsed.customers);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: parsed.kpi ?? kpi, kpiTargets: parsed.kpiTargets ?? kpiTargets, history: parsed.history ?? history, stationReports: parsed.stationReports ?? stationReports, driverLogs: parsed.driverLogs ?? driverLogs, customers: parsed.customers ?? customers, savedAt: new Date().toISOString() })); } catch {}
+        if (Array.isArray(parsed.tickets)) setTickets(parsed.tickets);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: parsed.kpi ?? kpi, kpiTargets: parsed.kpiTargets ?? kpiTargets, history: parsed.history ?? history, stationReports: parsed.stationReports ?? stationReports, driverLogs: parsed.driverLogs ?? driverLogs, tickets: parsed.tickets ?? tickets, savedAt: new Date().toISOString() })); } catch {}
         alert("Imported and saved.");
       } catch { alert("Invalid JSON."); }
       e.target.value = "";
@@ -372,13 +370,13 @@ export default function App() {
     <aside className="h-[calc(100vh-60px)] w-64 shrink-0 border-r" style={{ borderColor: BRAND.border, background: "#f8fafc" }}>
       <nav className="p-3">
         {[
-          { id: "dashboard", label: "Dashboard" },
-          { id: "finops", label: "Financial Operations" },
-          { id: "fuelops", label: "Fuel Ops" },           // NEW
-          { id: "customers", label: "Customers" },        // NEW
-          { id: "budget", label: "Budget" },
-          { id: "ops", label: "Ops KPIs" },
-          { id: "settings", label: "Settings" },
+          { id: "dashboard",       label: "Dashboard" },
+          { id: "finops",          label: "Financial Operations" },
+          { id: "storeInvoicing",  label: "Store Invoicing" },    // renamed from Fuel Ops
+          { id: "deliveryTickets", label: "Delivery Tickets" },   // NEW (replaces Customers)
+          { id: "budget",          label: "Budget" },
+          { id: "ops",             label: "Ops KPIs" },
+          { id: "settings",        label: "Settings" },
         ].map(item => (
           <button
             key={item.id}
@@ -441,10 +439,10 @@ export default function App() {
 
       <Section title="Shortcuts">
         <div className="flex flex-wrap gap-2">
-          <button onClick={()=>setActiveTab("fuelops")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Fuel Ops</button>
-          <button onClick={()=>setActiveTab("customers")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Customers</button>
-          <button onClick={()=>setActiveTab("finops")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Financial Ops</button>
-          <button onClick={()=>setActiveTab("budget")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Budget</button>
+          <button onClick={()=>setActiveTab("storeInvoicing")}  className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Store Invoicing</button>
+          <button onClick={()=>setActiveTab("deliveryTickets")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Delivery Tickets</button>
+          <button onClick={()=>setActiveTab("finops")}         className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Financial Ops</button>
+          <button onClick={()=>setActiveTab("budget")}         className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Budget</button>
         </div>
       </Section>
     </div>
@@ -561,9 +559,8 @@ export default function App() {
     </div>
   );
 
-  /** ---------- TAB: Fuel Ops (NEW) ---------- */
+  /** ---------- TAB: Store Invoicing (renamed from Fuel Ops) ---------- */
   const [srDraft, setSrDraft] = useState({ date: todayStr(), store: "", unleadedLvl: "", midLvl: "", premiumLvl: "", dieselLvl: "", uPrice: "", mPrice: "", pPrice: "", dPrice: "", comments: "" });
-  const [dlDraft, setDlDraft] = useState({ date: todayStr(), truck: "", route: "", stopName: "", product: "Propane", gallons: "", miles: "", hours: "", notes: "" });
 
   const addStationReport = () => {
     const rec = { id: cryptoId(), ...srDraft,
@@ -576,15 +573,12 @@ export default function App() {
   };
   const removeStationReport = (id) => setStationReports((rows)=>rows.filter(r=>r.id!==id));
 
-  const addDriverLog = () => {
-    const rec = { id: cryptoId(), ...dlDraft, gallons: numOr(dlDraft.gallons), miles: numOr(dlDraft.miles), hours: numOr(dlDraft.hours) };
-    if (!rec.truck || !rec.stopName) return alert("Truck and Stop are required.");
-    setDriverLogs((rows)=>[rec, ...rows]);
-    setDlDraft({ date: todayStr(), truck: "", route: "", stopName: "", product: "Propane", gallons: "", miles: "", hours: "", notes: "" });
-  };
-  const removeDriverLog = (id) => setDriverLogs((rows)=>rows.filter(r=>r.id!==id));
-
-  function numOr(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+  const stationCols = [
+    { key: "date", label: "Date" }, { key: "store", label: "Store" },
+    { key: "unleadedLvl", label: "Unleaded %"}, { key: "midLvl", label: "Mid %"}, { key: "premiumLvl", label: "Premium %"}, { key: "dieselLvl", label: "Diesel %"},
+    { key: "uPrice", label: "U $/gal"}, { key: "mPrice", label: "M $/gal"}, { key: "pPrice", label: "P $/gal"}, { key: "dPrice", label: "D $/gal"},
+    { key: "comments", label: "Comments" },
+  ];
 
   const exportCsv = (rows, columns, filename) => {
     const header = columns.map(c=>c.label).join(",");
@@ -601,27 +595,19 @@ export default function App() {
     return s;
   }
 
-  const stationCols = [
-    { key: "date", label: "Date" }, { key: "store", label: "Store" },
-    { key: "unleadedLvl", label: "Unleaded %"}, { key: "midLvl", label: "Mid %"}, { key: "premiumLvl", label: "Premium %"}, { key: "dieselLvl", label: "Diesel %"},
-    { key: "uPrice", label: "U $/gal"}, { key: "mPrice", label: "M $/gal"}, { key: "pPrice", label: "P $/gal"}, { key: "dPrice", label: "D $/gal"},
-    { key: "comments", label: "Comments" },
-  ];
-  const driverCols = [
-    { key: "date", label: "Date" }, { key: "truck", label: "Truck" }, { key: "route", label: "Route" }, { key: "stopName", label: "Stop" },
-    { key: "product", label: "Product" }, { key: "gallons", label: "Gallons" }, { key: "miles", label: "Miles" }, { key: "hours", label: "Hours" }, { key: "notes", label: "Notes" },
-  ];
-
-  const ViewFuelOps = (
+  const ViewStoreInvoicing = (
     <div className="mx-auto grid max-w-7xl gap-6">
       <Section
-        title="Gas Station Inventory Report"
+        title="Store Invoicing — Daily Inputs"
         right={
           <div className="flex gap-2">
-            <button onClick={()=>exportCsv(stationReports, stationCols, "station-inventory.csv")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Export CSV</button>
+            <button onClick={()=>exportCsv(stationReports, stationCols, "store-invoicing.csv")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Export CSV</button>
           </div>
         }
       >
+        <p className="mb-3 text-xs" style={{ color:"#64748b" }}>
+          Using the previous “station report” fields for now — send your exact store invoicing process and we’ll tailor these inputs.
+        </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <TextInput label="Date" value={srDraft.date} onChange={(v)=>setSrDraft(s=>({...s, date:v}))} type="date" />
           <TextInput label="Store" value={srDraft.store} onChange={(v)=>setSrDraft(s=>({...s, store:v}))} placeholder="Corner Pantry #1" />
@@ -637,7 +623,7 @@ export default function App() {
         </div>
         <div className="mt-3">
           <button disabled={viewOnly} onClick={addStationReport} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border, opacity: viewOnly?0.5:1 }}>
-            Add Report
+            Add Record
           </button>
           {viewOnly && <span className="ml-2 text-xs" style={{ color:"#64748b" }}>Toggle off View-only to add</span>}
         </div>
@@ -660,68 +646,7 @@ export default function App() {
                 </tr>
               ))}
               {stationReports.length===0 && (
-                <tr><td colSpan={stationCols.length+1} className="px-2 py-3 text-center text-xs" style={{ color:"#64748b" }}>No reports yet.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Section>
-
-      <Section
-        title="Driver Delivery Log"
-        right={
-          <div className="flex gap-2">
-            <button onClick={()=>exportCsv(driverLogs, driverCols, "driver-logs.csv")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Export CSV</button>
-          </div>
-        }
-      >
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <TextInput label="Date" value={dlDraft.date} onChange={(v)=>setDlDraft(s=>({...s, date:v}))} type="date" />
-          <TextInput label="Truck" value={dlDraft.truck} onChange={(v)=>setDlDraft(s=>({...s, truck:v}))} placeholder="LP-7" />
-          <TextInput label="Route" value={dlDraft.route} onChange={(v)=>setDlDraft(s=>({...s, route:v}))} placeholder="North" />
-          <TextInput label="Stop" value={dlDraft.stopName} onChange={(v)=>setDlDraft(s=>({...s, stopName:v}))} placeholder="123 Farm Rd" />
-          <label className="text-sm" style={{ color:"#334155" }}>
-            <div className="mb-1">Product</div>
-            <select value={dlDraft.product} onChange={(e)=>setDlDraft(s=>({...s, product:e.target.value}))} className="w-full rounded-lg border px-2 py-1 text-sm" style={{ borderColor:BRAND.border }}>
-              <option>Propane</option>
-              <option>Unleaded</option>
-              <option>Midgrade</option>
-              <option>Premium</option>
-              <option>Diesel</option>
-              <option>Fuel Oil</option>
-            </select>
-          </label>
-          <NumberInput label="Gallons" value={dlDraft.gallons} onChange={(v)=>setDlDraft(s=>({...s, gallons:v}))} />
-          <NumberInput label="Miles" value={dlDraft.miles} onChange={(v)=>setDlDraft(s=>({...s, miles:v}))} />
-          <NumberInput label="Hours" value={dlDraft.hours} onChange={(v)=>setDlDraft(s=>({...s, hours:v}))} />
-          <TextInput label="Notes" value={dlDraft.notes} onChange={(v)=>setDlDraft(s=>({...s, notes:v}))} className="sm:col-span-2 lg:col-span-4" />
-        </div>
-        <div className="mt-3">
-          <button disabled={viewOnly} onClick={addDriverLog} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border, opacity: viewOnly?0.5:1 }}>
-            Add Log
-          </button>
-          {viewOnly && <span className="ml-2 text-xs" style={{ color:"#64748b" }}>Toggle off View-only to add</span>}
-        </div>
-
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left" style={{ color:"#475569" }}>
-                {driverCols.map(c=><th key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{c.label}</th>)}
-                <th className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {driverLogs.map(r=>(
-                <tr key={r.id} className="align-top">
-                  {driverCols.map(c=><td key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{String(r[c.key] ?? "")}</td>)}
-                  <td className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>
-                    <button disabled={viewOnly} onClick={()=>removeDriverLog(r.id)} className="rounded border px-2 py-1" style={{ borderColor:BRAND.border, opacity:viewOnly?0.5:1 }}>Delete</button>
-                  </td>
-                </tr>
-              ))}
-              {driverLogs.length===0 && (
-                <tr><td colSpan={driverCols.length+1} className="px-2 py-3 text-center text-xs" style={{ color:"#64748b" }}>No logs yet.</td></tr>
+                <tr><td colSpan={stationCols.length+1} className="px-2 py-3 text-center text-xs" style={{ color:"#64748b" }}>No records yet.</td></tr>
               )}
             </tbody>
           </table>
@@ -730,49 +655,91 @@ export default function App() {
     </div>
   );
 
-  /** ---------- TAB: Customers (NEW) ---------- */
-  const [custDraft, setCustDraft] = useState({ name:"", type:"Residential", city:"", product:"Propane", tankSize:"", typicalOrder:"", active:true });
-  const addCustomer = () => {
-    if (!custDraft.name) return alert("Customer name required.");
-    const rec = { id: cryptoId(), ...custDraft, tankSize: numOr(custDraft.tankSize), typicalOrder: numOr(custDraft.typicalOrder) };
-    setCustomers((rows)=>[rec, ...rows]);
-    setCustDraft({ name:"", type:"Residential", city:"", product:"Propane", tankSize:"", typicalOrder:"", active:true });
-  };
-  const removeCustomer = (id) => setCustomers((rows)=>rows.filter(r=>r.id!==id));
+  /** ---------- TAB: Delivery Tickets (NEW) ---------- */
+  const [tkDraft, setTkDraft] = useState({
+    date: todayStr(),
+    ticketNo: "",
+    customer: "",
+    address: "",
+    product: "Propane",
+    gallons: "",
+    pricePerGal: "",
+    total: 0,
+    driver: "",
+    truck: "",
+    paid: false,
+    notes: "",
+  });
 
-  const customerCols = [
-    { key:"name", label:"Name" }, { key:"type", label:"Type" }, { key:"city", label:"City" }, { key:"product", label:"Product" }, { key:"tankSize", label:"Tank" }, { key:"typicalOrder", label:"Typical Gal" }, { key:"active", label:"Active" }
+  const recalcTicketTotal = (g, p) => (numOr(g) * numOr(p));
+
+  const addTicket = () => {
+    const rec = {
+      id: cryptoId(),
+      ...tkDraft,
+      gallons: numOr(tkDraft.gallons),
+      pricePerGal: numOr(tkDraft.pricePerGal),
+      total: recalcTicketTotal(tkDraft.gallons, tkDraft.pricePerGal),
+    };
+    if (!rec.ticketNo || !rec.customer) return alert("Ticket # and Customer are required.");
+    setTickets(rows => [rec, ...rows]);
+    setTkDraft({ date: todayStr(), ticketNo: "", customer: "", address: "", product: "Propane", gallons: "", pricePerGal: "", total: 0, driver: "", truck: "", paid: false, notes: "" });
+  };
+  const removeTicket = (id) => setTickets(rows => rows.filter(r => r.id !== id));
+
+  const ticketCols = [
+    { key: "date", label: "Date" }, { key: "ticketNo", label: "Ticket #" }, { key: "customer", label: "Customer" }, { key: "address", label: "Address" },
+    { key: "product", label: "Product" }, { key: "gallons", label: "Gallons" }, { key: "pricePerGal", label: "Price/gal" }, { key: "total", label: "Total" },
+    { key: "driver", label: "Driver" }, { key: "truck", label: "Truck" }, { key: "paid", label: "Paid" }, { key: "notes", label: "Notes" },
   ];
 
-  const ViewCustomers = (
+  const ViewDeliveryTickets = (
     <div className="mx-auto grid max-w-7xl gap-6">
-      <Section title="Customer Master">
+      <Section
+        title="Delivery Tickets"
+        right={
+          <div className="flex gap-2">
+            <button
+              onClick={() => exportCsv(tickets, ticketCols, "delivery-tickets.csv")}
+              className="rounded-lg border px-3 py-2 text-sm"
+              style={{ borderColor: BRAND.border }}
+            >
+              Export CSV
+            </button>
+          </div>
+        }
+      >
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <TextInput label="Name" value={custDraft.name} onChange={(v)=>setCustDraft(s=>({...s, name:v}))} />
-          <label className="text-sm" style={{ color:"#334155" }}>
-            <div className="mb-1">Type</div>
-            <select value={custDraft.type} onChange={(e)=>setCustDraft(s=>({...s, type:e.target.value}))} className="w-full rounded-lg border px-2 py-1 text-sm" style={{ borderColor:BRAND.border }}>
-              <option>Residential</option>
-              <option>Commercial</option>
-            </select>
-          </label>
-          <TextInput label="City" value={custDraft.city} onChange={(v)=>setCustDraft(s=>({...s, city:v}))} />
+          <TextInput  label="Date" value={tkDraft.date} onChange={(v)=>setTkDraft(s=>({...s, date:v}))} type="date" />
+          <TextInput  label="Ticket #" value={tkDraft.ticketNo} onChange={(v)=>setTkDraft(s=>({...s, ticketNo:v}))} placeholder="T-1002" />
+          <TextInput  label="Customer" value={tkDraft.customer} onChange={(v)=>setTkDraft(s=>({...s, customer:v}))} placeholder="Acme Farms" />
+          <TextInput  label="Address" value={tkDraft.address} onChange={(v)=>setTkDraft(s=>({...s, address:v}))} placeholder="123 Farm Rd, City" />
           <label className="text-sm" style={{ color:"#334155" }}>
             <div className="mb-1">Product</div>
-            <select value={custDraft.product} onChange={(e)=>setCustDraft(s=>({...s, product:e.target.value}))} className="w-full rounded-lg border px-2 py-1 text-sm" style={{ borderColor:BRAND.border }}>
-              <option>Propane</option><option>Unleaded</option><option>Midgrade</option><option>Premium</option><option>Diesel</option><option>Fuel Oil</option>
+            <select value={tkDraft.product} onChange={(e)=>setTkDraft(s=>({...s, product:e.target.value}))} className="w-full rounded-lg border px-2 py-1 text-sm" style={{ borderColor:BRAND.border }}>
+              <option>Propane</option>
+              <option>Unleaded</option>
+              <option>Midgrade</option>
+              <option>Premium</option>
+              <option>Diesel</option>
+              <option>Fuel Oil</option>
             </select>
           </label>
-          <NumberInput label="Tank Size (gal)" value={custDraft.tankSize} onChange={(v)=>setCustDraft(s=>({...s, tankSize:v}))} />
-          <NumberInput label="Typical Order (gal)" value={custDraft.typicalOrder} onChange={(v)=>setCustDraft(s=>({...s, typicalOrder:v}))} />
+          <NumberInput label="Gallons" value={tkDraft.gallons} onChange={(v)=>setTkDraft(s=>({...s, gallons:v, total: recalcTicketTotal(v, tkDraft.pricePerGal)}))} />
+          <NumberInput label="Price/gal" value={tkDraft.pricePerGal} onChange={(v)=>setTkDraft(s=>({...s, pricePerGal:v, total: recalcTicketTotal(tkDraft.gallons, v)}))} />
+          <TextInput  label="Total (auto)" value={formatMoney(recalcTicketTotal(tkDraft.gallons, tkDraft.pricePerGal))} onChange={()=>{}} disabled />
+          <TextInput  label="Driver" value={tkDraft.driver} onChange={(v)=>setTkDraft(s=>({...s, driver:v}))} placeholder="J. Doe" />
+          <TextInput  label="Truck" value={tkDraft.truck} onChange={(v)=>setTkDraft(s=>({...s, truck:v}))} placeholder="LP-7" />
           <label className="text-sm flex items-center gap-2 mt-6">
-            <input type="checkbox" checked={custDraft.active} onChange={(e)=>setCustDraft(s=>({...s, active:e.target.checked}))} />
-            Active
+            <input type="checkbox" checked={tkDraft.paid} onChange={(e)=>setTkDraft(s=>({...s, paid:e.target.checked}))} />
+            Paid
           </label>
+          <TextInput  label="Notes" value={tkDraft.notes} onChange={(v)=>setTkDraft(s=>({...s, notes:v}))} className="sm:col-span-2 lg:col-span-4" />
         </div>
+
         <div className="mt-3">
-          <button disabled={viewOnly} onClick={addCustomer} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border, opacity: viewOnly?0.5:1 }}>
-            Add Customer
+          <button disabled={viewOnly} onClick={addTicket} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border, opacity: viewOnly?0.5:1 }}>
+            Add Ticket
           </button>
           {viewOnly && <span className="ml-2 text-xs" style={{ color:"#64748b" }}>Toggle off View-only to add</span>}
         </div>
@@ -781,21 +748,26 @@ export default function App() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left" style={{ color:"#475569" }}>
-                {customerCols.map(c=><th key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{c.label}</th>)}
+                {ticketCols.map(c=><th key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{c.label}</th>)}
                 <th className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {customers.map(r=>(
+              {tickets.map(r=>(
                 <tr key={r.id} className="align-top">
-                  {customerCols.map(c=><td key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{String(r[c.key])}</td>)}
+                  {ticketCols.map(c=>{
+                    let val = r[c.key];
+                    if (c.key === "total") val = formatMoney(val);
+                    if (c.key === "paid") val = r.paid ? "Yes" : "No";
+                    return <td key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{String(val ?? "")}</td>;
+                  })}
                   <td className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>
-                    <button disabled={viewOnly} onClick={()=>removeCustomer(r.id)} className="rounded border px-2 py-1" style={{ borderColor:BRAND.border, opacity:viewOnly?0.5:1 }}>Delete</button>
+                    <button disabled={viewOnly} onClick={()=>removeTicket(r.id)} className="rounded border px-2 py-1" style={{ borderColor:BRAND.border, opacity:viewOnly?0.5:1 }}>Delete</button>
                   </td>
                 </tr>
               ))}
-              {customers.length===0 && (
-                <tr><td colSpan={customerCols.length+1} className="px-2 py-3 text-center text-xs" style={{ color:"#64748b" }}>No customers yet.</td></tr>
+              {tickets.length===0 && (
+                <tr><td colSpan={ticketCols.length+1} className="px-2 py-3 text-center text-xs" style={{ color:"#64748b" }}>No tickets yet.</td></tr>
               )}
             </tbody>
           </table>
@@ -865,13 +837,13 @@ export default function App() {
       <div className="flex">
         {Sidebar}
         <main className="flex-1 p-4">
-          {activeTab === "dashboard" && ViewDashboard}
-          {activeTab === "finops" && ViewFinOps}
-          {activeTab === "fuelops" && ViewFuelOps}
-          {activeTab === "customers" && ViewCustomers}
-          {activeTab === "budget" && ViewBudget}
-          {activeTab === "ops" && ViewOps}
-          {activeTab === "settings" && ViewSettings}
+          {activeTab === "dashboard"        && ViewDashboard}
+          {activeTab === "finops"           && ViewFinOps}
+          {activeTab === "storeInvoicing"   && ViewStoreInvoicing}
+          {activeTab === "deliveryTickets"  && ViewDeliveryTickets}
+          {activeTab === "budget"           && ViewBudget}
+          {activeTab === "ops"              && ViewOps}
+          {activeTab === "settings"         && ViewSettings}
           <footer className="mt-8 text-center text-xs" style={{ color: "#94a3b8" }}>
             Built for Joe’s Workspace • Editable data, charts, scenarios & persistence
           </footer>
