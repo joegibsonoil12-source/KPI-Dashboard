@@ -56,7 +56,19 @@ const defaultTargets = {
   poorQualityPct: 0.015,
 };
 
-const STORAGE_KEY = "kpiDashboardState:v1";
+/** NEW: starter rows so the forms aren’t empty on first load */
+const sampleStationReports = [
+  { id: cryptoId(), date: todayStr(), store: "Corner Pantry #1", unleadedLvl: 38, midLvl: 21, premiumLvl: 19, dieselLvl: 42, uPrice: 3.19, mPrice: 3.49, pPrice: 3.79, dPrice: 3.59, comments: "Normal usage" },
+];
+const sampleDriverLogs = [
+  { id: cryptoId(), date: todayStr(), truck: "LP-7", route: "North", stopName: "123 Farm Rd", product: "Propane", gallons: 450, miles: 62, hours: 3.2, notes: "No issues" },
+];
+const sampleCustomers = [
+  { id: cryptoId(), name: "Acme Farms", type: "Commercial", city: "Laurel Hill", product: "Propane", tankSize: 1000, typicalOrder: 600, active: true },
+  { id: cryptoId(), name: "Smith Residence", type: "Residential", city: "Rockingham", product: "Propane", tankSize: 250, typicalOrder: 150, active: true },
+];
+
+const STORAGE_KEY = "kpiDashboardState:v2"; // bump to v2 to avoid mixing with very old
 const DATA_JSON_URL = "/data.json";
 
 /** ================ Helpers ================= */
@@ -68,6 +80,15 @@ function formatMoney(n) {
   if (n == null || Number.isNaN(n)) return "—";
   return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
+function todayStr() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+function cryptoId() {
+  // good-enough id for client app
+  return (crypto?.randomUUID?.() || Math.random().toString(36).slice(2)) + "-" + Date.now().toString(36);
+}
+
 function mergeHistory(localHist = [], repoHist = []) {
   const byMonth = new Map();
   for (const r of repoHist) if (r?.month) byMonth.set(r.month, { ...r });
@@ -90,7 +111,7 @@ function computeWorkingCapital(currentAssets, currentLiabilities) {
   return currentAssets - currentLiabilities;
 }
 
-/** ================ Small UI bits ================= */
+/** small UI bits */
 function KpiCard({ title, value, target, formatter = (v) => v, children }) {
   return (
     <div className="rounded-2xl border p-4 shadow-sm" style={{ backgroundColor: BRAND.surface, borderColor: BRAND.border }}>
@@ -114,6 +135,27 @@ function Section({ title, children, right }) {
   );
 }
 
+function TextInput({ label, value, onChange, type="text", disabled=false, placeholder, className }) {
+  return (
+    <label className={`text-sm ${className || ""}`} style={{ color: "#334155" }}>
+      <div className="mb-1">{label}</div>
+      <input
+        type={type}
+        value={value ?? ""}
+        onChange={(e)=>onChange(e.target.value)}
+        disabled={disabled}
+        placeholder={placeholder}
+        className="w-full rounded-lg border px-2 py-1 text-sm"
+        style={{ borderColor: BRAND.border }}
+      />
+    </label>
+  );
+}
+
+function NumberInput(props) {
+  return <TextInput {...props} type="number" />;
+}
+
 /** ================ Main App ================= */
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -124,6 +166,11 @@ export default function App() {
   const [storageError, setStorageError] = useState(null);
   const fileInputRef = useRef(null);
 
+  /** NEW: operational state */
+  const [stationReports, setStationReports] = useState(sampleStationReports);
+  const [driverLogs, setDriverLogs] = useState(sampleDriverLogs);
+  const [customers, setCustomers] = useState(sampleCustomers);
+
   // restore & hydrate from repo data.json
   useEffect(() => {
     try {
@@ -133,6 +180,9 @@ export default function App() {
         if (parsed.kpi) setKpi(parsed.kpi);
         if (parsed.kpiTargets) setKpiTargets(parsed.kpiTargets);
         if (parsed.history) setHistory(parsed.history);
+        if (Array.isArray(parsed.stationReports)) setStationReports(parsed.stationReports);
+        if (Array.isArray(parsed.driverLogs)) setDriverLogs(parsed.driverLogs);
+        if (Array.isArray(parsed.customers)) setCustomers(parsed.customers);
       }
     } catch {
       setStorageError("Could not read saved data (localStorage blocked).");
@@ -145,6 +195,7 @@ export default function App() {
         if (base.kpi) setKpi((k) => ({ ...base.kpi, ...k }));
         if (base.kpiTargets) setKpiTargets((t) => ({ ...base.kpiTargets, ...t }));
         if (Array.isArray(base.history)) setHistory((h) => mergeHistory(h, base.history));
+        // optional: if you later add ops data to data.json, merge here the same way
       } catch {}
     })();
   }, []);
@@ -152,17 +203,17 @@ export default function App() {
   // persist
   useEffect(() => {
     try {
-      const payload = { kpi, kpiTargets, history, savedAt: new Date().toISOString() };
+      const payload = { kpi, kpiTargets, history, stationReports, driverLogs, customers, savedAt: new Date().toISOString() };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       setStorageError("Saving blocked (localStorage).");
     }
-  }, [kpi, kpiTargets, history]);
+  }, [kpi, kpiTargets, history, stationReports, driverLogs, customers]);
 
   // actions
   const saveState = () => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi, kpiTargets, history, savedAt: new Date().toISOString() }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi, kpiTargets, history, stationReports, driverLogs, customers, savedAt: new Date().toISOString() }));
       alert("Saved.");
     } catch { alert("Save failed."); }
   };
@@ -174,6 +225,9 @@ export default function App() {
       if (parsed.kpi) setKpi(parsed.kpi);
       if (parsed.kpiTargets) setKpiTargets(parsed.kpiTargets);
       if (parsed.history) setHistory(parsed.history);
+      if (Array.isArray(parsed.stationReports)) setStationReports(parsed.stationReports);
+      if (Array.isArray(parsed.driverLogs)) setDriverLogs(parsed.driverLogs);
+      if (Array.isArray(parsed.customers)) setCustomers(parsed.customers);
       alert("Loaded.");
     } catch { alert("Could not load."); }
   };
@@ -182,13 +236,16 @@ export default function App() {
     setKpi({ ...sampleKpis });
     setKpiTargets({ ...defaultTargets });
     setHistory([...sampleHistory]);
+    setStationReports([...sampleStationReports]);
+    setDriverLogs([...sampleDriverLogs]);
+    setCustomers([...sampleCustomers]);
   };
   const exportJson = () => {
-    const payload = { kpi, kpiTargets, history };
+    const payload = { kpi, kpiTargets, history, stationReports, driverLogs, customers };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "kpi-dashboard-data.json"; a.click();
+    a.href = url; a.download = "gibson-ops-data.json"; a.click();
     URL.revokeObjectURL(url);
   };
   const loadRepoData = async () => {
@@ -199,7 +256,8 @@ export default function App() {
       if (base.kpi) setKpi(base.kpi);
       if (base.kpiTargets) setKpiTargets(base.kpiTargets);
       if (base.history) setHistory(base.history);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: base.kpi, kpiTargets: base.kpiTargets, history: base.history, savedAt: new Date().toISOString() })); } catch {}
+      // optionally set ops data when you add it to data.json in the future
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: base.kpi, kpiTargets: base.kpiTargets, history: base.history, stationReports, driverLogs, customers, savedAt: new Date().toISOString() })); } catch {}
       alert("Loaded from repo data.json");
     } catch { alert("Could not fetch data.json"); }
   };
@@ -213,7 +271,10 @@ export default function App() {
         if (parsed.kpi) setKpi(parsed.kpi);
         if (parsed.kpiTargets) setKpiTargets(parsed.kpiTargets);
         if (parsed.history) setHistory(parsed.history);
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: parsed.kpi ?? kpi, kpiTargets: parsed.kpiTargets ?? kpiTargets, history: parsed.history ?? history, savedAt: new Date().toISOString() })); } catch {}
+        if (Array.isArray(parsed.stationReports)) setStationReports(parsed.stationReports);
+        if (Array.isArray(parsed.driverLogs)) setDriverLogs(parsed.driverLogs);
+        if (Array.isArray(parsed.customers)) setCustomers(parsed.customers);
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ kpi: parsed.kpi ?? kpi, kpiTargets: parsed.kpiTargets ?? kpiTargets, history: parsed.history ?? history, stationReports: parsed.stationReports ?? stationReports, driverLogs: parsed.driverLogs ?? driverLogs, customers: parsed.customers ?? customers, savedAt: new Date().toISOString() })); } catch {}
         alert("Imported and saved.");
       } catch { alert("Invalid JSON."); }
       e.target.value = "";
@@ -265,8 +326,7 @@ export default function App() {
   ];
   const colors = [BRAND.secondary, "#ef4444", BRAND.primary, "#94a3b8"];
 
-  /** =============== Views ================= */
-
+  /** =============== Layout ================= */
   const TopBar = (
     <header className="border-b p-3" style={{ backgroundColor: BRAND.primary, color: "white", borderColor: BRAND.primary }}>
       <div className="mx-auto flex max-w-7xl items-center justify-between">
@@ -314,6 +374,8 @@ export default function App() {
         {[
           { id: "dashboard", label: "Dashboard" },
           { id: "finops", label: "Financial Operations" },
+          { id: "fuelops", label: "Fuel Ops" },           // NEW
+          { id: "customers", label: "Customers" },        // NEW
           { id: "budget", label: "Budget" },
           { id: "ops", label: "Ops KPIs" },
           { id: "settings", label: "Settings" },
@@ -379,15 +441,16 @@ export default function App() {
 
       <Section title="Shortcuts">
         <div className="flex flex-wrap gap-2">
-          <button onClick={()=>setActiveTab("finops")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Go to Financial Operations</button>
-          <button onClick={()=>setActiveTab("budget")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Open Budget</button>
-          <button onClick={()=>setActiveTab("ops")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Ops KPIs</button>
+          <button onClick={()=>setActiveTab("fuelops")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Fuel Ops</button>
+          <button onClick={()=>setActiveTab("customers")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Customers</button>
+          <button onClick={()=>setActiveTab("finops")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Financial Ops</button>
+          <button onClick={()=>setActiveTab("budget")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Budget</button>
         </div>
       </Section>
     </div>
   );
 
-  /** ---------- TAB: Financial Operations (your old content) ---------- */
+  /** ---------- TAB: Financial Operations ---------- */
   const ViewFinOps = (
     <div className="mx-auto grid max-w-7xl gap-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -498,6 +561,249 @@ export default function App() {
     </div>
   );
 
+  /** ---------- TAB: Fuel Ops (NEW) ---------- */
+  const [srDraft, setSrDraft] = useState({ date: todayStr(), store: "", unleadedLvl: "", midLvl: "", premiumLvl: "", dieselLvl: "", uPrice: "", mPrice: "", pPrice: "", dPrice: "", comments: "" });
+  const [dlDraft, setDlDraft] = useState({ date: todayStr(), truck: "", route: "", stopName: "", product: "Propane", gallons: "", miles: "", hours: "", notes: "" });
+
+  const addStationReport = () => {
+    const rec = { id: cryptoId(), ...srDraft,
+      unleadedLvl: numOr(srDraft.unleadedLvl), midLvl: numOr(srDraft.midLvl), premiumLvl: numOr(srDraft.premiumLvl), dieselLvl: numOr(srDraft.dieselLvl),
+      uPrice: numOr(srDraft.uPrice), mPrice: numOr(srDraft.mPrice), pPrice: numOr(srDraft.pPrice), dPrice: numOr(srDraft.dPrice)
+    };
+    if (!rec.store) return alert("Store name required.");
+    setStationReports((rows)=>[rec, ...rows]);
+    setSrDraft({ date: todayStr(), store: "", unleadedLvl: "", midLvl: "", premiumLvl: "", dieselLvl: "", uPrice: "", mPrice: "", pPrice: "", dPrice: "", comments: "" });
+  };
+  const removeStationReport = (id) => setStationReports((rows)=>rows.filter(r=>r.id!==id));
+
+  const addDriverLog = () => {
+    const rec = { id: cryptoId(), ...dlDraft, gallons: numOr(dlDraft.gallons), miles: numOr(dlDraft.miles), hours: numOr(dlDraft.hours) };
+    if (!rec.truck || !rec.stopName) return alert("Truck and Stop are required.");
+    setDriverLogs((rows)=>[rec, ...rows]);
+    setDlDraft({ date: todayStr(), truck: "", route: "", stopName: "", product: "Propane", gallons: "", miles: "", hours: "", notes: "" });
+  };
+  const removeDriverLog = (id) => setDriverLogs((rows)=>rows.filter(r=>r.id!==id));
+
+  function numOr(v) { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+
+  const exportCsv = (rows, columns, filename) => {
+    const header = columns.map(c=>c.label).join(",");
+    const body = rows.map(r => columns.map(c => csvEscape(r[c.key])).join(",")).join("\n");
+    const csv = header + "\n" + body;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url);
+  };
+  function csvEscape(val) {
+    if (val == null) return "";
+    const s = String(val);
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  }
+
+  const stationCols = [
+    { key: "date", label: "Date" }, { key: "store", label: "Store" },
+    { key: "unleadedLvl", label: "Unleaded %"}, { key: "midLvl", label: "Mid %"}, { key: "premiumLvl", label: "Premium %"}, { key: "dieselLvl", label: "Diesel %"},
+    { key: "uPrice", label: "U $/gal"}, { key: "mPrice", label: "M $/gal"}, { key: "pPrice", label: "P $/gal"}, { key: "dPrice", label: "D $/gal"},
+    { key: "comments", label: "Comments" },
+  ];
+  const driverCols = [
+    { key: "date", label: "Date" }, { key: "truck", label: "Truck" }, { key: "route", label: "Route" }, { key: "stopName", label: "Stop" },
+    { key: "product", label: "Product" }, { key: "gallons", label: "Gallons" }, { key: "miles", label: "Miles" }, { key: "hours", label: "Hours" }, { key: "notes", label: "Notes" },
+  ];
+
+  const ViewFuelOps = (
+    <div className="mx-auto grid max-w-7xl gap-6">
+      <Section
+        title="Gas Station Inventory Report"
+        right={
+          <div className="flex gap-2">
+            <button onClick={()=>exportCsv(stationReports, stationCols, "station-inventory.csv")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Export CSV</button>
+          </div>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <TextInput label="Date" value={srDraft.date} onChange={(v)=>setSrDraft(s=>({...s, date:v}))} type="date" />
+          <TextInput label="Store" value={srDraft.store} onChange={(v)=>setSrDraft(s=>({...s, store:v}))} placeholder="Corner Pantry #1" />
+          <NumberInput label="Unleaded Tank %" value={srDraft.unleadedLvl} onChange={(v)=>setSrDraft(s=>({...s, unleadedLvl:v}))} />
+          <NumberInput label="Mid Tank %" value={srDraft.midLvl} onChange={(v)=>setSrDraft(s=>({...s, midLvl:v}))} />
+          <NumberInput label="Premium Tank %" value={srDraft.premiumLvl} onChange={(v)=>setSrDraft(s=>({...s, premiumLvl:v}))} />
+          <NumberInput label="Diesel Tank %" value={srDraft.dieselLvl} onChange={(v)=>setSrDraft(s=>({...s, dieselLvl:v}))} />
+          <NumberInput label="Unleaded Price/gal" value={srDraft.uPrice} onChange={(v)=>setSrDraft(s=>({...s, uPrice:v}))} />
+          <NumberInput label="Mid Price/gal" value={srDraft.mPrice} onChange={(v)=>setSrDraft(s=>({...s, mPrice:v}))} />
+          <NumberInput label="Premium Price/gal" value={srDraft.pPrice} onChange={(v)=>setSrDraft(s=>({...s, pPrice:v}))} />
+          <NumberInput label="Diesel Price/gal" value={srDraft.dPrice} onChange={(v)=>setSrDraft(s=>({...s, dPrice:v}))} />
+          <TextInput label="Comments" value={srDraft.comments} onChange={(v)=>setSrDraft(s=>({...s, comments:v}))} placeholder="Notes…" className="sm:col-span-2 lg:col-span-4" />
+        </div>
+        <div className="mt-3">
+          <button disabled={viewOnly} onClick={addStationReport} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border, opacity: viewOnly?0.5:1 }}>
+            Add Report
+          </button>
+          {viewOnly && <span className="ml-2 text-xs" style={{ color:"#64748b" }}>Toggle off View-only to add</span>}
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left" style={{ color:"#475569" }}>
+                {stationCols.map(c=><th key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{c.label}</th>)}
+                <th className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stationReports.map(r=>(
+                <tr key={r.id} className="align-top">
+                  {stationCols.map(c=><td key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{String(r[c.key] ?? "")}</td>)}
+                  <td className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>
+                    <button disabled={viewOnly} onClick={()=>removeStationReport(r.id)} className="rounded border px-2 py-1" style={{ borderColor:BRAND.border, opacity:viewOnly?0.5:1 }}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+              {stationReports.length===0 && (
+                <tr><td colSpan={stationCols.length+1} className="px-2 py-3 text-center text-xs" style={{ color:"#64748b" }}>No reports yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      <Section
+        title="Driver Delivery Log"
+        right={
+          <div className="flex gap-2">
+            <button onClick={()=>exportCsv(driverLogs, driverCols, "driver-logs.csv")} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border }}>Export CSV</button>
+          </div>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <TextInput label="Date" value={dlDraft.date} onChange={(v)=>setDlDraft(s=>({...s, date:v}))} type="date" />
+          <TextInput label="Truck" value={dlDraft.truck} onChange={(v)=>setDlDraft(s=>({...s, truck:v}))} placeholder="LP-7" />
+          <TextInput label="Route" value={dlDraft.route} onChange={(v)=>setDlDraft(s=>({...s, route:v}))} placeholder="North" />
+          <TextInput label="Stop" value={dlDraft.stopName} onChange={(v)=>setDlDraft(s=>({...s, stopName:v}))} placeholder="123 Farm Rd" />
+          <label className="text-sm" style={{ color:"#334155" }}>
+            <div className="mb-1">Product</div>
+            <select value={dlDraft.product} onChange={(e)=>setDlDraft(s=>({...s, product:e.target.value}))} className="w-full rounded-lg border px-2 py-1 text-sm" style={{ borderColor:BRAND.border }}>
+              <option>Propane</option>
+              <option>Unleaded</option>
+              <option>Midgrade</option>
+              <option>Premium</option>
+              <option>Diesel</option>
+              <option>Fuel Oil</option>
+            </select>
+          </label>
+          <NumberInput label="Gallons" value={dlDraft.gallons} onChange={(v)=>setDlDraft(s=>({...s, gallons:v}))} />
+          <NumberInput label="Miles" value={dlDraft.miles} onChange={(v)=>setDlDraft(s=>({...s, miles:v}))} />
+          <NumberInput label="Hours" value={dlDraft.hours} onChange={(v)=>setDlDraft(s=>({...s, hours:v}))} />
+          <TextInput label="Notes" value={dlDraft.notes} onChange={(v)=>setDlDraft(s=>({...s, notes:v}))} className="sm:col-span-2 lg:col-span-4" />
+        </div>
+        <div className="mt-3">
+          <button disabled={viewOnly} onClick={addDriverLog} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border, opacity: viewOnly?0.5:1 }}>
+            Add Log
+          </button>
+          {viewOnly && <span className="ml-2 text-xs" style={{ color:"#64748b" }}>Toggle off View-only to add</span>}
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left" style={{ color:"#475569" }}>
+                {driverCols.map(c=><th key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{c.label}</th>)}
+                <th className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {driverLogs.map(r=>(
+                <tr key={r.id} className="align-top">
+                  {driverCols.map(c=><td key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{String(r[c.key] ?? "")}</td>)}
+                  <td className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>
+                    <button disabled={viewOnly} onClick={()=>removeDriverLog(r.id)} className="rounded border px-2 py-1" style={{ borderColor:BRAND.border, opacity:viewOnly?0.5:1 }}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+              {driverLogs.length===0 && (
+                <tr><td colSpan={driverCols.length+1} className="px-2 py-3 text-center text-xs" style={{ color:"#64748b" }}>No logs yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+    </div>
+  );
+
+  /** ---------- TAB: Customers (NEW) ---------- */
+  const [custDraft, setCustDraft] = useState({ name:"", type:"Residential", city:"", product:"Propane", tankSize:"", typicalOrder:"", active:true });
+  const addCustomer = () => {
+    if (!custDraft.name) return alert("Customer name required.");
+    const rec = { id: cryptoId(), ...custDraft, tankSize: numOr(custDraft.tankSize), typicalOrder: numOr(custDraft.typicalOrder) };
+    setCustomers((rows)=>[rec, ...rows]);
+    setCustDraft({ name:"", type:"Residential", city:"", product:"Propane", tankSize:"", typicalOrder:"", active:true });
+  };
+  const removeCustomer = (id) => setCustomers((rows)=>rows.filter(r=>r.id!==id));
+
+  const customerCols = [
+    { key:"name", label:"Name" }, { key:"type", label:"Type" }, { key:"city", label:"City" }, { key:"product", label:"Product" }, { key:"tankSize", label:"Tank" }, { key:"typicalOrder", label:"Typical Gal" }, { key:"active", label:"Active" }
+  ];
+
+  const ViewCustomers = (
+    <div className="mx-auto grid max-w-7xl gap-6">
+      <Section title="Customer Master">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <TextInput label="Name" value={custDraft.name} onChange={(v)=>setCustDraft(s=>({...s, name:v}))} />
+          <label className="text-sm" style={{ color:"#334155" }}>
+            <div className="mb-1">Type</div>
+            <select value={custDraft.type} onChange={(e)=>setCustDraft(s=>({...s, type:e.target.value}))} className="w-full rounded-lg border px-2 py-1 text-sm" style={{ borderColor:BRAND.border }}>
+              <option>Residential</option>
+              <option>Commercial</option>
+            </select>
+          </label>
+          <TextInput label="City" value={custDraft.city} onChange={(v)=>setCustDraft(s=>({...s, city:v}))} />
+          <label className="text-sm" style={{ color:"#334155" }}>
+            <div className="mb-1">Product</div>
+            <select value={custDraft.product} onChange={(e)=>setCustDraft(s=>({...s, product:e.target.value}))} className="w-full rounded-lg border px-2 py-1 text-sm" style={{ borderColor:BRAND.border }}>
+              <option>Propane</option><option>Unleaded</option><option>Midgrade</option><option>Premium</option><option>Diesel</option><option>Fuel Oil</option>
+            </select>
+          </label>
+          <NumberInput label="Tank Size (gal)" value={custDraft.tankSize} onChange={(v)=>setCustDraft(s=>({...s, tankSize:v}))} />
+          <NumberInput label="Typical Order (gal)" value={custDraft.typicalOrder} onChange={(v)=>setCustDraft(s=>({...s, typicalOrder:v}))} />
+          <label className="text-sm flex items-center gap-2 mt-6">
+            <input type="checkbox" checked={custDraft.active} onChange={(e)=>setCustDraft(s=>({...s, active:e.target.checked}))} />
+            Active
+          </label>
+        </div>
+        <div className="mt-3">
+          <button disabled={viewOnly} onClick={addCustomer} className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: BRAND.border, opacity: viewOnly?0.5:1 }}>
+            Add Customer
+          </button>
+          {viewOnly && <span className="ml-2 text-xs" style={{ color:"#64748b" }}>Toggle off View-only to add</span>}
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left" style={{ color:"#475569" }}>
+                {customerCols.map(c=><th key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{c.label}</th>)}
+                <th className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {customers.map(r=>(
+                <tr key={r.id} className="align-top">
+                  {customerCols.map(c=><td key={c.key} className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>{String(r[c.key])}</td>)}
+                  <td className="border-b px-2 py-2" style={{ borderColor:BRAND.border }}>
+                    <button disabled={viewOnly} onClick={()=>removeCustomer(r.id)} className="rounded border px-2 py-1" style={{ borderColor:BRAND.border, opacity:viewOnly?0.5:1 }}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+              {customers.length===0 && (
+                <tr><td colSpan={customerCols.length+1} className="px-2 py-3 text-center text-xs" style={{ color:"#64748b" }}>No customers yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+    </div>
+  );
+
   /** ---------- TAB: Budget (placeholder) ---------- */
   const ViewBudget = (
     <div className="mx-auto grid max-w-7xl gap-4">
@@ -509,7 +815,7 @@ export default function App() {
     </div>
   );
 
-  /** ---------- TAB: Ops KPIs (placeholders for trucks/employees) ---------- */
+  /** ---------- TAB: Ops KPIs (placeholder) ---------- */
   const ViewOps = (
     <div className="mx-auto grid max-w-7xl gap-4">
       <Section title="Operational KPIs">
@@ -561,6 +867,8 @@ export default function App() {
         <main className="flex-1 p-4">
           {activeTab === "dashboard" && ViewDashboard}
           {activeTab === "finops" && ViewFinOps}
+          {activeTab === "fuelops" && ViewFuelOps}
+          {activeTab === "customers" && ViewCustomers}
           {activeTab === "budget" && ViewBudget}
           {activeTab === "ops" && ViewOps}
           {activeTab === "settings" && ViewSettings}
