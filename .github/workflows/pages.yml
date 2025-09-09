@@ -3,20 +3,31 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [ main ]
+    # Only build when app files change (optional but big win)
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "vite.config.js"
+      - "postcss.config.js"
+      - "tailwind.config.js"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
-concurrency:
-  group: "pages"
-  cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,18 +36,30 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: "npm"
 
-      # No lockfile required – works even if package-lock.json is missing
-      - name: Install dependencies
-        run: npm install
+      - name: Install deps (quiet)
+        env:
+          # keep npm quiet
+          NPM_CONFIG_LOGLEVEL: error
+          # speed: skip audit/fund banners
+          NPM_CONFIG_FUND: false
+          NPM_CONFIG_AUDIT: false
+        run: |
+          npm ci --no-audit --no-fund --silent
 
-      - name: Build
-        run: npm run build
+      - name: Build (quiet)
+        env:
+          # silence Vite except errors
+          VITE_INLINE: "true"
+        run: |
+          npx vite build --logLevel error
 
-      - name: Upload Pages artifact
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+          retention-days: 3
 
   deploy:
     needs: build
