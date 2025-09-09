@@ -93,7 +93,7 @@ function mergeHistory(localHist = [], repoHist = []) {
   return ordered;
 }
 
-/* ===== Minimal styles for the new shell ===== */
+/* ===== Minimal styles for the shell + inputs ===== */
 const styles = `
   .app-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh;background:${BRAND.bg}}
   .sidebar{background:${BRAND.primary};color:#fff;display:flex;flex-direction:column}
@@ -112,6 +112,9 @@ const styles = `
   .btn:active{transform:translateY(1px)}
   .muted{color:#6b7280;font-size:12px}
   .headline{font-weight:600;margin-bottom:8px}
+  .row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}
+  .input{width:140px;border:1px solid #e5e7eb;border-radius:10px;padding:6px 8px}
+  .pill{font-size:12px;border:1px solid #e5e7eb;border-radius:999px;padding:4px 8px;background:#fff}
 `;
 
 /* ===== Reusable card ===== */
@@ -126,8 +129,114 @@ function KpiCard({ title, value, target, formatter = (v) => v, children }) {
   );
 }
 
+/* ===== Editable sections ===== */
+function ManualEntry({ kpi, setKpi, viewOnly }) {
+  const updateKpiField = (key, raw) => {
+    const v = raw === "" ? "" : Number(raw);
+    const next = { ...kpi, [key]: raw === "" ? "" : (Number.isFinite(v) ? v : null) };
+
+    // recompute dependents
+    const rev = key === "revenue" ? v : kpi.revenue;
+    const hc = key === "headcount" ? v : kpi.headcount;
+    next.revenuePerEmployee = computeRevenuePerEmployee(rev, hc);
+
+    const spend = key === "salesMktgSpend" ? v : kpi.salesMktgSpend;
+    const newc = key === "newCustomers" ? v : kpi.newCustomers;
+    next.cac = computeCAC(spend, newc);
+
+    const ca = key === "currentAssets" ? v : kpi.currentAssets;
+    const cl = key === "currentLiabilities" ? v : kpi.currentLiabilities;
+    next.workingCapital = computeWorkingCapital(ca, cl);
+
+    setKpi(next);
+  };
+
+  const field = (label, key) => (
+    <div className="row">
+      <label className="muted" style={{ textTransform: "capitalize" }}>{label}</label>
+      <input
+        className="input"
+        type="number"
+        value={kpi?.[key] ?? ""}
+        disabled={viewOnly}
+        onChange={(e) => updateKpiField(key, e.target.value)}
+      />
+    </div>
+  );
+
+  return (
+    <div className="card">
+      <div className="headline">Manual Data Entry</div>
+      <div className="grid grid-3">
+        {field("revenue", "revenue")}
+        {field("headcount", "headcount")}
+        <div className="row">
+          <label className="muted">RevenuePerEmployee</label>
+          <input className="input" type="number" value={kpi?.revenuePerEmployee ?? ""} disabled />
+        </div>
+
+        {field("newCustomers", "newCustomers")}
+        {field("salesMktgSpend", "salesMktgSpend")}
+        <div className="row">
+          <label className="muted">CAC</label>
+          <input className="input" type="number" value={kpi?.cac ?? ""} disabled />
+        </div>
+
+        {field("currentAssets", "currentAssets")}
+        {field("currentLiabilities", "currentLiabilities")}
+        <div className="row">
+          <label className="muted">WorkingCapital</label>
+          <input className="input" type="number" value={kpi?.workingCapital ?? ""} disabled />
+        </div>
+
+        {field("grossMargin (decimal)", "grossMargin")}
+        {field("ebitdaPct (decimal)", "ebitdaPct")}
+        {field("sgaPct (decimal)", "sgaPct")}
+
+        {field("trainingPct (decimal)", "trainingPct")}
+        {field("poorQualityPct (decimal)", "poorQualityPct")}
+      </div>
+      <div className="muted" style={{ marginTop: 8 }}>Percentages are decimals (e.g., 0.53 = 53%). Money as plain numbers.</div>
+    </div>
+  );
+}
+
+function TargetsEditor({ targets, setTargets, viewOnly }) {
+  const field = (label, key) => (
+    <div className="row">
+      <label className="muted" style={{ textTransform: "capitalize" }}>{label}</label>
+      <input
+        className="input"
+        type="number"
+        value={targets?.[key] ?? ""}
+        disabled={viewOnly}
+        onChange={(e) => {
+          const v = e.target.value === "" ? "" : Number(e.target.value);
+          setTargets((t) => ({ ...t, [key]: e.target.value === "" ? "" : (Number.isFinite(v) ? v : null) }));
+        }}
+      />
+    </div>
+  );
+
+  return (
+    <div className="card">
+      <div className="headline">Targets & Settings</div>
+      <div className="grid grid-3">
+        {field("grossMargin", "grossMargin")}
+        {field("ebitdaPct", "ebitdaPct")}
+        {field("sgaPct", "sgaPct")}
+        {field("revenuePerEmployee", "revenuePerEmployee")}
+        {field("cac", "cac")}
+        {field("workingCapital", "workingCapital")}
+        {field("trainingPct", "trainingPct")}
+        {field("poorQualityPct", "poorQualityPct")}
+      </div>
+    </div>
+  );
+}
+
 /* ===== Pages ===== */
-function DashboardPage({ kpi, kpiTargets, history }) {
+function DashboardPage({ kpi, kpiTargets, history, setKpi, setKpiTargets, viewOnly }) {
   const safeHistory = Array.isArray(history) ? history : [];
 
   const revPerEmpSeries = useMemo(
@@ -234,6 +343,12 @@ function DashboardPage({ kpi, kpiTargets, history }) {
           </div>
         </div>
       </div>
+
+      {/* Editable sections */}
+      <div className="grid" style={{ marginTop: 16 }}>
+        <ManualEntry kpi={kpi} setKpi={setKpi} viewOnly={viewOnly} />
+        <TargetsEditor targets={kpiTargets} setTargets={setKpiTargets} viewOnly={viewOnly} />
+      </div>
     </div>
   );
 }
@@ -256,10 +371,12 @@ function OpsKpisPage() {
         <div className="card">
           <div className="headline">Revenue per Employee vs Cost per Employee</div>
           <div className="muted">Hook up payroll/employee cost data here; we’ll chart Rev/Emp vs Cost/Emp and a margin.</div>
+          <div className="pill" style={{ marginTop: 8 }}>Next: connect payroll export</div>
         </div>
         <div className="card">
           <div className="headline">Truck Cost per Delivery / per Stop</div>
           <div className="muted">Wire to Geotab, Suburban, Housecall Pro: cost per mile, per route, per stop.</div>
+          <div className="pill" style={{ marginTop: 8 }}>Next: connect Geotab & job data</div>
         </div>
       </div>
     </div>
@@ -380,7 +497,14 @@ export default function App() {
 
   const content =
     active === "dashboard" ? (
-      <DashboardPage kpi={kpi} kpiTargets={kpiTargets} history={history} />
+      <DashboardPage
+        kpi={kpi}
+        kpiTargets={kpiTargets}
+        history={history}
+        setKpi={setKpi}
+        setKpiTargets={setKpiTargets}
+        viewOnly={viewOnly}
+      />
     ) : active === "budget" ? (
       <BudgetPage />
     ) : (
