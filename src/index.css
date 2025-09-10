@@ -1,15 +1,14 @@
+/* Tailwind core */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --brand-primary: #21253F;
-  --brand-secondary: #B6BE82;
+/* App-level tweaks (optional) */
+html, body, #root {
+  height: 100%;
 }
 
-html, body, #root { height: 100%; }
-
 body {
-  @apply bg-slate-50 text-slate-800;
-  font-feature-settings: "rlig" 1, "calt" 1;
+  /* provides a neutral background if Tailwind classes don't override */
+  background-color: #f8fafc; /* slate-50 */
 }
