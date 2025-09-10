@@ -1,89 +1,160 @@
-import React, { useState } from "react";
+// src/components/SignInForm.jsx
+import React from "react";
 import { supabase } from "../lib/supabaseClient";
 
 export default function SignInForm() {
-  const [email, setEmail] = useState("");
-  const [pass, setPass] = useState("");
-  const [mode, setMode] = useState("password"); // "password" | "magic"
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [mode, setMode] = React.useState("password"); // password | magic
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState("");
 
-  const signInWithPassword = async (e) => {
+  async function signInWithPassword(e) {
     e.preventDefault();
-    setMsg(""); setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
-    setLoading(false);
+    setBusy(true);
+    setMsg("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setBusy(false);
     if (error) setMsg(error.message);
-    else setMsg("Signed in! Redirecting…");
-  };
+    else window.location.reload();
+  }
 
-  const sendMagicLink = async (e) => {
+  async function signUpWithPassword(e) {
     e.preventDefault();
-    setMsg(""); setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true }});
-    setLoading(false);
-    setMsg(error ? error.message : "Check your email for a sign-in link.");
-  };
+    setBusy(true);
+    setMsg("");
+    const { error } = await supabase.auth.signUp({ email, password });
+    setBusy(false);
+    if (error) setMsg(error.message);
+    else setMsg("Check your email to confirm your account, then sign in.");
+  }
 
-  const onSubmit = mode === "password" ? signInWithPassword : sendMagicLink;
+  async function sendMagicLink(e) {
+    e.preventDefault();
+    setBusy(true);
+    setMsg("");
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    setBusy(false);
+    if (error) setMsg(error.message);
+    else setMsg("Magic link sent. Check your email.");
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-      <div className="w-full max-w-md bg-white shadow-lg rounded-xl p-6 border border-slate-200">
-        <h1 className="text-xl font-semibold text-slate-800 mb-1">Sign in</h1>
-        <p className="text-slate-500 mb-4">Gibson Oil &amp; Gas — internal dashboard</p>
+    <div
+      style={{
+        width: 360,
+        padding: 24,
+        border: "1px solid #e5e7eb",
+        borderRadius: 12,
+        background: "white",
+        boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+      }}
+    >
+      <h2 style={{ marginTop: 0, marginBottom: 12 }}>Sign in</h2>
 
-        <div className="flex gap-2 mb-4">
-          <button
-            className={`px-3 py-1 rounded border ${mode==='password'?'bg-slate-800 text-white':'bg-white'} border-slate-300`}
-            onClick={() => setMode("password")}
-          >
-            Email + Password
-          </button>
-          <button
-            className={`px-3 py-1 rounded border ${mode==='magic'?'bg-slate-800 text-white':'bg-white'} border-slate-300`}
-            onClick={() => setMode("magic")}
-          >
-            Magic Link
-          </button>
-        </div>
-
-        <form onSubmit={onSubmit} className="space-y-3">
-          <div>
-            <label className="block text-sm text-slate-600">Email</label>
-            <input
-              type="email"
-              className="mt-1 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-400"
-              value={email}
-              onChange={(e)=>setEmail(e.target.value)}
-              required
-            />
-          </div>
-
-          {mode === "password" && (
-            <div>
-              <label className="block text-sm text-slate-600">Password</label>
-              <input
-                type="password"
-                className="mt-1 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-slate-400"
-                value={pass}
-                onChange={(e)=>setPass(e.target.value)}
-                required
-              />
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 rounded bg-slate-800 text-white disabled:opacity-60"
-          >
-            {loading ? "Working…" : (mode === "password" ? "Sign in" : "Send magic link")}
-          </button>
-
-          {msg && <p className="text-sm text-slate-600">{msg}</p>}
-        </form>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button
+          onClick={() => setMode("password")}
+          style={{
+            flex: 1,
+            padding: 8,
+            borderRadius: 8,
+            border: "1px solid #d1d5db",
+            background: mode === "password" ? "#111827" : "white",
+            color: mode === "password" ? "white" : "black",
+            cursor: "pointer",
+          }}
+        >
+          Email + Password
+        </button>
+        <button
+          onClick={() => setMode("magic")}
+          style={{
+            flex: 1,
+            padding: 8,
+            borderRadius: 8,
+            border: "1px solid #d1d5db",
+            background: mode === "magic" ? "#111827" : "white",
+            color: mode === "magic" ? "white" : "black",
+            cursor: "pointer",
+          }}
+        >
+          Magic Link
+        </button>
       </div>
+
+      {mode === "password" ? (
+        <form onSubmit={signInWithPassword}>
+          <label>Email</label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={inputStyle}
+          />
+          <label>Password</label>
+          <input
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={inputStyle}
+          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="submit" disabled={busy} style={primaryBtn}>
+              {busy ? "Signing in…" : "Sign in"}
+            </button>
+            <button onClick={signUpWithPassword} disabled={busy} style={secondaryBtn}>
+              Create account
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={sendMagicLink}>
+          <label>Email</label>
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={inputStyle}
+          />
+          <button type="submit" disabled={busy} style={primaryBtn}>
+            {busy ? "Sending…" : "Send magic link"}
+          </button>
+        </form>
+      )}
+
+      {msg && <p style={{ marginTop: 12, color: "#b91c1c" }}>{msg}</p>}
     </div>
   );
 }
+
+const inputStyle = {
+  width: "100%",
+  padding: 10,
+  border: "1px solid #d1d5db",
+  borderRadius: 8,
+  marginBottom: 12,
+};
+
+const primaryBtn = {
+  flex: 1,
+  padding: 10,
+  background: "#111827",
+  color: "white",
+  border: "1px solid #111827",
+  borderRadius: 8,
+  cursor: "pointer",
+};
+
+const secondaryBtn = {
+  flex: 1,
+  padding: 10,
+  background: "white",
+  color: "black",
+  border: "1px solid #d1d5db",
+  borderRadius: 8,
+  cursor: "pointer",
+};
