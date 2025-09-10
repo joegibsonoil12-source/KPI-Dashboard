@@ -5,12 +5,11 @@ export default {
     extend: {
       colors: {
         brand: {
-          primary: "#21253F",   // navy from your logo
-          secondary: "#B6BE82", // green from your logo
-        },
-      },
-      borderRadius: { "2xl": "1rem" },
-    },
+          primary: "#21253F",   // navy
+          secondary: "#B6BE82"  // olive/green
+        }
+      }
+    }
   },
-  plugins: [],
+  plugins: []
 };
