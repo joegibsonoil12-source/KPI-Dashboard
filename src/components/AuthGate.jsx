@@ -1,41 +1,58 @@
-import React, { useEffect, useState } from "react";
+// src/components/AuthGate.jsx
+import React from "react";
 import { supabase } from "../lib/supabaseClient";
 import SignInForm from "./SignInForm";
 
 export default function AuthGate({ children }) {
-  const [loading, setLoading] = useState(true);
-  const [session, setSession] = useState(null);
+  const [status, setStatus] = React.useState("checking"); // checking | signed-in | signed-out
 
-  useEffect(() => {
-    let mounted = true;
+  React.useEffect(() => {
+    let alive = true;
 
-    (async () => {
-      const { data } = await supabase.auth.getSession();
-      if (mounted) {
-        setSession(data.session ?? null);
-        setLoading(false);
+    async function check() {
+      const { data, error } = await supabase.auth.getSession();
+      if (!alive) return;
+
+      console.log("[AuthGate] getSession:", { data, error });
+
+      if (error) {
+        setStatus("signed-out");
+        return;
       }
-    })();
+      setStatus(data?.session ? "signed-in" : "signed-out");
+    }
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, sess) => {
-      setSession(sess ?? null);
+    check();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!alive) return;
+      console.log("[AuthGate] onAuthStateChange:", { session });
+      setStatus(session ? "signed-in" : "signed-out");
     });
 
     return () => {
-      mounted = false;
-      sub.subscription?.unsubscribe?.();
+      alive = false;
+      subscription.unsubscribe();
     };
   }, []);
 
-  if (loading) {
+  if (status === "checking") {
     return (
-      <div className="min-h-screen flex items-center justify-center text-slate-600">
-        Loading…
+      <div style={{ padding: 24 }}>
+        <p>Checking sign-in…</p>
       </div>
     );
   }
 
-  if (!session) return <SignInForm />;
+  if (status === "signed-out") {
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}>
+        <SignInForm />
+      </div>
+    );
+  }
 
   return <>{children}</>;
 }
