@@ -21,30 +21,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Use cache only if a lockfile exists
-      - name: Setup Node (cached)
-        if: ${{ hashFiles('package-lock.json') != '' || hashFiles('npm-shrinkwrap.json') != '' || hashFiles('yarn.lock') != '' }}
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Setup Node (no cache)
-        if: ${{ hashFiles('package-lock.json') == '' && hashFiles('npm-shrinkwrap.json') == '' && hashFiles('yarn.lock') == '' }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      # Make your Vite env vars available at build time
+      - name: Write .env for Vite
+        run: |
+          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> .env
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> .env
 
-      - name: Install deps
-        run: npm install
+      - name: Install dependencies
+        run: npm install --no-fund --no-audit
+
+      # Safety net: ensure the SDK is present even if package.json was out of sync
+      - name: Ensure Supabase SDK is installed
+        run: |
+          if ! npm ls @supabase/supabase-js --depth=0 >/dev/null 2>&1; then
+            npm i @supabase/supabase-js@2 --save
+          fi
 
       - name: Build
         run: npm run build
 
-      - name: Upload artifact
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: ./dist
 
   deploy:
     needs: build
