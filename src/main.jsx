@@ -1,7 +1,13 @@
 import React from "react";
-import { createRoot } from "react-dom/client";
+import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
-import "./index.css"; // keep even if empty so Vite has a css entry
+import AuthLayout from "./AuthLayout.jsx";
+import "./index.css";
 
-const root = document.getElementById("root");
-createRoot(root).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <AuthLayout>
+      <App />
+    </AuthLayout>
+  </React.StrictMode>
+);
