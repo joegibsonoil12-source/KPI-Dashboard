@@ -1,26 +1,145 @@
 // src/App.jsx
-import React, { useEffect, useState } from "react";
-import { supabase } from "./lib/supabaseClient";
-import AdminOnly from "./components/AdminOnly";
-import RoleBadge from "./components/RoleBadge";
-import LegacyDashboard from "./LegacyDashboard";
+import React, { useEffect, useMemo, useState } from "react";
 
-/* Stub sections (swap later with real components) */
-function FinancialOps() { return <div><h2>Financial Ops</h2></div>; }
-function DeliveryTickets() { return <div><h2>Delivery Tickets</h2><p>Admin only.</p></div>; }
-function StoreInvoicing() { return <div><h2>Store Invoicing</h2><p>Admin only.</p></div>; }
-function OperationalKPIs() { return <div><h2>Operational KPIs</h2></div>; }
-function Budget() { return <div><h2>Budget</h2></div>; }
+/* ============================================================================
+   Supabase client (inlined)
+   ----------------------------------------------------------------------------
+   If you already have src/lib/supabaseClient.js you can keep using it instead
+   and delete this block, then: import { supabase } from "./lib/supabaseClient";
+   ========================================================================== */
+function makeSupabase() {
+  // Minimal inlined client using ESM @supabase/supabase-js if present in deps.
+  // If your project already imports from "./lib/supabaseClient", replace this
+  // function with:  import { supabase } from "./lib/supabaseClient";
+  // and delete the code below.
+  // eslint-disable-next-line no-new-func
+  const factory = new Function(
+    "createClient",
+    "url",
+    "anon",
+    "return createClient(url, anon, { auth: { persistSession: true, autoRefreshToken: true } });"
+  );
+  try {
+    // Lazy require from window if bundled elsewhere
+    if (window.__supabase) return window.__supabase;
+  } catch (_) {}
+  // Dynamically import so this file remains single-file usable.
+  // Note: Vite will handle this import at build time.
+  // If that’s an issue, switch to your existing supabaseClient.js.
+  let supabaseSingleton = null;
+  const supa = async () => {
+    if (supabaseSingleton) return supabaseSingleton;
+    const mod = await import("@supabase/supabase-js");
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    supabaseSingleton = factory(mod.createClient, url, anon);
+    try { window.__supabase = supabaseSingleton; } catch (_) {}
+    return supabaseSingleton;
+  };
+  // a tiny proxy to give supabase-like API synchronously (we await inside)
+  const proxy = new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        return async (...args) => {
+          const cli = await supa();
+          return cli[prop](...args);
+        };
+      },
+    }
+  );
+  return proxy;
+}
+const supabase = makeSupabase();
 
-const TABS = [
-  { key: "dashboard", label: "Dashboard", adminOnly: false, Component: LegacyDashboard },
-  { key: "financial", label: "Financial Ops", adminOnly: false, Component: FinancialOps },
-  { key: "tickets", label: "Delivery Tickets", adminOnly: true, Component: DeliveryTickets },
-  { key: "invoicing", label: "Store Invoicing", adminOnly: true, Component: StoreInvoicing },
-  { key: "ops", label: "Operational KPIs", adminOnly: false, Component: OperationalKPIs },
-  { key: "budget", label: "Budget", adminOnly: false, Component: Budget },
-];
+/* ============================================================================
+   AdminOnly wrapper (checks profiles.role === 'admin')
+   ========================================================================== */
+function AdminOnly({ children, fallback = null }) {
+  const [isAdmin, setIsAdmin] = useState(null);
 
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id;
+      if (!uid) {
+        if (mounted) setIsAdmin(false);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", uid)
+        .maybeSingle();
+      if (!mounted) return;
+      if (error) {
+        console.error("AdminOnly profile error:", error);
+        setIsAdmin(false);
+        return;
+      }
+      setIsAdmin((data?.role || "").toLowerCase() === "admin");
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  if (isAdmin === null) return null;
+  if (!isAdmin) return fallback;
+  return <>{children}</>;
+}
+
+/* ============================================================================
+   RoleBadge (fixed bottom-right “Role: …”)
+   ========================================================================== */
+function RoleBadge() {
+  const [role, setRole] = useState("user");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id;
+      if (!uid) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", uid)
+        .maybeSingle();
+      if (!cancelled) setRole((data?.role || "user").toLowerCase());
+    }
+    load();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        right: 16,
+        bottom: 16,
+        background: "#111827",
+        color: "white",
+        padding: "6px 10px",
+        borderRadius: 8,
+        fontSize: 12,
+        zIndex: 9,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+      }}
+    >
+      Role: {role}
+    </div>
+  );
+}
+
+/* ============================================================================
+   SignInCard (magic link)
+   ========================================================================== */
 function SignInCard() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -38,30 +157,658 @@ function SignInCard() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#F8FAFC" }}>
-      <div style={{ width: 380, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24 }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        background: "#F8FAFC",
+      }}
+    >
+      <div
+        style={{
+          width: 380,
+          background: "#fff",
+          border: "1px solid #E5E7EB",
+          borderRadius: 12,
+          padding: 24,
+        }}
+      >
         <h2 style={{ marginTop: 0 }}>Sign in</h2>
         {!sent ? (
           <form onSubmit={onSignIn}>
-            <label style={{ display: "block", fontSize: 12, color: "#6B7280", marginBottom: 6 }}>Work email</label>
+            <label
+              style={{
+                display: "block",
+                fontSize: 12,
+                color: "#6B7280",
+                marginBottom: 6,
+              }}
+            >
+              Work email
+            </label>
             <input
-              type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="you@company.com"
-              style={{ width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, marginBottom: 12 }}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "1px solid #E5E7EB",
+                borderRadius: 8,
+                marginBottom: 12,
+              }}
             />
-            {!!error && <div style={{ color: "#b91c1c", fontSize: 12, marginBottom: 8 }}>{error}</div>}
-            <button type="submit" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}>
+            {!!error && (
+              <div
+                style={{ color: "#b91c1c", fontSize: 12, marginBottom: 8 }}
+              >
+                {error}
+              </div>
+            )}
+            <button
+              type="submit"
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #E5E7EB",
+                background: "#111827",
+                color: "white",
+                cursor: "pointer",
+              }}
+            >
               Send magic link
             </button>
           </form>
         ) : (
-          <div><p>We sent you a sign-in link. Open it on this device.</p></div>
+          <div>
+            <p>We sent you a sign-in link. Open it on this device.</p>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
+/* ============================================================================
+   Shared UI helpers
+   ========================================================================== */
+function Card({ title, value, sub, right, style, children }) {
+  return (
+    <div
+      style={{
+        background: "white",
+        border: "1px solid #E5E7EB",
+        borderRadius: 12,
+        padding: 16,
+        ...style,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline" }}>
+        <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>
+          {title}
+        </div>
+        <div style={{ marginLeft: "auto" }}>{right}</div>
+      </div>
+      {value !== undefined && (
+        <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>
+          {value}
+        </div>
+      )}
+      {sub && (
+        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{sub}</div>
+      )}
+      {children}
+    </div>
+  );
+}
+function Section({ title, actions, children, style }) {
+  return (
+    <section style={{ marginTop: 24, ...style }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 16 }}>{title}</h3>
+        <div style={{ marginLeft: "auto" }}>{actions}</div>
+      </div>
+      <div>{children}</div>
+    </section>
+  );
+}
+function Table({ columns, rows, keyField }) {
+  return (
+    <div style={{ overflow: "auto", border: "1px solid #E5E7EB", borderRadius: 12 }}>
+      <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
+        <thead>
+          <tr style={{ background: "#F3F4F6" }}>
+            {columns.map((c) => (
+              <th
+                key={c.key}
+                style={{
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  fontSize: 12,
+                  color: "#6B7280",
+                  borderBottom: "1px solid #E5E7EB",
+                }}
+              >
+                {c.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r[keyField] ?? i} style={{ background: i % 2 ? "#FAFAFA" : "white" }}>
+              {columns.map((c) => (
+                <td
+                  key={c.key}
+                  style={{
+                    padding: "10px 12px",
+                    borderBottom: "1px solid #F3F4F6",
+                    fontSize: 13,
+                    verticalAlign: "top",
+                  }}
+                >
+                  {typeof c.render === "function" ? c.render(r[c.key], r, i) : r[c.key]}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ============================================================================
+   Mock data generators (replace with real queries later)
+   ========================================================================== */
+const STORES = ["Midland", "Odessa", "Lubbock", "Abilene", "San Angelo"];
+const PRODUCTS = ["Diesel", "Gasoline", "DEF"];
+const DRIVERS = ["J. Carter", "L. Nguyen", "M. Patel", "R. Gomez", "S. Ali"];
+const rand = (min, max) => Math.round(min + Math.random() * (max - min));
+const randf = (min, max) => min + Math.random() * (max - min);
+
+function seedTickets(n = 120) {
+  return Array.from({ length: n }, (_, i) => {
+    const gallons = rand(300, 5000);
+    const price = parseFloat(randf(2.25, 4.25).toFixed(2));
+    return {
+      id: i + 1,
+      date: new Date(2025, 7, rand(1, 30)).toISOString().slice(0, 10),
+      store: STORES[rand(0, STORES.length - 1)],
+      product: PRODUCTS[rand(0, PRODUCTS.length - 1)],
+      driver: DRIVERS[rand(0, DRIVERS.length - 1)],
+      gallons,
+      price,
+      amount: gallons * price,
+      ticketId: "T-" + (1000 + i),
+      status: ["Delivered", "Scheduled", "Issue"][rand(0, 2)],
+      notes: rand(0, 4) ? "" : "Call store on arrival",
+    };
+  });
+}
+
+function seedInvoices(tickets) {
+  // Simple rollup by store to “invoice” rows
+  const byStore = new Map();
+  tickets.forEach((t) => {
+    const k = t.store;
+    byStore.set(k, (byStore.get(k) || 0) + t.amount);
+  });
+  return Array.from(byStore.entries()).map(([store, amount], i) => ({
+    id: i + 1,
+    invoiceNo: "INV-" + (5000 + i),
+    store,
+    total: amount,
+    status: ["Open", "Pending", "Paid"][rand(0, 2)],
+    created: new Date(2025, 7, rand(1, 30)).toISOString().slice(0, 10),
+  }));
+}
+
+/* ============================================================================
+   LegacyDashboard — big UI (KPIs, filters, tables, budget, revenue by store)
+   ========================================================================== */
+function Filters({ value, onChange }) {
+  const [q, setQ] = useState(value.q || "");
+  const [store, setStore] = useState(value.store || "All");
+  const [product, setProduct] = useState(value.product || "All");
+  const [status, setStatus] = useState(value.status || "Any");
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px 160px 120px", gap: 8 }}>
+      <input
+        placeholder="Search tickets, stores, products, driver…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}
+      />
+      <select value={store} onChange={(e) => setStore(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+        <option>All</option>
+        {STORES.map((s) => <option key={s}>{s}</option>)}
+      </select>
+      <select value={product} onChange={(e) => setProduct(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+        <option>All</option>
+        {PRODUCTS.map((p) => <option key={p}>{p}</option>)}
+      </select>
+      <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+        <option>Any</option>
+        <option>Delivered</option>
+        <option>Scheduled</option>
+        <option>Issue</option>
+      </select>
+      <button
+        onClick={() => onChange({ q, store, product, status })}
+        style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}
+      >
+        Apply
+      </button>
+    </div>
+  );
+}
+
+function KPIGrid({ rows }) {
+  const totals = useMemo(() => {
+    const gallons = rows.reduce((a, b) => a + b.gallons, 0);
+    const revenue = rows.reduce((a, b) => a + b.amount, 0);
+    const avgPrice = revenue / Math.max(gallons, 1);
+    const delivered = rows.filter((t) => t.status === "Delivered").length;
+    const issues = rows.filter((t) => t.status === "Issue").length;
+    return { gallons, revenue, avgPrice, delivered, issues };
+  }, [rows]);
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+      <Card title="Total Gallons" value={totals.gallons.toLocaleString()} sub="Filtered sum" />
+      <Card title="Est. Revenue" value={"$" + totals.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} sub={"Avg $" + totals.avgPrice.toFixed(2) + " / gal"} />
+      <Card title="Delivered" value={totals.delivered} sub="Tickets" />
+      <Card title="Open Issues" value={totals.issues} sub="Needs attention" />
+      <Card title="Avg Ticket" value={"$" + (totals.revenue / Math.max(rows.length, 1)).toFixed(0)} sub="Revenue / ticket" />
+    </div>
+  );
+}
+
+function RevenueByStore({ rows }) {
+  const sums = useMemo(() => {
+    const m = new Map();
+    rows.forEach((r) => {
+      m.set(r.store, (m.get(r.store) || 0) + r.amount);
+    });
+    return Array.from(m.entries())
+      .map(([store, revenue]) => ({ store, revenue }))
+      .sort((a, b) => b.revenue - a.revenue);
+  }, [rows]);
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      {sums.map((s) => (
+        <Card key={s.store} title={s.store} value={"$" + s.revenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} sub="Est. revenue" />
+      ))}
+    </div>
+  );
+}
+
+function BudgetProgress({ rows }) {
+  const target = 150000;
+  const revenue = rows.reduce((a, b) => a + b.amount, 0);
+  const pct = Math.min(100, Math.round((revenue / target) * 100));
+  return (
+    <Card title="Monthly Budget Progress" right={<span style={{ fontSize: 12, color: "#6B7280" }}>${target.toLocaleString()} target</span>}>
+      <div style={{ height: 12, background: "#F3F4F6", borderRadius: 999, overflow: "hidden", marginTop: 10 }}>
+        <div style={{ width: pct + "%", height: "100%", background: "#111827" }} />
+      </div>
+      <div style={{ marginTop: 8, fontSize: 13 }}>${revenue.toLocaleString()} • {pct}%</div>
+    </Card>
+  );
+}
+
+function TicketsTable({ rows }) {
+  const cols = [
+    { key: "ticketId", label: "Ticket" },
+    { key: "date", label: "Date" },
+    { key: "store", label: "Store" },
+    { key: "product", label: "Product" },
+    { key: "driver", label: "Driver" },
+    { key: "gallons", label: "Gallons", render: (v) => v.toLocaleString() },
+    { key: "price", label: "Price/gal", render: (v) => "$" + v.toFixed(2) },
+    { key: "amount", label: "Amount", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+    {
+      key: "status",
+      label: "Status",
+      render: (v) => (
+        <span
+          style={{
+            padding: "4px 8px",
+            borderRadius: 999,
+            fontSize: 12,
+            background: v === "Delivered" ? "#DCFCE7" : v === "Scheduled" ? "#E0E7FF" : "#FEE2E2",
+            color: v === "Delivered" ? "#166534" : v === "Scheduled" ? "#3730A3" : "#991B1B",
+            border: "1px solid " + (v === "Delivered" ? "#BBF7D0" : v === "Scheduled" ? "#C7D2FE" : "#FECACA"),
+          }}
+        >
+          {v}
+        </span>
+      ),
+    },
+    { key: "notes", label: "Notes" },
+  ];
+  return <Table columns={cols} rows={rows} keyField="id" />;
+}
+
+function NotesPanel() {
+  const [notes, setNotes] = useState([
+    { id: 1, text: "Review scheduled tickets with high gallons." },
+    { id: 2, text: "Investigate open issues flagged by drivers." },
+    { id: 3, text: "Confirm invoice totals against delivery volume." },
+  ]);
+  const [input, setInput] = useState("");
+
+  function addNote() {
+    const t = input.trim();
+    if (!t) return;
+    setNotes((prev) => [...prev, { id: prev.length ? prev[prev.length - 1].id + 1 : 1, text: t }]);
+    setInput("");
+  }
+  function removeNote(id) {
+    setNotes((prev) => prev.filter((n) => n.id !== id));
+  }
+
+  return (
+    <Card title="Notes / Next actions">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginTop: 8 }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Add a note…"
+          style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}
+        />
+        <button
+          onClick={addNote}
+          style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}
+        >
+          Add
+        </button>
+      </div>
+      <ul style={{ margin: 0, paddingLeft: 18, marginTop: 10 }}>
+        {notes.map((n) => (
+          <li key={n.id} style={{ marginBottom: 6 }}>
+            <span>{n.text}</span>
+            <button
+              onClick={() => removeNote(n.id)}
+              style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 6, border: "1px solid #E5E7EB", background: "white", cursor: "pointer", fontSize: 12 }}
+            >
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+function LegacyDashboard() {
+  const [filter, setFilter] = useState({ q: "", store: "All", product: "All", status: "Any" });
+  const [tickets] = useState(seedTickets(140));
+  const invoices = useMemo(() => seedInvoices(tickets), [tickets]);
+
+  const filtered = useMemo(() => {
+    return tickets.filter((r) => {
+      if (filter.store !== "All" && r.store !== filter.store) return false;
+      if (filter.product !== "All" && r.product !== filter.product) return false;
+      if (filter.status !== "Any" && r.status !== filter.status) return false;
+      if (filter.q) {
+        const q = filter.q.toLowerCase();
+        const text = `${r.ticketId} ${r.store} ${r.product} ${r.driver}`.toLowerCase();
+        if (!text.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [tickets, filter]);
+
+  const openIssues = filtered.filter((t) => t.status === "Issue");
+  const scheduled = filtered.filter((t) => t.status === "Scheduled");
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Section
+        title="Filters"
+        actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span>}
+      >
+        <Filters value={filter} onChange={setFilter} />
+      </Section>
+
+      <KPIGrid rows={filtered} />
+
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+        <Section title="Revenue by Store">
+          <RevenueByStore rows={filtered} />
+        </Section>
+        <Section title="Budget">
+          <BudgetProgress rows={filtered} />
+        </Section>
+      </div>
+
+      <Section title="Recent Tickets">
+        <TicketsTable rows={filtered.slice(0, 30)} />
+      </Section>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Section title="Open Issues" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{openIssues.length}</span>}>
+          <Table
+            keyField="id"
+            columns={[
+              { key: "ticketId", label: "Ticket" },
+              { key: "store", label: "Store" },
+              { key: "product", label: "Product" },
+              { key: "driver", label: "Driver" },
+              { key: "gallons", label: "Gallons", render: (v) => v.toLocaleString() },
+              { key: "date", label: "Date" },
+            ]}
+            rows={openIssues.slice(0, 12)}
+          />
+        </Section>
+        <Section title="Scheduled" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{scheduled.length}</span>}>
+          <Table
+            keyField="id"
+            columns={[
+              { key: "ticketId", label: "Ticket" },
+              { key: "store", label: "Store" },
+              { key: "product", label: "Product" },
+              { key: "driver", label: "Driver" },
+              { key: "date", label: "Date" },
+            ]}
+            rows={scheduled.slice(0, 12)}
+          />
+        </Section>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+        <Section title="Store Invoicing (Rollup)">
+          <Table
+            keyField="id"
+            columns={[
+              { key: "invoiceNo", label: "Invoice" },
+              { key: "store", label: "Store" },
+              { key: "created", label: "Created" },
+              { key: "status", label: "Status" },
+              { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+            ]}
+            rows={invoices.slice(0, 20)}
+          />
+        </Section>
+        <NotesPanel />
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================================
+   Other Tab Stubs (expand later or paste your own UIs)
+   ========================================================================== */
+function FinancialOps() {
+  const rows = useMemo(
+    () =>
+      Array.from({ length: 15 }, (_, i) => ({
+        id: i + 1,
+        category: ["Fuel Costs", "Maintenance", "Payroll", "Insurance"][rand(0, 3)],
+        month: ["May", "Jun", "Jul", "Aug"][rand(0, 3)],
+        amount: rand(1200, 13000),
+        variance: rand(-1500, 2500),
+        note: rand(0, 1) ? "" : "Check allocation",
+      })),
+    []
+  );
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <KPIGrid
+        rows={Array.from({ length: 12 }, () => ({
+          gallons: rand(1000, 7000),
+          amount: rand(3000, 25000),
+          status: ["Delivered", "Scheduled", "Issue"][rand(0, 2)],
+        }))}
+      />
+      <Section title="Expense Summary">
+        <Table
+          keyField="id"
+          columns={[
+            { key: "category", label: "Category" },
+            { key: "month", label: "Month" },
+            { key: "amount", label: "Amount", render: (v) => "$" + v.toLocaleString() },
+            { key: "variance", label: "Variance", render: (v) => (v >= 0 ? "+" : "−") + "$" + Math.abs(v).toLocaleString() },
+            { key: "note", label: "Note" },
+          ]}
+          rows={rows}
+        />
+      </Section>
+    </div>
+  );
+}
+function DeliveryTickets() {
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Card title="Delivery Tickets" sub="This section is visible to admins only." />
+      <Section title="Admin Actions">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>Recalculate KPIs</button>
+          <button style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>Resync Tickets</button>
+          <button style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>Export CSV</button>
+        </div>
+      </Section>
+    </div>
+  );
+}
+function StoreInvoicing() {
+  const rows = useMemo(
+    () =>
+      Array.from({ length: 18 }, (_, i) => ({
+        id: i + 1,
+        store: STORES[rand(0, STORES.length - 1)],
+        month: ["May", "Jun", "Jul", "Aug"][rand(0, 3)],
+        invoices: rand(3, 18),
+        total: rand(15000, 250000),
+        paidPct: rand(45, 100),
+      })),
+    []
+  );
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Section title="Store Invoice Status">
+        <Table
+          keyField="id"
+          columns={[
+            { key: "store", label: "Store" },
+            { key: "month", label: "Month" },
+            { key: "invoices", label: "Invoices" },
+            { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString() },
+            { key: "paidPct", label: "Paid %", render: (v) => v + "%" },
+          ]}
+          rows={rows}
+        />
+      </Section>
+    </div>
+  );
+}
+function OperationalKPIs() {
+  const rows = useMemo(
+    () =>
+      Array.from({ length: 20 }, (_, i) => ({
+        id: i + 1,
+        kpi: ["On-time delivery", "Avg. delivery time", "Driver utilization", "Truck uptime"][rand(0, 3)],
+        target: rand(70, 98),
+        actual: rand(60, 99),
+        owner: ["Ops", "Logistics", "Fleet"][rand(0, 2)],
+      })),
+    []
+  );
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <KPIGrid
+        rows={Array.from({ length: 10 }, () => ({
+          gallons: rand(800, 4000),
+          amount: rand(2000, 16000),
+          status: ["Delivered", "Scheduled", "Issue"][rand(0, 2)],
+        }))}
+      />
+      <Section title="KPI List">
+        <Table
+          keyField="id"
+          columns={[
+            { key: "kpi", label: "KPI" },
+            { key: "target", label: "Target", render: (v) => v + "%" },
+            { key: "actual", label: "Actual", render: (v) => v + "%" },
+            { key: "owner", label: "Owner" },
+          ]}
+          rows={rows}
+        />
+      </Section>
+    </div>
+  );
+}
+function Budget() {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
+  const rows = months.map((m, i) => ({
+    id: i + 1,
+    month: m,
+    budget: rand(80000, 130000),
+    actual: rand(60000, 150000),
+    variance: rand(-20000, 25000),
+  }));
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Section title="Budget vs Actual">
+        <Table
+          keyField="id"
+          columns={[
+            { key: "month", label: "Month" },
+            { key: "budget", label: "Budget", render: (v) => "$" + v.toLocaleString() },
+            { key: "actual", label: "Actual", render: (v) => "$" + v.toLocaleString() },
+            { key: "variance", label: "Variance", render: (v) => (v >= 0 ? "+" : "−") + "$" + Math.abs(v).toLocaleString() },
+          ]}
+          rows={rows}
+        />
+      </Section>
+    </div>
+  );
+}
+
+/* ============================================================================
+   Tabs & Shell
+   ========================================================================== */
+const TABS = [
+  { key: "dashboard", label: "Dashboard", adminOnly: false, Component: LegacyDashboard },
+  { key: "financial", label: "Financial Ops", adminOnly: false, Component: FinancialOps },
+  { key: "tickets", label: "Delivery Tickets", adminOnly: true, Component: DeliveryTickets },
+  { key: "invoicing", label: "Store Invoicing", adminOnly: true, Component: StoreInvoicing },
+  { key: "ops", label: "Operational KPIs", adminOnly: false, Component: OperationalKPIs },
+  { key: "budget", label: "Budget", adminOnly: false, Component: Budget },
+];
+
+/* ============================================================================
+   App (auth + sidebar + gating)
+   ========================================================================== */
 export default function App() {
   const [active, setActive] = useState("dashboard");
   const [session, setSession] = useState(null);
@@ -75,10 +822,20 @@ export default function App() {
       setChecking(false);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => setSession(s));
-    return () => { mounted = false; sub.subscription.unsubscribe(); };
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
   }, []);
 
-  if (checking) return <div style={{ padding: 24 }}><div style={{ fontSize: 18 }}>Loadingâ€¦</div></div>;
+  if (checking) {
+    return (
+      <div style={{ padding: 24 }}>
+        <div style={{ fontSize: 18 }}>Loading…</div>
+      </div>
+    );
+  }
+
   if (!session) return <SignInCard />;
 
   const Current = TABS.find((t) => t.key === active) || TABS[0];
@@ -86,13 +843,33 @@ export default function App() {
   return (
     <div style={{ position: "relative", minHeight: "100vh", background: "#F8FAFC" }}>
       <RoleBadge />
-      <header style={{ padding: "16px 24px", borderBottom: "1px solid #E5E7EB", background: "white", position: "sticky", top: 0, zIndex: 5 }}>
+
+      {/* Header */}
+      <header
+        style={{
+          padding: "16px 24px",
+          borderBottom: "1px solid #E5E7EB",
+          background: "white",
+          position: "sticky",
+          top: 0,
+          zIndex: 5,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas â€” KPI Dashboard</h1>
+          <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas — KPI Dashboard</h1>
           <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
             <button
-              onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }}
-              style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}
+              onClick={async () => {
+                await supabase.auth.signOut();
+                window.location.reload();
+              }}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid #E5E7EB",
+                background: "white",
+                cursor: "pointer",
+              }}
             >
               Sign out
             </button>
@@ -100,30 +877,56 @@ export default function App() {
         </div>
       </header>
 
+      {/* Layout */}
       <div style={{ display: "flex" }}>
-        <aside style={{ width: 240, borderRight: "1px solid #E5E7EB", background: "white", minHeight: "calc(100vh - 60px)", position: "sticky", top: 60, alignSelf: "flex-start" }}>
+        {/* Sidebar */}
+        <aside
+          style={{
+            width: 240,
+            borderRight: "1px solid #E5E7EB",
+            background: "white",
+            minHeight: "calc(100vh - 60px)",
+            position: "sticky",
+            top: 60,
+            alignSelf: "flex-start",
+          }}
+        >
           <nav style={{ padding: 12 }}>
             {TABS.map((tab) => {
-              const btn = (
+              const buttonEl = (
                 <button
                   key={tab.key}
                   onClick={() => setActive(tab.key)}
                   style={{
-                    display: "block", width: "100%", textAlign: "left", padding: "10px 12px", marginBottom: 6,
-                    borderRadius: 8, border: "1px solid #E5E7EB", background: active === tab.key ? "#EEF2FF" : "white",
-                    cursor: "pointer", fontWeight: 500,
+                    display: "block",
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "10px 12px",
+                    marginBottom: 6,
+                    borderRadius: 8,
+                    border: "1px solid #E5E7EB",
+                    background: active === tab.key ? "#EEF2FF" : "white",
+                    cursor: "pointer",
+                    fontWeight: 500,
                   }}
                 >
-                  {tab.label} {tab.adminOnly ? "ðŸ”’" : ""}
+                  {tab.label} {tab.adminOnly ? "🔒" : ""}
                 </button>
               );
+
+              // hide admin tabs for non-admins in the nav:
               return tab.adminOnly ? (
-                <AdminOnly key={tab.key} fallback={null}>{btn}</AdminOnly>
-              ) : btn;
+                <AdminOnly key={tab.key} fallback={null}>
+                  {buttonEl}
+                </AdminOnly>
+              ) : (
+                buttonEl
+              );
             })}
           </nav>
         </aside>
 
+        {/* Content */}
         <main style={{ flex: 1, padding: 24 }}>
           {Current.adminOnly ? (
             <AdminOnly fallback={<div>Admins only.</div>}>
@@ -137,4 +940,3 @@ export default function App() {
     </div>
   );
 }
-
