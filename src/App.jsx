@@ -1,63 +1,78 @@
 // src/App.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "./lib/supabaseClient";
 
-/* ============================================================================
-   Supabase client (inlined)
-   ----------------------------------------------------------------------------
-   If you already have src/lib/supabaseClient.js you can keep using it instead
-   and delete this block, then: import { supabase } from "./lib/supabaseClient";
-   ========================================================================== */
-function makeSupabase() {
-  // Minimal inlined client using ESM @supabase/supabase-js if present in deps.
-  // If your project already imports from "./lib/supabaseClient", replace this
-  // function with:  import { supabase } from "./lib/supabaseClient";
-  // and delete the code below.
-  // eslint-disable-next-line no-new-func
-  const factory = new Function(
-    "createClient",
-    "url",
-    "anon",
-    "return createClient(url, anon, { auth: { persistSession: true, autoRefreshToken: true } });"
-  );
-  try {
-    // Lazy require from window if bundled elsewhere
-    if (window.__supabase) return window.__supabase;
-  } catch (_) {}
-  // Dynamically import so this file remains single-file usable.
-  // Note: Vite will handle this import at build time.
-  // If that’s an issue, switch to your existing supabaseClient.js.
-  let supabaseSingleton = null;
-  const supa = async () => {
-    if (supabaseSingleton) return supabaseSingleton;
-    const mod = await import("@supabase/supabase-js");
-    const url = import.meta.env.VITE_SUPABASE_URL;
-    const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    supabaseSingleton = factory(mod.createClient, url, anon);
-    try { window.__supabase = supabaseSingleton; } catch (_) {}
-    return supabaseSingleton;
-  };
-  // a tiny proxy to give supabase-like API synchronously (we await inside)
-  const proxy = new Proxy(
-    {},
-    {
-      get(_t, prop) {
-        return async (...args) => {
-          const cli = await supa();
-          return cli[prop](...args);
-        };
-      },
+/* ========================= Error Boundary ========================= */
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { err: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { err: error };
+  }
+  componentDidCatch(error, info) {
+    console.error("Render error:", error, info);
+  }
+  render() {
+    if (this.state.err) {
+      return (
+        <div style={{ padding: 24 }}>
+          <h2 style={{ marginTop: 0 }}>Something went wrong.</h2>
+          <pre style={{ whiteSpace: "pre-wrap" }}>{String(this.state.err)}</pre>
+        </div>
+      );
     }
-  );
-  return proxy;
+    return this.props.children;
+  }
 }
-const supabase = makeSupabase();
 
-/* ============================================================================
-   AdminOnly wrapper (checks profiles.role === 'admin')
-   ========================================================================== */
+/* ========================= Role Badge ========================= */
+function RoleBadge() {
+  const [role, setRole] = useState("user");
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const { data: auth } = await supabase.auth.getUser();
+      const uid = auth?.user?.id;
+      if (!uid) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", uid)
+        .maybeSingle();
+      if (!cancelled) setRole((data?.role || "user").toLowerCase());
+    }
+    load();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
+    return () => {
+      cancelled = true;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
+  return (
+    <div
+      style={{
+        position: "fixed",
+        right: 16,
+        bottom: 16,
+        background: "#111827",
+        color: "white",
+        padding: "6px 10px",
+        borderRadius: 8,
+        fontSize: 12,
+        zIndex: 9,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+      }}
+    >
+      Role: {role}
+    </div>
+  );
+}
+
+/* ========================= AdminOnly ========================= */
 function AdminOnly({ children, fallback = null }) {
   const [isAdmin, setIsAdmin] = useState(null);
-
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -84,62 +99,12 @@ function AdminOnly({ children, fallback = null }) {
       mounted = false;
     };
   }, []);
-
   if (isAdmin === null) return null;
   if (!isAdmin) return fallback;
   return <>{children}</>;
 }
 
-/* ============================================================================
-   RoleBadge (fixed bottom-right “Role: …”)
-   ========================================================================== */
-function RoleBadge() {
-  const [role, setRole] = useState("user");
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const { data: auth } = await supabase.auth.getUser();
-      const uid = auth?.user?.id;
-      if (!uid) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", uid)
-        .maybeSingle();
-      if (!cancelled) setRole((data?.role || "user").toLowerCase());
-    }
-    load();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
-    return () => {
-      cancelled = true;
-      sub?.subscription?.unsubscribe?.();
-    };
-  }, []);
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        right: 16,
-        bottom: 16,
-        background: "#111827",
-        color: "white",
-        padding: "6px 10px",
-        borderRadius: 8,
-        fontSize: 12,
-        zIndex: 9,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-      }}
-    >
-      Role: {role}
-    </div>
-  );
-}
-
-/* ============================================================================
-   SignInCard (magic link)
-   ========================================================================== */
+/* ========================= SignIn (magic link) ========================= */
 function SignInCard() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -148,126 +113,58 @@ function SignInCard() {
   async function onSignIn(e) {
     e.preventDefault();
     setError("");
+    // Build a robust redirect that always points at your GH Pages base
+    const redirect = new URL("/KPI-Dashboard/", window.location.href).href;
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin + "/KPI-Dashboard/" },
+      options: { emailRedirectTo: redirect },
     });
     if (error) setError(error.message);
     else setSent(true);
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "grid",
-        placeItems: "center",
-        background: "#F8FAFC",
-      }}
-    >
-      <div
-        style={{
-          width: 380,
-          background: "#fff",
-          border: "1px solid #E5E7EB",
-          borderRadius: 12,
-          padding: 24,
-        }}
-      >
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#F8FAFC" }}>
+      <div style={{ width: 380, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24 }}>
         <h2 style={{ marginTop: 0 }}>Sign in</h2>
         {!sent ? (
           <form onSubmit={onSignIn}>
-            <label
-              style={{
-                display: "block",
-                fontSize: 12,
-                color: "#6B7280",
-                marginBottom: 6,
-              }}
-            >
-              Work email
-            </label>
+            <label style={{ display: "block", fontSize: 12, color: "#6B7280", marginBottom: 6 }}>Work email</label>
             <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
               placeholder="you@company.com"
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                border: "1px solid #E5E7EB",
-                borderRadius: 8,
-                marginBottom: 12,
-              }}
+              style={{ width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, marginBottom: 12 }}
             />
-            {!!error && (
-              <div
-                style={{ color: "#b91c1c", fontSize: 12, marginBottom: 8 }}
-              >
-                {error}
-              </div>
-            )}
-            <button
-              type="submit"
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1px solid #E5E7EB",
-                background: "#111827",
-                color: "white",
-                cursor: "pointer",
-              }}
-            >
+            {!!error && <div style={{ color: "#b91c1c", fontSize: 12, marginBottom: 8 }}>{error}</div>}
+            <button type="submit" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}>
               Send magic link
             </button>
           </form>
         ) : (
-          <div>
-            <p>We sent you a sign-in link. Open it on this device.</p>
-          </div>
+          <div><p>We sent you a sign-in link. Open it on this device.</p></div>
         )}
       </div>
     </div>
   );
 }
 
-/* ============================================================================
-   Shared UI helpers
-   ========================================================================== */
+/* ========================= Small UI helpers ========================= */
 function Card({ title, value, sub, right, style, children }) {
   return (
-    <div
-      style={{
-        background: "white",
-        border: "1px solid #E5E7EB",
-        borderRadius: 12,
-        padding: 16,
-        ...style,
-      }}
-    >
+    <div style={{ background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: 16, ...style }}>
       <div style={{ display: "flex", alignItems: "baseline" }}>
-        <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>
-          {title}
-        </div>
+        <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{title}</div>
         <div style={{ marginLeft: "auto" }}>{right}</div>
       </div>
-      {value !== undefined && (
-        <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>
-          {value}
-        </div>
-      )}
-      {sub && (
-        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{sub}</div>
-      )}
+      {value !== undefined && <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>{value}</div>}
+      {sub && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{sub}</div>}
       {children}
     </div>
   );
 }
-function Section({ title, actions, children, style }) {
+function Section({ title, actions, children }) {
   return (
-    <section style={{ marginTop: 24, ...style }}>
+    <section style={{ marginTop: 24 }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
         <h3 style={{ margin: 0, fontSize: 16 }}>{title}</h3>
         <div style={{ marginLeft: "auto" }}>{actions}</div>
@@ -283,16 +180,7 @@ function Table({ columns, rows, keyField }) {
         <thead>
           <tr style={{ background: "#F3F4F6" }}>
             {columns.map((c) => (
-              <th
-                key={c.key}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  fontSize: 12,
-                  color: "#6B7280",
-                  borderBottom: "1px solid #E5E7EB",
-                }}
-              >
+              <th key={c.key} style={{ textAlign: "left", padding: "10px 12px", fontSize: 12, color: "#6B7280", borderBottom: "1px solid #E5E7EB" }}>
                 {c.label}
               </th>
             ))}
@@ -302,15 +190,7 @@ function Table({ columns, rows, keyField }) {
           {rows.map((r, i) => (
             <tr key={r[keyField] ?? i} style={{ background: i % 2 ? "#FAFAFA" : "white" }}>
               {columns.map((c) => (
-                <td
-                  key={c.key}
-                  style={{
-                    padding: "10px 12px",
-                    borderBottom: "1px solid #F3F4F6",
-                    fontSize: 13,
-                    verticalAlign: "top",
-                  }}
-                >
+                <td key={c.key} style={{ padding: "10px 12px", borderBottom: "1px solid #F3F4F6", fontSize: 13 }}>
                   {typeof c.render === "function" ? c.render(r[c.key], r, i) : r[c.key]}
                 </td>
               ))}
@@ -322,16 +202,14 @@ function Table({ columns, rows, keyField }) {
   );
 }
 
-/* ============================================================================
-   Mock data generators (replace with real queries later)
-   ========================================================================== */
+/* ========================= Mock data ========================= */
 const STORES = ["Midland", "Odessa", "Lubbock", "Abilene", "San Angelo"];
 const PRODUCTS = ["Diesel", "Gasoline", "DEF"];
 const DRIVERS = ["J. Carter", "L. Nguyen", "M. Patel", "R. Gomez", "S. Ali"];
 const rand = (min, max) => Math.round(min + Math.random() * (max - min));
 const randf = (min, max) => min + Math.random() * (max - min);
 
-function seedTickets(n = 120) {
+function seedTickets(n = 140) {
   return Array.from({ length: n }, (_, i) => {
     const gallons = rand(300, 5000);
     const price = parseFloat(randf(2.25, 4.25).toFixed(2));
@@ -350,13 +228,10 @@ function seedTickets(n = 120) {
     };
   });
 }
-
 function seedInvoices(tickets) {
-  // Simple rollup by store to “invoice” rows
   const byStore = new Map();
   tickets.forEach((t) => {
-    const k = t.store;
-    byStore.set(k, (byStore.get(k) || 0) + t.amount);
+    byStore.set(t.store, (byStore.get(t.store) || 0) + t.amount);
   });
   return Array.from(byStore.entries()).map(([store, amount], i) => ({
     id: i + 1,
@@ -368,9 +243,7 @@ function seedInvoices(tickets) {
   }));
 }
 
-/* ============================================================================
-   LegacyDashboard — big UI (KPIs, filters, tables, budget, revenue by store)
-   ========================================================================== */
+/* ========================= Dashboard pieces ========================= */
 function Filters({ value, onChange }) {
   const [q, setQ] = useState(value.q || "");
   const [store, setStore] = useState(value.store || "All");
@@ -408,7 +281,6 @@ function Filters({ value, onChange }) {
     </div>
   );
 }
-
 function KPIGrid({ rows }) {
   const totals = useMemo(() => {
     const gallons = rows.reduce((a, b) => a + b.gallons, 0);
@@ -418,7 +290,6 @@ function KPIGrid({ rows }) {
     const issues = rows.filter((t) => t.status === "Issue").length;
     return { gallons, revenue, avgPrice, delivered, issues };
   }, [rows]);
-
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
       <Card title="Total Gallons" value={totals.gallons.toLocaleString()} sub="Filtered sum" />
@@ -429,18 +300,14 @@ function KPIGrid({ rows }) {
     </div>
   );
 }
-
 function RevenueByStore({ rows }) {
   const sums = useMemo(() => {
     const m = new Map();
-    rows.forEach((r) => {
-      m.set(r.store, (m.get(r.store) || 0) + r.amount);
-    });
+    rows.forEach((r) => m.set(r.store, (m.get(r.store) || 0) + r.amount));
     return Array.from(m.entries())
       .map(([store, revenue]) => ({ store, revenue }))
       .sort((a, b) => b.revenue - a.revenue);
   }, [rows]);
-
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
       {sums.map((s) => (
@@ -449,7 +316,6 @@ function RevenueByStore({ rows }) {
     </div>
   );
 }
-
 function BudgetProgress({ rows }) {
   const target = 150000;
   const revenue = rows.reduce((a, b) => a + b.amount, 0);
@@ -463,7 +329,6 @@ function BudgetProgress({ rows }) {
     </Card>
   );
 }
-
 function TicketsTable({ rows }) {
   const cols = [
     { key: "ticketId", label: "Ticket" },
@@ -496,7 +361,6 @@ function TicketsTable({ rows }) {
   ];
   return <Table columns={cols} rows={rows} keyField="id" />;
 }
-
 function NotesPanel() {
   const [notes, setNotes] = useState([
     { id: 1, text: "Review scheduled tickets with high gallons." },
@@ -504,7 +368,6 @@ function NotesPanel() {
     { id: 3, text: "Confirm invoice totals against delivery volume." },
   ]);
   const [input, setInput] = useState("");
-
   function addNote() {
     const t = input.trim();
     if (!t) return;
@@ -514,7 +377,6 @@ function NotesPanel() {
   function removeNote(id) {
     setNotes((prev) => prev.filter((n) => n.id !== id));
   }
-
   return (
     <Card title="Notes / Next actions">
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginTop: 8 }}>
@@ -547,10 +409,9 @@ function NotesPanel() {
     </Card>
   );
 }
-
 function LegacyDashboard() {
   const [filter, setFilter] = useState({ q: "", store: "All", product: "All", status: "Any" });
-  const [tickets] = useState(seedTickets(140));
+  const [tickets] = useState(seedTickets(160));
   const invoices = useMemo(() => seedInvoices(tickets), [tickets]);
 
   const filtered = useMemo(() => {
@@ -572,71 +433,45 @@ function LegacyDashboard() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <Section
-        title="Filters"
-        actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span>}
-      >
+      <Section title="Filters" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span>}>
         <Filters value={filter} onChange={setFilter} />
       </Section>
-
       <KPIGrid rows={filtered} />
-
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
-        <Section title="Revenue by Store">
-          <RevenueByStore rows={filtered} />
-        </Section>
-        <Section title="Budget">
-          <BudgetProgress rows={filtered} />
-        </Section>
+        <Section title="Revenue by Store"><RevenueByStore rows={filtered} /></Section>
+        <Section title="Budget"><BudgetProgress rows={filtered} /></Section>
       </div>
-
-      <Section title="Recent Tickets">
-        <TicketsTable rows={filtered.slice(0, 30)} />
-      </Section>
-
+      <Section title="Recent Tickets"><TicketsTable rows={filtered.slice(0, 30)} /></Section>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Section title="Open Issues" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{openIssues.length}</span>}>
-          <Table
-            keyField="id"
-            columns={[
-              { key: "ticketId", label: "Ticket" },
-              { key: "store", label: "Store" },
-              { key: "product", label: "Product" },
-              { key: "driver", label: "Driver" },
-              { key: "gallons", label: "Gallons", render: (v) => v.toLocaleString() },
-              { key: "date", label: "Date" },
-            ]}
-            rows={openIssues.slice(0, 12)}
-          />
+          <Table keyField="id" columns={[
+            { key: "ticketId", label: "Ticket" },
+            { key: "store", label: "Store" },
+            { key: "product", label: "Product" },
+            { key: "driver", label: "Driver" },
+            { key: "gallons", label: "Gallons", render: (v) => v.toLocaleString() },
+            { key: "date", label: "Date" },
+          ]} rows={openIssues.slice(0, 12)} />
         </Section>
         <Section title="Scheduled" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{scheduled.length}</span>}>
-          <Table
-            keyField="id"
-            columns={[
-              { key: "ticketId", label: "Ticket" },
-              { key: "store", label: "Store" },
-              { key: "product", label: "Product" },
-              { key: "driver", label: "Driver" },
-              { key: "date", label: "Date" },
-            ]}
-            rows={scheduled.slice(0, 12)}
-          />
+          <Table keyField="id" columns={[
+            { key: "ticketId", label: "Ticket" },
+            { key: "store", label: "Store" },
+            { key: "product", label: "Product" },
+            { key: "driver", label: "Driver" },
+            { key: "date", label: "Date" },
+          ]} rows={scheduled.slice(0, 12)} />
         </Section>
       </div>
-
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
         <Section title="Store Invoicing (Rollup)">
-          <Table
-            keyField="id"
-            columns={[
-              { key: "invoiceNo", label: "Invoice" },
-              { key: "store", label: "Store" },
-              { key: "created", label: "Created" },
-              { key: "status", label: "Status" },
-              { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-            ]}
-            rows={invoices.slice(0, 20)}
-          />
+          <Table keyField="id" columns={[
+            { key: "invoiceNo", label: "Invoice" },
+            { key: "store", label: "Store" },
+            { key: "created", label: "Created" },
+            { key: "status", label: "Status" },
+            { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+          ]} rows={invoices.slice(0, 20)} />
         </Section>
         <NotesPanel />
       </div>
@@ -644,159 +479,14 @@ function LegacyDashboard() {
   );
 }
 
-/* ============================================================================
-   Other Tab Stubs (expand later or paste your own UIs)
-   ========================================================================== */
-function FinancialOps() {
-  const rows = useMemo(
-    () =>
-      Array.from({ length: 15 }, (_, i) => ({
-        id: i + 1,
-        category: ["Fuel Costs", "Maintenance", "Payroll", "Insurance"][rand(0, 3)],
-        month: ["May", "Jun", "Jul", "Aug"][rand(0, 3)],
-        amount: rand(1200, 13000),
-        variance: rand(-1500, 2500),
-        note: rand(0, 1) ? "" : "Check allocation",
-      })),
-    []
-  );
+/* ========================= Other tabs (stubs) ========================= */
+function FinancialOps() { return <div><h2>Financial Ops</h2></div>; }
+function DeliveryTickets() { return <div><h2>Delivery Tickets</h2><p>Admin only.</p></div>; }
+function StoreInvoicing() { return <div><h2>Store Invoicing</h2><p>Admin only.</p></div>; }
+function OperationalKPIs() { return <div><h2>Operational KPIs</h2></div>; }
+function Budget() { return <div><h2>Budget</h2></div>; }
 
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <KPIGrid
-        rows={Array.from({ length: 12 }, () => ({
-          gallons: rand(1000, 7000),
-          amount: rand(3000, 25000),
-          status: ["Delivered", "Scheduled", "Issue"][rand(0, 2)],
-        }))}
-      />
-      <Section title="Expense Summary">
-        <Table
-          keyField="id"
-          columns={[
-            { key: "category", label: "Category" },
-            { key: "month", label: "Month" },
-            { key: "amount", label: "Amount", render: (v) => "$" + v.toLocaleString() },
-            { key: "variance", label: "Variance", render: (v) => (v >= 0 ? "+" : "−") + "$" + Math.abs(v).toLocaleString() },
-            { key: "note", label: "Note" },
-          ]}
-          rows={rows}
-        />
-      </Section>
-    </div>
-  );
-}
-function DeliveryTickets() {
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <Card title="Delivery Tickets" sub="This section is visible to admins only." />
-      <Section title="Admin Actions">
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>Recalculate KPIs</button>
-          <button style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>Resync Tickets</button>
-          <button style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>Export CSV</button>
-        </div>
-      </Section>
-    </div>
-  );
-}
-function StoreInvoicing() {
-  const rows = useMemo(
-    () =>
-      Array.from({ length: 18 }, (_, i) => ({
-        id: i + 1,
-        store: STORES[rand(0, STORES.length - 1)],
-        month: ["May", "Jun", "Jul", "Aug"][rand(0, 3)],
-        invoices: rand(3, 18),
-        total: rand(15000, 250000),
-        paidPct: rand(45, 100),
-      })),
-    []
-  );
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <Section title="Store Invoice Status">
-        <Table
-          keyField="id"
-          columns={[
-            { key: "store", label: "Store" },
-            { key: "month", label: "Month" },
-            { key: "invoices", label: "Invoices" },
-            { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString() },
-            { key: "paidPct", label: "Paid %", render: (v) => v + "%" },
-          ]}
-          rows={rows}
-        />
-      </Section>
-    </div>
-  );
-}
-function OperationalKPIs() {
-  const rows = useMemo(
-    () =>
-      Array.from({ length: 20 }, (_, i) => ({
-        id: i + 1,
-        kpi: ["On-time delivery", "Avg. delivery time", "Driver utilization", "Truck uptime"][rand(0, 3)],
-        target: rand(70, 98),
-        actual: rand(60, 99),
-        owner: ["Ops", "Logistics", "Fleet"][rand(0, 2)],
-      })),
-    []
-  );
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <KPIGrid
-        rows={Array.from({ length: 10 }, () => ({
-          gallons: rand(800, 4000),
-          amount: rand(2000, 16000),
-          status: ["Delivered", "Scheduled", "Issue"][rand(0, 2)],
-        }))}
-      />
-      <Section title="KPI List">
-        <Table
-          keyField="id"
-          columns={[
-            { key: "kpi", label: "KPI" },
-            { key: "target", label: "Target", render: (v) => v + "%" },
-            { key: "actual", label: "Actual", render: (v) => v + "%" },
-            { key: "owner", label: "Owner" },
-          ]}
-          rows={rows}
-        />
-      </Section>
-    </div>
-  );
-}
-function Budget() {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
-  const rows = months.map((m, i) => ({
-    id: i + 1,
-    month: m,
-    budget: rand(80000, 130000),
-    actual: rand(60000, 150000),
-    variance: rand(-20000, 25000),
-  }));
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <Section title="Budget vs Actual">
-        <Table
-          keyField="id"
-          columns={[
-            { key: "month", label: "Month" },
-            { key: "budget", label: "Budget", render: (v) => "$" + v.toLocaleString() },
-            { key: "actual", label: "Actual", render: (v) => "$" + v.toLocaleString() },
-            { key: "variance", label: "Variance", render: (v) => (v >= 0 ? "+" : "−") + "$" + Math.abs(v).toLocaleString() },
-          ]}
-          rows={rows}
-        />
-      </Section>
-    </div>
-  );
-}
-
-/* ============================================================================
-   Tabs & Shell
-   ========================================================================== */
+/* ========================= Tabs ========================= */
 const TABS = [
   { key: "dashboard", label: "Dashboard", adminOnly: false, Component: LegacyDashboard },
   { key: "financial", label: "Financial Ops", adminOnly: false, Component: FinancialOps },
@@ -806,9 +496,36 @@ const TABS = [
   { key: "budget", label: "Budget", adminOnly: false, Component: Budget },
 ];
 
-/* ============================================================================
-   App (auth + sidebar + gating)
-   ========================================================================== */
+/* ========================= Self-check overlay ========================= */
+function SelfCheck({ session }) {
+  const [open, setOpen] = useState(false);
+  const supaKeys = Object.keys(localStorage).filter((k) => k.startsWith("sb-")).slice(0, 5);
+  const expectedRedirect = new URL("/KPI-Dashboard/", window.location.href).href;
+  return (
+    <div style={{ position: "fixed", left: 16, bottom: 16, zIndex: 9999 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: open ? "#111827" : "white", color: open ? "white" : "#111827", cursor: "pointer" }}
+      >
+        {open ? "Hide" : "Show"} Debug
+      </button>
+      {open && (
+        <pre style={{ marginTop: 8, maxWidth: 420, maxHeight: 260, overflow: "auto", background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: 12, fontSize: 12 }}>
+{JSON.stringify({
+  session: session?.user ? { id: session.user.id, email: session.user.email } : null,
+  access_token: session?.access_token ? "[present]" : null,
+  expectedRedirect,
+  path: window.location.pathname,
+  hasSupabaseKeys: supaKeys.length > 0,
+  supabaseKeysPreview: supaKeys,
+}, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+/* ========================= App Shell ========================= */
 export default function App() {
   const [active, setActive] = useState("dashboard");
   const [session, setSession] = useState(null);
@@ -816,12 +533,29 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
+
+    async function init() {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) console.error("getSession error:", error);
+        if (!mounted) return;
+        setSession(data?.session ?? null);
+      } catch (e) {
+        console.error("Auth init threw:", e);
+        if (!mounted) return;
+        setSession(null);
+      } finally {
+        if (mounted) setChecking(false);
+      }
+    }
+    init();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
       if (!mounted) return;
-      setSession(data.session);
+      setSession(s);
       setChecking(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => setSession(s));
+
     return () => {
       mounted = false;
       sub?.subscription?.unsubscribe?.();
@@ -831,7 +565,10 @@ export default function App() {
   if (checking) {
     return (
       <div style={{ padding: 24 }}>
-        <div style={{ fontSize: 18 }}>Loading…</div>
+        <div style={{ fontSize: 18, marginBottom: 8 }}>Restoring session…</div>
+        <div style={{ fontSize: 13, color: "#6B7280" }}>
+          If this never finishes, try <a href={new URL("/KPI-Dashboard/", window.location.href).href}>reloading</a>.
+        </div>
       </div>
     );
   }
@@ -841,102 +578,95 @@ export default function App() {
   const Current = TABS.find((t) => t.key === active) || TABS[0];
 
   return (
-    <div style={{ position: "relative", minHeight: "100vh", background: "#F8FAFC" }}>
-      <RoleBadge />
+    <ErrorBoundary>
+      <div style={{ position: "relative", minHeight: "100vh", background: "#F8FAFC" }}>
+        <RoleBadge />
+        <SelfCheck session={session} />
 
-      {/* Header */}
-      <header
-        style={{
-          padding: "16px 24px",
-          borderBottom: "1px solid #E5E7EB",
-          background: "white",
-          position: "sticky",
-          top: 0,
-          zIndex: 5,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas — KPI Dashboard</h1>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-            <button
-              onClick={async () => {
-                await supabase.auth.signOut();
-                window.location.reload();
-              }}
-              style={{
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid #E5E7EB",
-                background: "white",
-                cursor: "pointer",
-              }}
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Layout */}
-      <div style={{ display: "flex" }}>
-        {/* Sidebar */}
-        <aside
+        {/* Header */}
+        <header
           style={{
-            width: 240,
-            borderRight: "1px solid #E5E7EB",
+            padding: "16px 24px",
+            borderBottom: "1px solid #E5E7EB",
             background: "white",
-            minHeight: "calc(100vh - 60px)",
             position: "sticky",
-            top: 60,
-            alignSelf: "flex-start",
+            top: 0,
+            zIndex: 5,
           }}
         >
-          <nav style={{ padding: 12 }}>
-            {TABS.map((tab) => {
-              const buttonEl = (
-                <button
-                  key={tab.key}
-                  onClick={() => setActive(tab.key)}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "10px 12px",
-                    marginBottom: 6,
-                    borderRadius: 8,
-                    border: "1px solid #E5E7EB",
-                    background: active === tab.key ? "#EEF2FF" : "white",
-                    cursor: "pointer",
-                    fontWeight: 500,
-                  }}
-                >
-                  {tab.label} {tab.adminOnly ? "🔒" : ""}
-                </button>
-              );
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas — KPI Dashboard</h1>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+              <button
+                onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }}
+                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </header>
 
-              // hide admin tabs for non-admins in the nav:
-              return tab.adminOnly ? (
-                <AdminOnly key={tab.key} fallback={null}>
-                  {buttonEl}
-                </AdminOnly>
-              ) : (
-                buttonEl
-              );
-            })}
-          </nav>
-        </aside>
+        {/* Layout */}
+        <div style={{ display: "flex" }}>
+          {/* Sidebar */}
+          <aside
+            style={{
+              width: 240,
+              borderRight: "1px solid #E5E7EB",
+              background: "white",
+              minHeight: "calc(100vh - 60px)",
+              position: "sticky",
+              top: 60,
+              alignSelf: "flex-start",
+            }}
+          >
+            <nav style={{ padding: 12 }}>
+              {TABS.map((tab) => {
+                const buttonEl = (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActive(tab.key)}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      marginBottom: 6,
+                      borderRadius: 8,
+                      border: "1px solid #E5E7EB",
+                      background: active === tab.key ? "#EEF2FF" : "white",
+                      cursor: "pointer",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {tab.label} {tab.adminOnly ? "🔒" : ""}
+                  </button>
+                );
+                // hide admin tabs for non-admins in the nav:
+                return tab.adminOnly ? (
+                  <AdminOnly key={tab.key} fallback={null}>
+                    {buttonEl}
+                  </AdminOnly>
+                ) : (
+                  buttonEl
+                );
+              })}
+            </nav>
+          </aside>
 
-        {/* Content */}
-        <main style={{ flex: 1, padding: 24 }}>
-          {Current.adminOnly ? (
-            <AdminOnly fallback={<div>Admins only.</div>}>
+          {/* Content */}
+          <main style={{ flex: 1, padding: 24 }}>
+            {Current.adminOnly ? (
+              <AdminOnly fallback={<div>Admins only.</div>}>
+                <Current.Component />
+              </AdminOnly>
+            ) : (
               <Current.Component />
-            </AdminOnly>
-          ) : (
-            <Current.Component />
-          )}
-        </main>
+            )}
+          </main>
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 }
