@@ -130,7 +130,7 @@ export default function Procedures() {
           <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:10 }}>
             <select value={mode} onChange={e=>setMode(e.target.value)} style={{ minWidth: 220 }}>
               <option value="procedure">Procedure (Text)</option>
-              <option value="video">Video for… (attach to procedure)</option>
+              <option value="video">Video forâ€¦ (attach to procedure)</option>
             </select>
             <div style={{ opacity:0.7, fontSize:12 }}>
               Tip: You can also add videos inline on each procedure card below.
@@ -148,10 +148,10 @@ export default function Procedures() {
             <form onSubmit={addVideoTop}
               style={{ display:'grid', gridTemplateColumns:'1fr 1fr 96px', gap:10 }}>
               <select value={attachToId} onChange={e=>setAttachToId(e.target.value)} required>
-                <option value="">Choose procedure…</option>
+                <option value="">Choose procedureâ€¦</option>
                 {procedureOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-              <input placeholder="Paste YouTube or Loom URL…" value={videoUrl} onChange={e=>setVideoUrl(e.target.value)} required />
+              <input placeholder="Paste YouTube or Loom URLâ€¦" value={videoUrl} onChange={e=>setVideoUrl(e.target.value)} required />
               <button type="submit">Add</button>
             </form>
           )}
@@ -160,7 +160,7 @@ export default function Procedures() {
 
       <h2 style={{ fontSize: 16, margin: '12px 0' }}>Procedures & Training</h2>
 
-      {loading ? <div>Loading…</div> : (
+      {loading ? <div>Loadingâ€¦</div> : (
         <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 14 }}>
           {items.map(p => (
             <li key={p.id} style={{ border: '1px solid #e6e6e6', borderRadius: 12, padding: 14 }}>
@@ -200,7 +200,7 @@ export default function Procedures() {
               <AdminOnly>
                 <div style={{ marginTop: 10, display:'flex', gap:8 }}>
                   <input
-                    placeholder="Add video to this procedure (YouTube or Loom URL)…"
+                    placeholder="Add video to this procedure (YouTube or Loom URL)â€¦"
                     value={inlineVideo[p.id] || ''}
                     onChange={e=>setInlineVideo(x => ({ ...x, [p.id]: e.target.value }))}
                     style={{ flex:1 }}
@@ -215,3 +215,4 @@ export default function Procedures() {
     </div>
   )
 }
+
