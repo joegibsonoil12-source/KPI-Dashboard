@@ -411,9 +411,9 @@ function NotesPanel() {
 }
 function LegacyDashboard() {
   const [filter, setFilter] = useState({ q: "", store: "All", product: "All", status: "Any" });
-  const [tickets] = useState(seedTickets(160));
+  
   const invoices = useMemo(() => seedInvoices(tickets), [tickets]);
-
+  const [tickets, setTickets] = useState([]);
   const filtered = useMemo(() => {
     return tickets.filter((r) => {
       if (filter.store !== "All" && r.store !== filter.store) return false;
