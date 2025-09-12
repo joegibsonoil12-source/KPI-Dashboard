@@ -32,7 +32,11 @@ function RoleBadge() {
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth?.user?.id;
       if (!uid) return;
-      const { data } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
+      const { data } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", uid)
+        .maybeSingle();
       if (!cancelled) setRole((data?.role || "user").toLowerCase());
     }
     load();
@@ -40,11 +44,20 @@ function RoleBadge() {
     return () => { cancelled = true; sub?.subscription?.unsubscribe?.(); };
   }, []);
   return (
-    <div style={{
-      position: "fixed", right: 16, bottom: 16, background: "#111827",
-      color: "white", padding: "6px 10px", borderRadius: 8, fontSize: 12,
-      zIndex: 9, boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-    }}>
+    <div
+      style={{
+        position: "fixed",
+        right: 16,
+        bottom: 16,
+        background: "#111827",
+        color: "white",
+        padding: "6px 10px",
+        borderRadius: 8,
+        fontSize: 12,
+        zIndex: 9,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+      }}
+    >
       Role: {role}
     </div>
   );
@@ -59,7 +72,11 @@ function AdminOnly({ children, fallback = null }) {
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth?.user?.id;
       if (!uid) { if (mounted) setIsAdmin(false); return; }
-      const { data, error } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", uid)
+        .maybeSingle();
       if (!mounted) return;
       if (error) { console.error("AdminOnly profile error:", error); setIsAdmin(false); return; }
       setIsAdmin((data?.role || "").toLowerCase() === "admin");
@@ -95,7 +112,8 @@ function SignInCard() {
           <form onSubmit={onSignIn}>
             <label style={{ display: "block", fontSize: 12, color: "#6B7280", marginBottom: 6 }}>Work email</label>
             <input
-              type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com"
+              type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@company.com"
               style={{ width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, marginBottom: 12 }}
             />
             {!!error && <div style={{ color: "#b91c1c", fontSize: 12, marginBottom: 8 }}>{error}</div>}
@@ -139,7 +157,7 @@ function Section({ title, actions, children }) {
     </section>
   );
 }
-/*  FIX: use `row` instead of `r` to avoid shadowing/TDZ errors  */
+/*  Table uses `row` to avoid TDZ/shadow errors  */
 function Table({ columns, rows, keyField }) {
   return (
     <div style={{ overflow: "auto", border: "1px solid #E5E7EB", borderRadius: 12 }}>
@@ -169,14 +187,14 @@ function Table({ columns, rows, keyField }) {
   );
 }
 
-/* ========================= Mock data (placeholders) ========================= */
+/* ========================= Mock data (placeholders ON again) ========================= */
 const STORES = ["Midland", "Odessa", "Lubbock", "Abilene", "San Angelo"];
 const PRODUCTS = ["Diesel", "Gasoline", "DEF"];
 const DRIVERS = ["J. Carter", "L. Nguyen", "M. Patel", "R. Gomez", "S. Ali"];
 const rand = (min, max) => Math.round(min + Math.random() * (max - min));
 const randf = (min, max) => min + Math.random() * (max - min);
 
-function seedTickets(n = 140) {
+function seedTickets(n = 160) {
   return Array.from({ length: n }, (_, i) => {
     const gallons = rand(300, 5000);
     const price = parseFloat(randf(2.25, 4.25).toFixed(2));
@@ -216,26 +234,39 @@ function Filters({ value, onChange }) {
   const [store, setStore] = useState(value.store || "All");
   const [product, setProduct] = useState(value.product || "All");
   const [status, setStatus] = useState(value.status || "Any");
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px 160px 120px", gap: 8 }}>
-      <input placeholder="Search tickets, stores, products, driver…" value={q} onChange={(e) => setQ(e.target.value)}
-             style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
+      <input
+        placeholder="Search tickets, stores, products, driver…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}
+      />
       <select value={store} onChange={(e) => setStore(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-        <option>All</option>{STORES.map((s) => <option key={s}>{s}</option>)}
+        <option>All</option>
+        {STORES.map((s) => <option key={s}>{s}</option>)}
       </select>
       <select value={product} onChange={(e) => setProduct(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-        <option>All</option>{PRODUCTS.map((p) => <option key={p}>{p}</option>)}
+        <option>All</option>
+        {PRODUCTS.map((p) => <option key={p}>{p}</option>)}
       </select>
       <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-        <option>Any</option><option>Delivered</option><option>Scheduled</option><option>Issue</option>
+        <option>Any</option>
+        <option>Delivered</option>
+        <option>Scheduled</option>
+        <option>Issue</option>
       </select>
-      <button onClick={() => onChange({ q, store, product, status })}
-              style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}>
+      <button
+        onClick={() => onChange({ q, store, product, status })}
+        style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}
+      >
         Apply
       </button>
     </div>
   );
 }
+
 function KPIGrid({ rows }) {
   const totals = useMemo(() => {
     const gallons = rows.reduce((a, b) => a + b.gallons, 0);
@@ -245,6 +276,7 @@ function KPIGrid({ rows }) {
     const issues = rows.filter((t) => t.status === "Issue").length;
     return { gallons, revenue, avgPrice, delivered, issues };
   }, [rows]);
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
       <Card title="Total Gallons" value={totals.gallons.toLocaleString()} sub="Filtered sum" />
@@ -255,6 +287,7 @@ function KPIGrid({ rows }) {
     </div>
   );
 }
+
 function RevenueByStore({ rows }) {
   const sums = useMemo(() => {
     const m = new Map();
@@ -263,6 +296,7 @@ function RevenueByStore({ rows }) {
       .map(([store, revenue]) => ({ store, revenue }))
       .sort((a, b) => b.revenue - a.revenue);
   }, [rows]);
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
       {sums.map((s) => (
@@ -271,6 +305,7 @@ function RevenueByStore({ rows }) {
     </div>
   );
 }
+
 function BudgetProgress({ rows }) {
   const target = 150000;
   const revenue = rows.reduce((a, b) => a + b.amount, 0);
@@ -284,6 +319,7 @@ function BudgetProgress({ rows }) {
     </Card>
   );
 }
+
 function TicketsTable({ rows }) {
   const cols = [
     { key: "ticketId", label: "Ticket" },
@@ -295,20 +331,28 @@ function TicketsTable({ rows }) {
     { key: "price", label: "Price/gal", render: (v) => "$" + v.toFixed(2) },
     { key: "amount", label: "Amount", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
     {
-      key: "status", label: "Status",
+      key: "status",
+      label: "Status",
       render: (v) => (
-        <span style={{
-          padding: "4px 8px", borderRadius: 999, fontSize: 12,
-          background: v === "Delivered" ? "#DCFCE7" : v === "Scheduled" ? "#E0E7FF" : "#FEE2E2",
-          color: v === "Delivered" ? "#166534" : v === "Scheduled" ? "#3730A3" : "#991B1B",
-          border: "1px solid " + (v === "Delivered" ? "#BBF7D0" : v === "Scheduled" ? "#C7D2FE" : "#FECACA")
-        }}>{v}</span>
-      )
+        <span
+          style={{
+            padding: "4px 8px",
+            borderRadius: 999,
+            fontSize: 12,
+            background: v === "Delivered" ? "#DCFCE7" : v === "Scheduled" ? "#E0E7FF" : "#FEE2E2",
+            color: v === "Delivered" ? "#166534" : v === "Scheduled" ? "#3730A3" : "#991B1B",
+            border: "1px solid " + (v === "Delivered" ? "#BBF7D0" : v === "Scheduled" ? "#C7D2FE" : "#FECACA"),
+          }}
+        >
+          {v}
+        </span>
+      ),
     },
     { key: "notes", label: "Notes" },
   ];
   return <Table columns={cols} rows={rows} keyField="id" />;
 }
+
 function NotesPanel() {
   const [notes, setNotes] = useState([
     { id: 1, text: "Review scheduled tickets with high gallons." },
@@ -347,11 +391,14 @@ function NotesPanel() {
     </Card>
   );
 }
+
+/* ========================= LegacyDashboard (with data ON) ========================= */
 function LegacyDashboard() {
-  // OPTION A: keep UI but hide data until real backend is wired
   const [filter, setFilter] = useState({ q: "", store: "All", product: "All", status: "Any" });
-  const [tickets, setTickets] = useState([]);      // 👈 empty = no placeholder data
-  const invoices = useMemo(() => [], []);          // 👈 empty until wired
+
+  // ✅ Bring back seeded data for Tickets & Invoices
+  const [tickets] = useState(seedTickets(160));
+  const invoices = useMemo(() => seedInvoices(tickets), [tickets]);
 
   const filtered = useMemo(() => {
     return tickets.filter((row) => {
@@ -376,59 +423,65 @@ function LegacyDashboard() {
         <Filters value={filter} onChange={setFilter} />
       </Section>
 
-      {tickets.length > 0 && <KPIGrid rows={filtered} />}
+      <KPIGrid rows={filtered} />
 
-      {tickets.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
-          <Section title="Revenue by Store"><RevenueByStore rows={filtered} /></Section>
-          <Section title="Budget"><BudgetProgress rows={filtered} /></Section>
-        </div>
-      )}
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+        <Section title="Revenue by Store">
+          <RevenueByStore rows={filtered} />
+        </Section>
+        <Section title="Budget">
+          <BudgetProgress rows={filtered} />
+        </Section>
+      </div>
 
-      {tickets.length > 0 && (
-        <Section title="Recent Tickets"><TicketsTable rows={filtered.slice(0, 30)} /></Section>
-      )}
+      <Section title="Recent Tickets">
+        <TicketsTable rows={filtered.slice(0, 30)} />
+      </Section>
 
-      {tickets.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          <Section title="Open Issues" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{openIssues.length}</span>}>
-            <Table keyField="id" columns={[
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Section title="Open Issues" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{openIssues.length}</span>}>
+          <Table
+            keyField="id"
+            columns={[
               { key: "ticketId", label: "Ticket" },
               { key: "store", label: "Store" },
               { key: "product", label: "Product" },
               { key: "driver", label: "Driver" },
               { key: "gallons", label: "Gallons", render: (v) => v.toLocaleString() },
               { key: "date", label: "Date" },
-            ]} rows={openIssues.slice(0, 12)} />
-          </Section>
-          <Section title="Scheduled" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{scheduled.length}</span>}>
-            <Table keyField="id" columns={[
+            ]}
+            rows={openIssues.slice(0, 12)}
+          />
+        </Section>
+
+        <Section title="Scheduled" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{scheduled.length}</span>}>
+          <Table
+            keyField="id"
+            columns={[
               { key: "ticketId", label: "Ticket" },
               { key: "store", label: "Store" },
               { key: "product", label: "Product" },
               { key: "driver", label: "Driver" },
               { key: "date", label: "Date" },
-            ]} rows={scheduled.slice(0, 12)} />
-          </Section>
-        </div>
-      )}
+            ]}
+            rows={scheduled.slice(0, 12)}
+          />
+        </Section>
+      </div>
 
-      {/* Notes panel stays visible even if there’s no data */}
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
         <Section title="Store Invoicing (Rollup)">
-          {invoices.length > 0 ? (
-            <Table keyField="id" columns={[
+          <Table
+            keyField="id"
+            columns={[
               { key: "invoiceNo", label: "Invoice" },
               { key: "store", label: "Store" },
               { key: "created", label: "Created" },
               { key: "status", label: "Status" },
               { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-            ]} rows={invoices.slice(0, 20)} />
-          ) : (
-            <div style={{ padding: 12, border: "1px dashed #E5E7EB", borderRadius: 8, color: "#6B7280" }}>
-              No invoices yet.
-            </div>
-          )}
+            ]}
+            rows={invoices.slice(0, 20)}
+          />
         </Section>
         <NotesPanel />
       </div>
@@ -436,12 +489,133 @@ function LegacyDashboard() {
   );
 }
 
-/* ========================= Other tabs (stubs) ========================= */
-function FinancialOps() { return <div><h2>Financial Ops</h2></div>; }
-function DeliveryTickets() { return <div><h2>Delivery Tickets</h2><p>Admin only.</p></div>; }
-function StoreInvoicing() { return <div><h2>Store Invoicing</h2><p>Admin only.</p></div>; }
-function OperationalKPIs() { return <div><h2>Operational KPIs</h2></div>; }
-function Budget() { return <div><h2>Budget</h2></div>; }
+/* ========================= Other tabs (can expand later) ========================= */
+function FinancialOps() {
+  // simple example table (placeholder)
+  const rows = useMemo(
+    () => Array.from({ length: 12 }, (_, i) => ({
+      id: i + 1,
+      category: ["Fuel Costs", "Maintenance", "Payroll", "Insurance"][rand(0, 3)],
+      month: ["May", "Jun", "Jul", "Aug"][rand(0, 3)],
+      amount: rand(1200, 13000),
+      variance: rand(-1500, 2500),
+      note: rand(0, 1) ? "" : "Check allocation",
+    })), []
+  );
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Section title="Expense Summary">
+        <Table
+          keyField="id"
+          columns={[
+            { key: "category", label: "Category" },
+            { key: "month", label: "Month" },
+            { key: "amount", label: "Amount", render: (v) => "$" + v.toLocaleString() },
+            { key: "variance", label: "Variance", render: (v) => (v >= 0 ? "+" : "−") + "$" + Math.abs(v).toLocaleString() },
+            { key: "note", label: "Note" },
+          ]}
+          rows={rows}
+        />
+      </Section>
+    </div>
+  );
+}
+function DeliveryTickets() {
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Card title="Delivery Tickets" sub="This section is visible to admins only." />
+      <Section title="Admin Actions">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>Recalculate KPIs</button>
+          <button style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>Resync Tickets</button>
+          <button style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>Export CSV</button>
+        </div>
+      </Section>
+    </div>
+  );
+}
+function StoreInvoicing() {
+  const rows = useMemo(
+    () => Array.from({ length: 18 }, (_, i) => ({
+      id: i + 1,
+      store: STORES[rand(0, STORES.length - 1)],
+      month: ["May", "Jun", "Jul", "Aug"][rand(0, 3)],
+      invoices: rand(3, 18),
+      total: rand(15000, 250000),
+      paidPct: rand(45, 100),
+    })), []
+  );
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Section title="Store Invoice Status">
+        <Table
+          keyField="id"
+          columns={[
+            { key: "store", label: "Store" },
+            { key: "month", label: "Month" },
+            { key: "invoices", label: "Invoices" },
+            { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString() },
+            { key: "paidPct", label: "Paid %", render: (v) => v + "%" },
+          ]}
+          rows={rows}
+        />
+      </Section>
+    </div>
+  );
+}
+function OperationalKPIs() {
+  const rows = useMemo(
+    () => Array.from({ length: 20 }, (_, i) => ({
+      id: i + 1,
+      kpi: ["On-time delivery", "Avg. delivery time", "Driver utilization", "Truck uptime"][rand(0, 3)],
+      target: rand(70, 98),
+      actual: rand(60, 99),
+      owner: ["Ops", "Logistics", "Fleet"][rand(0, 2)],
+    })), []
+  );
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Section title="KPI List">
+        <Table
+          keyField="id"
+          columns={[
+            { key: "kpi", label: "KPI" },
+            { key: "target", label: "Target", render: (v) => v + "%" },
+            { key: "actual", label: "Actual", render: (v) => v + "%" },
+            { key: "owner", label: "Owner" },
+          ]}
+          rows={rows}
+        />
+      </Section>
+    </div>
+  );
+}
+function Budget() {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"];
+  const rows = months.map((m, i) => ({
+    id: i + 1,
+    month: m,
+    budget: rand(80000, 130000),
+    actual: rand(60000, 150000),
+    variance: rand(-20000, 25000),
+  }));
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Section title="Budget vs Actual">
+        <Table
+          keyField="id"
+          columns={[
+            { key: "month", label: "Month" },
+            { key: "budget", label: "Budget", render: (v) => "$" + v.toLocaleString() },
+            { key: "actual", label: "Actual", render: (v) => "$" + v.toLocaleString() },
+            { key: "variance", label: "Variance", render: (v) => (v >= 0 ? "+" : "−") + "$" + Math.abs(v).toLocaleString() },
+          ]}
+          rows={rows}
+        />
+      </Section>
+    </div>
+  );
+}
 
 /* ========================= Tabs ========================= */
 const TABS = [
