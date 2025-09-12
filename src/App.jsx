@@ -8,12 +8,8 @@ class ErrorBoundary extends React.Component {
     super(props);
     this.state = { err: null };
   }
-  static getDerivedStateFromError(error) {
-    return { err: error };
-  }
-  componentDidCatch(error, info) {
-    console.error("Render error:", error, info);
-  }
+  static getDerivedStateFromError(error) { return { err: error }; }
+  componentDidCatch(error, info) { console.error("Render error:", error, info); }
   render() {
     if (this.state.err) {
       return (
@@ -36,35 +32,19 @@ function RoleBadge() {
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth?.user?.id;
       if (!uid) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", uid)
-        .maybeSingle();
+      const { data } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
       if (!cancelled) setRole((data?.role || "user").toLowerCase());
     }
     load();
     const { data: sub } = supabase.auth.onAuthStateChange(() => load());
-    return () => {
-      cancelled = true;
-      sub?.subscription?.unsubscribe?.();
-    };
+    return () => { cancelled = true; sub?.subscription?.unsubscribe?.(); };
   }, []);
   return (
-    <div
-      style={{
-        position: "fixed",
-        right: 16,
-        bottom: 16,
-        background: "#111827",
-        color: "white",
-        padding: "6px 10px",
-        borderRadius: 8,
-        fontSize: 12,
-        zIndex: 9,
-        boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-      }}
-    >
+    <div style={{
+      position: "fixed", right: 16, bottom: 16, background: "#111827",
+      color: "white", padding: "6px 10px", borderRadius: 8, fontSize: 12,
+      zIndex: 9, boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+    }}>
       Role: {role}
     </div>
   );
@@ -78,26 +58,13 @@ function AdminOnly({ children, fallback = null }) {
     (async () => {
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth?.user?.id;
-      if (!uid) {
-        if (mounted) setIsAdmin(false);
-        return;
-      }
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", uid)
-        .maybeSingle();
+      if (!uid) { if (mounted) setIsAdmin(false); return; }
+      const { data, error } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
       if (!mounted) return;
-      if (error) {
-        console.error("AdminOnly profile error:", error);
-        setIsAdmin(false);
-        return;
-      }
+      if (error) { console.error("AdminOnly profile error:", error); setIsAdmin(false); return; }
       setIsAdmin((data?.role || "").toLowerCase() === "admin");
     })();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
   if (isAdmin === null) return null;
   if (!isAdmin) return fallback;
@@ -109,11 +76,9 @@ function SignInCard() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
-
   async function onSignIn(e) {
     e.preventDefault();
     setError("");
-    // Build a robust redirect that always points at your GH Pages base
     const redirect = new URL("/KPI-Dashboard/", window.location.href).href;
     const { error } = await supabase.auth.signInWithOtp({
       email,
@@ -122,7 +87,6 @@ function SignInCard() {
     if (error) setError(error.message);
     else setSent(true);
   }
-
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#F8FAFC" }}>
       <div style={{ width: 380, background: "#fff", border: "1px solid #E5E7EB", borderRadius: 12, padding: 24 }}>
@@ -131,12 +95,14 @@ function SignInCard() {
           <form onSubmit={onSignIn}>
             <label style={{ display: "block", fontSize: 12, color: "#6B7280", marginBottom: 6 }}>Work email</label>
             <input
-              type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
+              type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com"
               style={{ width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, marginBottom: 12 }}
             />
             {!!error && <div style={{ color: "#b91c1c", fontSize: 12, marginBottom: 8 }}>{error}</div>}
-            <button type="submit" style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}>
+            <button type="submit" style={{
+              width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB",
+              background: "#111827", color: "white", cursor: "pointer"
+            }}>
               Send magic link
             </button>
           </form>
@@ -173,6 +139,7 @@ function Section({ title, actions, children }) {
     </section>
   );
 }
+/*  FIX: use `row` instead of `r` to avoid shadowing/TDZ errors  */
 function Table({ columns, rows, keyField }) {
   return (
     <div style={{ overflow: "auto", border: "1px solid #E5E7EB", borderRadius: 12 }}>
@@ -187,11 +154,11 @@ function Table({ columns, rows, keyField }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={r[keyField] ?? i} style={{ background: i % 2 ? "#FAFAFA" : "white" }}>
+          {rows.map((row, i) => (
+            <tr key={row[keyField] ?? i} style={{ background: i % 2 ? "#FAFAFA" : "white" }}>
               {columns.map((c) => (
                 <td key={c.key} style={{ padding: "10px 12px", borderBottom: "1px solid #F3F4F6", fontSize: 13 }}>
-                  {typeof c.render === "function" ? c.render(r[c.key], r, i) : r[c.key]}
+                  {typeof c.render === "function" ? c.render(row[c.key], row, i) : row[c.key]}
                 </td>
               ))}
             </tr>
@@ -202,7 +169,7 @@ function Table({ columns, rows, keyField }) {
   );
 }
 
-/* ========================= Mock data ========================= */
+/* ========================= Mock data (placeholders) ========================= */
 const STORES = ["Midland", "Odessa", "Lubbock", "Abilene", "San Angelo"];
 const PRODUCTS = ["Diesel", "Gasoline", "DEF"];
 const DRIVERS = ["J. Carter", "L. Nguyen", "M. Patel", "R. Gomez", "S. Ali"];
@@ -230,8 +197,8 @@ function seedTickets(n = 140) {
 }
 function seedInvoices(tickets) {
   const byStore = new Map();
-  tickets.forEach((t) => {
-    byStore.set(t.store, (byStore.get(t.store) || 0) + t.amount);
+  tickets.forEach((row) => {
+    byStore.set(row.store, (byStore.get(row.store) || 0) + row.amount);
   });
   return Array.from(byStore.entries()).map(([store, amount], i) => ({
     id: i + 1,
@@ -249,33 +216,21 @@ function Filters({ value, onChange }) {
   const [store, setStore] = useState(value.store || "All");
   const [product, setProduct] = useState(value.product || "All");
   const [status, setStatus] = useState(value.status || "Any");
-
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px 160px 120px", gap: 8 }}>
-      <input
-        placeholder="Search tickets, stores, products, driver…"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}
-      />
+      <input placeholder="Search tickets, stores, products, driver…" value={q} onChange={(e) => setQ(e.target.value)}
+             style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
       <select value={store} onChange={(e) => setStore(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-        <option>All</option>
-        {STORES.map((s) => <option key={s}>{s}</option>)}
+        <option>All</option>{STORES.map((s) => <option key={s}>{s}</option>)}
       </select>
       <select value={product} onChange={(e) => setProduct(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-        <option>All</option>
-        {PRODUCTS.map((p) => <option key={p}>{p}</option>)}
+        <option>All</option>{PRODUCTS.map((p) => <option key={p}>{p}</option>)}
       </select>
       <select value={status} onChange={(e) => setStatus(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-        <option>Any</option>
-        <option>Delivered</option>
-        <option>Scheduled</option>
-        <option>Issue</option>
+        <option>Any</option><option>Delivered</option><option>Scheduled</option><option>Issue</option>
       </select>
-      <button
-        onClick={() => onChange({ q, store, product, status })}
-        style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}
-      >
+      <button onClick={() => onChange({ q, store, product, status })}
+              style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}>
         Apply
       </button>
     </div>
@@ -303,7 +258,7 @@ function KPIGrid({ rows }) {
 function RevenueByStore({ rows }) {
   const sums = useMemo(() => {
     const m = new Map();
-    rows.forEach((r) => m.set(r.store, (m.get(r.store) || 0) + r.amount));
+    rows.forEach((row) => { m.set(row.store, (m.get(row.store) || 0) + row.amount); });
     return Array.from(m.entries())
       .map(([store, revenue]) => ({ store, revenue }))
       .sort((a, b) => b.revenue - a.revenue);
@@ -340,22 +295,15 @@ function TicketsTable({ rows }) {
     { key: "price", label: "Price/gal", render: (v) => "$" + v.toFixed(2) },
     { key: "amount", label: "Amount", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
     {
-      key: "status",
-      label: "Status",
+      key: "status", label: "Status",
       render: (v) => (
-        <span
-          style={{
-            padding: "4px 8px",
-            borderRadius: 999,
-            fontSize: 12,
-            background: v === "Delivered" ? "#DCFCE7" : v === "Scheduled" ? "#E0E7FF" : "#FEE2E2",
-            color: v === "Delivered" ? "#166534" : v === "Scheduled" ? "#3730A3" : "#991B1B",
-            border: "1px solid " + (v === "Delivered" ? "#BBF7D0" : v === "Scheduled" ? "#C7D2FE" : "#FECACA"),
-          }}
-        >
-          {v}
-        </span>
-      ),
+        <span style={{
+          padding: "4px 8px", borderRadius: 999, fontSize: 12,
+          background: v === "Delivered" ? "#DCFCE7" : v === "Scheduled" ? "#E0E7FF" : "#FEE2E2",
+          color: v === "Delivered" ? "#166534" : v === "Scheduled" ? "#3730A3" : "#991B1B",
+          border: "1px solid " + (v === "Delivered" ? "#BBF7D0" : v === "Scheduled" ? "#C7D2FE" : "#FECACA")
+        }}>{v}</span>
+      )
     },
     { key: "notes", label: "Notes" },
   ];
@@ -374,35 +322,25 @@ function NotesPanel() {
     setNotes((prev) => [...prev, { id: prev.length ? prev[prev.length - 1].id + 1 : 1, text: t }]);
     setInput("");
   }
-  function removeNote(id) {
-    setNotes((prev) => prev.filter((n) => n.id !== id));
-  }
+  function removeNote(id) { setNotes((prev) => prev.filter((n) => n.id !== id)); }
   return (
     <Card title="Notes / Next actions">
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginTop: 8 }}>
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Add a note…"
-          style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}
-        />
-        <button
-          onClick={addNote}
-          style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}
-        >
-          Add
-        </button>
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Add a note…"
+               style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
+        <button onClick={addNote} style={{
+          padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB",
+          background: "#111827", color: "white", cursor: "pointer"
+        }}>Add</button>
       </div>
       <ul style={{ margin: 0, paddingLeft: 18, marginTop: 10 }}>
         {notes.map((n) => (
           <li key={n.id} style={{ marginBottom: 6 }}>
             <span>{n.text}</span>
-            <button
-              onClick={() => removeNote(n.id)}
-              style={{ marginLeft: 8, padding: "2px 6px", borderRadius: 6, border: "1px solid #E5E7EB", background: "white", cursor: "pointer", fontSize: 12 }}
-            >
-              Remove
-            </button>
+            <button onClick={() => removeNote(n.id)} style={{
+              marginLeft: 8, padding: "2px 6px", borderRadius: 6,
+              border: "1px solid #E5E7EB", background: "white", cursor: "pointer", fontSize: 12
+            }}>Remove</button>
           </li>
         ))}
       </ul>
@@ -410,18 +348,19 @@ function NotesPanel() {
   );
 }
 function LegacyDashboard() {
+  // OPTION A: keep UI but hide data until real backend is wired
   const [filter, setFilter] = useState({ q: "", store: "All", product: "All", status: "Any" });
-  
-  const invoices = useMemo(() => seedInvoices(tickets), [tickets]);
-  const [tickets, setTickets] = useState([]);
+  const [tickets, setTickets] = useState([]);      // 👈 empty = no placeholder data
+  const invoices = useMemo(() => [], []);          // 👈 empty until wired
+
   const filtered = useMemo(() => {
-    return tickets.filter((r) => {
-      if (filter.store !== "All" && r.store !== filter.store) return false;
-      if (filter.product !== "All" && r.product !== filter.product) return false;
-      if (filter.status !== "Any" && r.status !== filter.status) return false;
+    return tickets.filter((row) => {
+      if (filter.store !== "All" && row.store !== filter.store) return false;
+      if (filter.product !== "All" && row.product !== filter.product) return false;
+      if (filter.status !== "Any" && row.status !== filter.status) return false;
       if (filter.q) {
         const q = filter.q.toLowerCase();
-        const text = `${r.ticketId} ${r.store} ${r.product} ${r.driver}`.toLowerCase();
+        const text = `${row.ticketId} ${row.store} ${row.product} ${row.driver}`.toLowerCase();
         if (!text.includes(q)) return false;
       }
       return true;
@@ -429,49 +368,67 @@ function LegacyDashboard() {
   }, [tickets, filter]);
 
   const openIssues = filtered.filter((t) => t.status === "Issue");
-  const scheduled = filtered.filter((t) => t.status === "Scheduled");
+  const scheduled  = filtered.filter((t) => t.status === "Scheduled");
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <Section title="Filters" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span>}>
         <Filters value={filter} onChange={setFilter} />
       </Section>
-      <KPIGrid rows={filtered} />
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
-        <Section title="Revenue by Store"><RevenueByStore rows={filtered} /></Section>
-        <Section title="Budget"><BudgetProgress rows={filtered} /></Section>
-      </div>
-      <Section title="Recent Tickets"><TicketsTable rows={filtered.slice(0, 30)} /></Section>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Section title="Open Issues" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{openIssues.length}</span>}>
-          <Table keyField="id" columns={[
-            { key: "ticketId", label: "Ticket" },
-            { key: "store", label: "Store" },
-            { key: "product", label: "Product" },
-            { key: "driver", label: "Driver" },
-            { key: "gallons", label: "Gallons", render: (v) => v.toLocaleString() },
-            { key: "date", label: "Date" },
-          ]} rows={openIssues.slice(0, 12)} />
-        </Section>
-        <Section title="Scheduled" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{scheduled.length}</span>}>
-          <Table keyField="id" columns={[
-            { key: "ticketId", label: "Ticket" },
-            { key: "store", label: "Store" },
-            { key: "product", label: "Product" },
-            { key: "driver", label: "Driver" },
-            { key: "date", label: "Date" },
-          ]} rows={scheduled.slice(0, 12)} />
-        </Section>
-      </div>
+
+      {tickets.length > 0 && <KPIGrid rows={filtered} />}
+
+      {tickets.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+          <Section title="Revenue by Store"><RevenueByStore rows={filtered} /></Section>
+          <Section title="Budget"><BudgetProgress rows={filtered} /></Section>
+        </div>
+      )}
+
+      {tickets.length > 0 && (
+        <Section title="Recent Tickets"><TicketsTable rows={filtered.slice(0, 30)} /></Section>
+      )}
+
+      {tickets.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <Section title="Open Issues" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{openIssues.length}</span>}>
+            <Table keyField="id" columns={[
+              { key: "ticketId", label: "Ticket" },
+              { key: "store", label: "Store" },
+              { key: "product", label: "Product" },
+              { key: "driver", label: "Driver" },
+              { key: "gallons", label: "Gallons", render: (v) => v.toLocaleString() },
+              { key: "date", label: "Date" },
+            ]} rows={openIssues.slice(0, 12)} />
+          </Section>
+          <Section title="Scheduled" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{scheduled.length}</span>}>
+            <Table keyField="id" columns={[
+              { key: "ticketId", label: "Ticket" },
+              { key: "store", label: "Store" },
+              { key: "product", label: "Product" },
+              { key: "driver", label: "Driver" },
+              { key: "date", label: "Date" },
+            ]} rows={scheduled.slice(0, 12)} />
+          </Section>
+        </div>
+      )}
+
+      {/* Notes panel stays visible even if there’s no data */}
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
         <Section title="Store Invoicing (Rollup)">
-          <Table keyField="id" columns={[
-            { key: "invoiceNo", label: "Invoice" },
-            { key: "store", label: "Store" },
-            { key: "created", label: "Created" },
-            { key: "status", label: "Status" },
-            { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-          ]} rows={invoices.slice(0, 20)} />
+          {invoices.length > 0 ? (
+            <Table keyField="id" columns={[
+              { key: "invoiceNo", label: "Invoice" },
+              { key: "store", label: "Store" },
+              { key: "created", label: "Created" },
+              { key: "status", label: "Status" },
+              { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+            ]} rows={invoices.slice(0, 20)} />
+          ) : (
+            <div style={{ padding: 12, border: "1px dashed #E5E7EB", borderRadius: 8, color: "#6B7280" }}>
+              No invoices yet.
+            </div>
+          )}
         </Section>
         <NotesPanel />
       </div>
@@ -533,7 +490,6 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
-
     async function init() {
       try {
         const { data, error } = await supabase.auth.getSession();
@@ -549,17 +505,12 @@ export default function App() {
       }
     }
     init();
-
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
       if (!mounted) return;
       setSession(s);
       setChecking(false);
     });
-
-    return () => {
-      mounted = false;
-      sub?.subscription?.unsubscribe?.();
-    };
+    return () => { mounted = false; sub?.subscription?.unsubscribe?.(); };
   }, []);
 
   if (checking) {
@@ -584,16 +535,10 @@ export default function App() {
         <SelfCheck session={session} />
 
         {/* Header */}
-        <header
-          style={{
-            padding: "16px 24px",
-            borderBottom: "1px solid #E5E7EB",
-            background: "white",
-            position: "sticky",
-            top: 0,
-            zIndex: 5,
-          }}
-        >
+        <header style={{
+          padding: "16px 24px", borderBottom: "1px solid #E5E7EB",
+          background: "white", position: "sticky", top: 0, zIndex: 5,
+        }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas — KPI Dashboard</h1>
             <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
@@ -610,17 +555,10 @@ export default function App() {
         {/* Layout */}
         <div style={{ display: "flex" }}>
           {/* Sidebar */}
-          <aside
-            style={{
-              width: 240,
-              borderRight: "1px solid #E5E7EB",
-              background: "white",
-              minHeight: "calc(100vh - 60px)",
-              position: "sticky",
-              top: 60,
-              alignSelf: "flex-start",
-            }}
-          >
+          <aside style={{
+            width: 240, borderRight: "1px solid #E5E7EB", background: "white",
+            minHeight: "calc(100vh - 60px)", position: "sticky", top: 60, alignSelf: "flex-start",
+          }}>
             <nav style={{ padding: 12 }}>
               {TABS.map((tab) => {
                 const buttonEl = (
@@ -628,26 +566,17 @@ export default function App() {
                     key={tab.key}
                     onClick={() => setActive(tab.key)}
                     style={{
-                      display: "block",
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "10px 12px",
-                      marginBottom: 6,
-                      borderRadius: 8,
-                      border: "1px solid #E5E7EB",
+                      display: "block", width: "100%", textAlign: "left", padding: "10px 12px",
+                      marginBottom: 6, borderRadius: 8, border: "1px solid #E5E7EB",
                       background: active === tab.key ? "#EEF2FF" : "white",
-                      cursor: "pointer",
-                      fontWeight: 500,
+                      cursor: "pointer", fontWeight: 500,
                     }}
                   >
                     {tab.label} {tab.adminOnly ? "🔒" : ""}
                   </button>
                 );
-                // hide admin tabs for non-admins in the nav:
                 return tab.adminOnly ? (
-                  <AdminOnly key={tab.key} fallback={null}>
-                    {buttonEl}
-                  </AdminOnly>
+                  <AdminOnly key={tab.key} fallback={null}>{buttonEl}</AdminOnly>
                 ) : (
                   buttonEl
                 );
