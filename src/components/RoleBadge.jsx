@@ -1,33 +1,49 @@
 // src/components/RoleBadge.jsx
-import { useEffect, useState } from "react";
-import { getUserRole } from "../lib/getUserRole";
+import { useEffect, useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
 
 export default function RoleBadge() {
-  const [state, setState] = useState({ user: null, role: null, full_name: "" });
+  const [role, setRole] = useState('guest')
+  const [loading, setLoading] = useState(true)
+
+  async function refreshRole() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { setRole('guest'); setLoading(false); return }
+      const { data, error } = await supabase.rpc('is_admin')
+      if (error) {
+        console.error('is_admin RPC error:', error)
+        setRole('user')
+      } else {
+        setRole(data ? 'admin' : 'user')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    getUserRole().then(setState);
-  }, []);
+    let cancelled = false
 
-  if (!state.user) return null;
+    // Initial check after app mounts
+    refreshRole()
 
-  const isAdmin = state.role === "admin";
+    // React to future auth changes (login/logout, token refresh)
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, _session) => {
+      if (!cancelled) refreshRole()
+    })
+
+    return () => {
+      cancelled = true
+      sub?.subscription?.unsubscribe?.()
+    }
+  }, [])
 
   return (
-    <div style={{ position: "absolute", top: 12, right: 16, zIndex: 10 }}>
-      <span
-        style={{
-          padding: "4px 10px",
-          borderRadius: 999,
-          fontSize: 12,
-          background: isAdmin ? "#DCFCE7" : "#E5E7EB",
-          color: isAdmin ? "#166534" : "#111827",
-          border: "1px solid #D1D5DB",
-        }}
-        title={state.full_name || ""}
-      >
-        {isAdmin ? "Role: admin" : "Role: user"}
+    <div style={{position:'fixed', right:12, bottom:12, fontSize:12, opacity:0.85}}>
+      <span style={{padding:'6px 10px', borderRadius:8, background:'#111', color:'#fff'}}>
+        Role: {loading ? '…' : role}
       </span>
     </div>
-  );
+  )
 }
