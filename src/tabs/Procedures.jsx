@@ -108,6 +108,7 @@ export default function Procedures() {
     if (error) return alert(error.message)
     load()
   }
+
   async function deleteVideo(vid) {
     const { error } = await supabase.from('procedure_videos').delete().eq('id', vid)
     if (error) return alert(error.message)
