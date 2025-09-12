@@ -1,5 +1,5 @@
 // src/tabs/Procedures.jsx
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import AdminOnly from '../components/AdminOnly'
 
@@ -15,8 +15,10 @@ function VideoEmbed({ url }) {
         <iframe
           width="560" height="315"
           src={`https://www.youtube.com/embed/${id}`}
-          title="YouTube video" frameBorder="0" allowFullScreen
-          style={{maxWidth:'100%'}}
+          title="YouTube video"
+          frameBorder="0"
+          allowFullScreen
+          style={{ maxWidth: '100%' }}
         />
       )
     }
@@ -26,8 +28,10 @@ function VideoEmbed({ url }) {
         <iframe
           width="560" height="315"
           src={url.replace('/share/', '/embed/')}
-          title="Loom video" frameBorder="0" allowFullScreen
-          style={{maxWidth:'100%'}}
+          title="Loom video"
+          frameBorder="0"
+          allowFullScreen
+          style={{ maxWidth: '100%' }}
         />
       )
     }
@@ -38,12 +42,16 @@ function VideoEmbed({ url }) {
 export default function Procedures() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ title:'', body:'' })
-  const [videoForm, setVideoForm] = useState({}) // { [procedure_id]: url }
+
+  // Top form state
+  const [mode, setMode] = useState('procedure') // 'procedure' | 'video'
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [videoUrl, setVideoUrl] = useState('')
+  const [attachToId, setAttachToId] = useState('') // procedure_id when adding a video
 
   async function load() {
     setLoading(true)
-    // fetch procedures with their videos
     const { data, error } = await supabase
       .from('procedures')
       .select('id,title,body,created_at,procedure_videos(id,url,created_at)')
@@ -54,26 +62,39 @@ export default function Procedures() {
 
   useEffect(() => { load() }, [])
 
-  async function addProcedure(e) {
+  // Convenience: options for the “Video for …” dropdown
+  const procedureOptions = useMemo(
+    () => items.map(p => ({ value: p.id, label: p.title || '(untitled)' })),
+    [items]
+  )
+
+  async function onAdd(e) {
     e.preventDefault()
-    const { error } = await supabase.from('procedures').insert(form)
-    if (error) return alert(error.message)
-    setForm({ title:'', body:'' })
-    load()
+    if (mode === 'procedure') {
+      if (!title.trim()) return alert('Title is required.')
+      const { error } = await supabase.from('procedures').insert({
+        title: title.trim(),
+        body: body.trim() || null,
+      })
+      if (error) return alert(error.message)
+      setTitle(''); setBody('')
+      load()
+    } else {
+      if (!attachToId) return alert('Choose a procedure to attach the video to.')
+      if (!videoUrl.trim()) return alert('Paste a YouTube or Loom URL.')
+      const { error } = await supabase.from('procedure_videos').insert({
+        procedure_id: attachToId,
+        url: videoUrl.trim(),
+      })
+      if (error) return alert(error.message)
+      setVideoUrl('')
+      load()
+    }
   }
 
   async function deleteProcedure(id) {
     const { error } = await supabase.from('procedures').delete().eq('id', id)
     if (error) return alert(error.message)
-    load()
-  }
-
-  async function addVideo(procedureId) {
-    const url = (videoForm[procedureId] || '').trim()
-    if (!url) return
-    const { error } = await supabase.from('procedure_videos').insert({ procedure_id: procedureId, url })
-    if (error) return alert(error.message)
-    setVideoForm(v => ({ ...v, [procedureId]: '' }))
     load()
   }
 
@@ -84,55 +105,93 @@ export default function Procedures() {
   }
 
   return (
-    <div className="p-4" style={{maxWidth:1000}}>
+    <div className="p-4" style={{ maxWidth: 1000 }}>
       <h1>Procedures</h1>
-      <p>Write the steps as text and attach one or more videos. Anyone signed in can view; only admins can add or delete.</p>
 
+      {/* Top composer */}
       <AdminOnly>
-        <form onSubmit={addProcedure} className="mb-6" style={{display:'grid', gap:8}}>
-          <input
-            required placeholder="Title"
-            value={form.title}
-            onChange={e=>setForm(v=>({...v, title:e.target.value}))}
-          />
-          <textarea
-            rows={5} placeholder="Body (steps, notes…) — optional"
-            value={form.body}
-            onChange={e=>setForm(v=>({...v, body:e.target.value}))}
-          />
-          <button type="submit">Add Procedure</button>
+        <form onSubmit={onAdd}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '220px 1fr 1fr 96px',
+            gap: 10,
+            alignItems: 'center',
+            marginBottom: 16
+          }}
+        >
+          <select value={mode} onChange={e => setMode(e.target.value)}>
+            <option value="procedure">Procedure (Text)</option>
+            <option value="video">Video for… (attach to procedure)</option>
+          </select>
+
+          {mode === 'procedure' ? (
+            <>
+              <input
+                placeholder="Title"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+              />
+              <input
+                placeholder="Short description / steps"
+                value={body}
+                onChange={e => setBody(e.target.value)}
+              />
+            </>
+          ) : (
+            <>
+              <select
+                value={attachToId}
+                onChange={e => setAttachToId(e.target.value)}
+              >
+                <option value="">Choose procedure…</option>
+                {procedureOptions.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <input
+                placeholder="Paste YouTube or Loom URL…"
+                value={videoUrl}
+                onChange={e => setVideoUrl(e.target.value)}
+              />
+            </>
+          )}
+
+          <button type="submit">Add</button>
         </form>
       </AdminOnly>
 
+      <h2 style={{ fontSize: 16, margin: '12px 0' }}>Procedures & Training</h2>
+
       {loading ? <div>Loading…</div> : (
-        <ul style={{listStyle:'none', padding:0, display:'grid', gap:14}}>
+        <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 14 }}>
           {items.map(p => (
-            <li key={p.id} style={{border:'1px solid #ddd', borderRadius:10, padding:14}}>
-              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12}}>
-                <h3 style={{margin:0}}>{p.title}</h3>
+            <li key={p.id} style={{ border: '1px solid #e6e6e6', borderRadius: 12, padding: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{p.title}</div>
+                  {p.body && <div style={{ opacity: 0.8 }}>{p.body}</div>}
+                </div>
                 <AdminOnly>
                   <button
-                    onClick={()=>deleteProcedure(p.id)}
-                    style={{background:'#e33', color:'#fff', border:'none', padding:'6px 10px', borderRadius:6}}
+                    onClick={() => deleteProcedure(p.id)}
+                    style={{ background: '#e33', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 8 }}
                   >
-                    Delete
+                    Remove
                   </button>
                 </AdminOnly>
               </div>
 
-              {p.body && <p style={{whiteSpace:'pre-wrap', marginTop:8}}>{p.body}</p>}
-
-              {/* videos */}
-              <div style={{marginTop:10, display:'grid', gap:10}}>
+              {/* Videos attached to this procedure */}
+              <div style={{ marginTop: 10, display: 'grid', gap: 12 }}>
                 {(p.procedure_videos || []).map(v => (
-                  <div key={v.id} style={{display:'grid', gap:6}}>
+                  <div key={v.id} style={{ display: 'grid', gap: 6 }}>
                     <VideoEmbed url={v.url} />
-                    <div style={{fontSize:12, opacity:0.7}}>Video URL: {v.url}</div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>Video URL: {v.url}</div>
                     <AdminOnly>
                       <div>
                         <button
-                          onClick={()=>deleteVideo(v.id)}
-                          style={{background:'#444', color:'#fff', border:'none', padding:'4px 8px', borderRadius:6}}
+                          onClick={() => deleteVideo(v.id)}
+                          style={{ background: '#444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: 6 }}
                         >
                           Remove video
                         </button>
@@ -140,22 +199,6 @@ export default function Procedures() {
                     </AdminOnly>
                   </div>
                 ))}
-              </div>
-
-              <AdminOnly>
-                <div style={{marginTop:10, display:'flex', gap:8}}>
-                  <input
-                    placeholder="Paste YouTube or Loom URL…"
-                    value={videoForm[p.id] || ''}
-                    onChange={e=>setVideoForm(x => ({ ...x, [p.id]: e.target.value }))}
-                    style={{flex:1}}
-                  />
-                  <button onClick={()=>addVideo(p.id)} type="button">Add video</button>
-                </div>
-              </AdminOnly>
-
-              <div style={{fontSize:12, opacity:0.7, marginTop:8}}>
-                Created {new Date(p.created_at).toLocaleString()}
               </div>
             </li>
           ))}
