@@ -7,9 +7,10 @@ export default function RoleBadge() {
   const [loading, setLoading] = useState(true)
 
   async function refreshRole() {
+    setLoading(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { setRole('guest'); setLoading(false); return }
+      if (!session) { setRole('guest'); return }
       const { data, error } = await supabase.rpc('is_admin')
       if (error) {
         console.error('is_admin RPC error:', error)
@@ -23,24 +24,13 @@ export default function RoleBadge() {
   }
 
   useEffect(() => {
-    let cancelled = false
-
-    // Initial check after app mounts
+    const { data: sub } = supabase.auth.onAuthStateChange(() => refreshRole())
     refreshRole()
-
-    // React to future auth changes (login/logout, token refresh)
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, _session) => {
-      if (!cancelled) refreshRole()
-    })
-
-    return () => {
-      cancelled = true
-      sub?.subscription?.unsubscribe?.()
-    }
+    return () => sub?.subscription?.unsubscribe?.()
   }, [])
 
   return (
-    <div style={{position:'fixed', right:12, bottom:12, fontSize:12, opacity:0.85}}>
+    <div style={{position:'fixed', right:12, bottom:12, fontSize:12, opacity:0.85, zIndex:9999}}>
       <span style={{padding:'6px 10px', borderRadius:8, background:'#111', color:'#fff'}}>
         Role: {loading ? '…' : role}
       </span>
