@@ -3,10 +3,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import AdminOnly from '../components/AdminOnly'
 
+const PROC_COMPONENT_VERSION = 'v3'
+console.log('[Procedures.jsx]', PROC_COMPONENT_VERSION)
+
 function VideoEmbed({ url }) {
   if (!url) return null
   try {
     const u = new URL(url)
+    // YouTube
     if (u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')) {
       const id = u.searchParams.get('v') || u.pathname.replace('/', '')
       if (!id) return null
@@ -19,6 +23,7 @@ function VideoEmbed({ url }) {
         />
       )
     }
+    // Loom
     if (u.hostname.includes('loom.com')) {
       return (
         <iframe
@@ -65,6 +70,7 @@ export default function Procedures() {
 
   async function addProcedure(e) {
     e.preventDefault()
+    if (!title.trim()) return alert('Title is required.')
     const { error } = await supabase.from('procedures').insert({
       title: title.trim(),
       body: body.trim() || null,
@@ -109,14 +115,19 @@ export default function Procedures() {
   }
 
   return (
-    <div className="p-4" style={{ maxWidth: 1000 }}>
-      <h1>Procedures</h1>
+    <div className="p-4" style={{ maxWidth: 1000 }} data-proc-version={PROC_COMPONENT_VERSION}>
+      <div style={{display:'flex', alignItems:'center', gap:8}}>
+        <h1 style={{margin:0}}>Procedures</h1>
+        <span style={{fontSize:12, padding:'2px 6px', border:'1px solid #e5e7eb', borderRadius:999}}>
+          {PROC_COMPONENT_VERSION}
+        </span>
+      </div>
 
       {/* TOP COMPOSER */}
       <AdminOnly>
-        <div style={{ marginBottom: 16, border: '1px solid #eee', borderRadius: 10, padding: 12, background: '#fafbfd' }}>
+        <div style={{ marginTop: 12, marginBottom: 16, border: '1px solid #eee', borderRadius: 10, padding: 12, background: '#fafbfd' }}>
           <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:10 }}>
-            <select value={mode} onChange={e=>setMode(e.target.value)} style={{ minWidth: 210 }}>
+            <select value={mode} onChange={e=>setMode(e.target.value)} style={{ minWidth: 220 }}>
               <option value="procedure">Procedure (Text)</option>
               <option value="video">Video for… (attach to procedure)</option>
             </select>
