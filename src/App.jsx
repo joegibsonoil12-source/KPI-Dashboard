@@ -4,10 +4,7 @@ import { supabase } from "./lib/supabaseClient";
 
 /* ========================= Error Boundary ========================= */
 class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { err: null };
-  }
+  constructor(props) { super(props); this.state = { err: null }; }
   static getDerivedStateFromError(error) { return { err: error }; }
   componentDidCatch(error, info) { console.error("Render error:", error, info); }
   render() {
@@ -33,15 +30,9 @@ function RoleBadge() {
         const { data: auth } = await supabase.auth.getUser();
         const uid = auth?.user?.id;
         if (!uid) return;
-        const { data } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", uid)
-          .maybeSingle();
+        const { data } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
         if (!cancelled) setRole((data?.role || "user").toLowerCase());
-      } catch {
-        if (!cancelled) setRole("user");
-      }
+      } catch { if (!cancelled) setRole("user"); }
     }
     load();
     const { data: sub } = supabase.auth.onAuthStateChange(() => load());
@@ -68,17 +59,11 @@ function AdminOnly({ children, fallback = null }) {
         const { data: auth } = await supabase.auth.getUser();
         const uid = auth?.user?.id;
         if (!uid) { if (mounted) setIsAdmin(false); return; }
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", uid)
-          .maybeSingle();
+        const { data, error } = await supabase.from("profiles").select("role").eq("id", uid).maybeSingle();
         if (!mounted) return;
         if (error) { console.error("AdminOnly profile error:", error); setIsAdmin(false); return; }
         setIsAdmin((data?.role || "").toLowerCase() === "admin");
-      } catch {
-        if (mounted) setIsAdmin(false);
-      }
+      } catch { if (mounted) setIsAdmin(false); }
     })();
     return () => { mounted = false; };
   }, []);
@@ -96,12 +81,8 @@ function SignInCard() {
     e.preventDefault();
     setError("");
     const redirect = new URL("/KPI-Dashboard/", window.location.href).href;
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirect },
-    });
-    if (error) setError(error.message);
-    else setSent(true);
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
+    if (error) setError(error.message); else setSent(true);
   }
   return (
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#F8FAFC" }}>
@@ -110,21 +91,15 @@ function SignInCard() {
         {!sent ? (
           <form onSubmit={onSignIn}>
             <label style={{ display: "block", fontSize: 12, color: "#6B7280", marginBottom: 6 }}>Work email</label>
-            <input
-              type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com"
-              style={{ width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, marginBottom: 12 }}
-            />
+            <input type="email" required value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@company.com"
+                   style={{ width: "100%", padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8, marginBottom: 12 }} />
             {!!error && <div style={{ color: "#b91c1c", fontSize: 12, marginBottom: 8 }}>{error}</div>}
             <button type="submit" style={{
               width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB",
               background: "#111827", color: "white", cursor: "pointer"
-            }}>
-              Send magic link
-            </button>
+            }}>Send magic link</button>
           </form>
-        ) : (
-          <div><p>We sent you a sign-in link. Open it on this device.</p></div>
-        )}
+        ) : (<div><p>We sent you a sign-in link. Open it on this device.</p></div>)}
       </div>
     </div>
   );
@@ -188,52 +163,35 @@ function Table({ columns, rows, keyField }) {
 const KPIContext = React.createContext(null);
 
 const DEFAULT_KPIS = {
-  propaneGallonsSold: 428_310,       // gal
-  unleadedSalesCStores: 1_318_550,   // $
-  offRoadDieselGallons: 96_440,      // gal
-  newTanksSet: 42,                   // #
-  serviceRevenue: 264_900,           // $
+  propaneGallonsSold: 428_310,
+  unleadedSalesCStores: 1_318_550,
+  offRoadDieselGallons: 96_440,
+  newTanksSet: 42,
+  serviceRevenue: 264_900,
   customerCounts: [
     { state: "TX", residential: 1240, commercial: 310 },
     { state: "NM", residential: 460,  commercial: 120 },
     { state: "OK", residential: 380,  commercial: 95  },
   ],
 };
-
 const KPI_STORE_KEY = "kpi-store-v1";
 
 function KPIProvider({ children }) {
   const [kpis, setKpis] = useState(() => {
-    try {
-      const raw = localStorage.getItem(KPI_STORE_KEY);
-      return raw ? JSON.parse(raw) : DEFAULT_KPIS;
-    } catch {
-      return DEFAULT_KPIS;
-    }
+    try { const raw = localStorage.getItem(KPI_STORE_KEY); return raw ? JSON.parse(raw) : DEFAULT_KPIS; }
+    catch { return DEFAULT_KPIS; }
   });
   const [editMode, setEditMode] = useState(false);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(KPI_STORE_KEY, JSON.stringify(kpis));
-    } catch {}
-  }, [kpis]);
-
-  const update = useCallback((patch) => {
-    setKpis((prev) => ({ ...prev, ...patch }));
-  }, []);
-
+  useEffect(() => { try { localStorage.setItem(KPI_STORE_KEY, JSON.stringify(kpis)); } catch {} }, [kpis]);
+  const update = useCallback((patch) => setKpis((prev) => ({ ...prev, ...patch })), []);
   const value = { kpis, setKpis, update, editMode, setEditMode };
   return <KPIContext.Provider value={value}>{children}</KPIContext.Provider>;
 }
-
 function useKpis() {
   const ctx = useContext(KPIContext);
   if (!ctx) throw new Error("useKpis must be used within KPIProvider");
   return ctx;
 }
-
-// Helper to print any KPI anywhere with consistent formatting
 function KPIValue({ path, format = "int" }) {
   const { kpis } = useKpis();
   const value = kpis[path];
@@ -273,9 +231,7 @@ function seedTickets(n = 160) {
 }
 function seedInvoices(tickets) {
   const byStore = new Map();
-  tickets.forEach((row) => {
-    byStore.set(row.store, (byStore.get(row.store) || 0) + row.amount);
-  });
+  tickets.forEach((row) => { byStore.set(row.store, (byStore.get(row.store) || 0) + row.amount); });
   return Array.from(byStore.entries()).map(([store, amount], i) => ({
     id: i + 1,
     invoiceNo: "INV-" + (5000 + i),
@@ -384,18 +340,14 @@ function TicketsTable({ rows }) {
     { key: "gallons", label: "Gallons", render: (v) => v.toLocaleString() },
     { key: "price", label: "Price/gal", render: (v) => "$" + v.toFixed(2) },
     { key: "amount", label: "Amount", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-    {
-      key: "status",
-      label: "Status",
-      render: (v) => (
-        <span style={{
-          padding: "4px 8px", borderRadius: 999, fontSize: 12,
-          background: v === "Delivered" ? "#DCFCE7" : v === "Scheduled" ? "#E0E7FF" : "#FEE2E2",
-          color: v === "Delivered" ? "#166534" : v === "Scheduled" ? "#3730A3" : "#991B1B",
-          border: "1px solid " + (v === "Delivered" ? "#BBF7D0" : "Scheduled" ? "#C7D2FE" : "#FECACA")
-        }}>{v}</span>
-      ),
-    },
+    { key: "status", label: "Status", render: (v) => (
+      <span style={{
+        padding: "4px 8px", borderRadius: 999, fontSize: 12,
+        background: v === "Delivered" ? "#DCFCE7" : v === "Scheduled" ? "#E0E7FF" : "#FEE2E2",
+        color: v === "Delivered" ? "#166534" : v === "Scheduled" ? "#3730A3" : "#991B1B",
+        border: "1px solid " + (v === "Delivered" ? "#BBF7D0" : "#C7D2FE")
+      }}>{v}</span>
+    )},
     { key: "notes", label: "Notes" },
   ];
   return <Table columns={cols} rows={rows} keyField="id" />;
@@ -408,8 +360,7 @@ function NotesPanel() {
   ]);
   const [input, setInput] = useState("");
   function addNote() {
-    const t = input.trim();
-    if (!t) return;
+    const t = input.trim(); if (!t) return;
     setNotes((prev) => [...prev, { id: prev.length ? prev[prev.length - 1].id + 1 : 1, text: t }]);
     setInput("");
   }
@@ -464,9 +415,7 @@ function LegacyDashboard() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      {/* NEW: KPI strip */}
       <KpiStrip />
-
       <Section title="Filters" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span>}>
         <Filters value={filter} onChange={setFilter} />
       </Section>
@@ -549,19 +498,15 @@ function Procedures() {
     { id: 2, type: "doc", title: "Drivers: Pre-Trip Inspection", body: "Walk-around, fluids, tires, lights, ELD status." },
     { id: 3, type: "video", title: "Service Tech: Pump Priming", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
   ]);
-
-  const [title, setTitle] = useState("");
-  const [kind, setKind] = useState("doc"); // 'doc' | 'video'
-  const [body, setBody] = useState("");
-  const [url, setUrl] = useState("");
+  const [title, setTitle] = useState(""); const [kind, setKind] = useState("doc");
+  const [body, setBody] = useState(""); const [url, setUrl] = useState("");
 
   function addItem() {
     if (kind === "doc" && !title.trim()) return;
     if (kind === "video" && (!title.trim() || !url.trim())) return;
     setItems(prev => [...prev, {
       id: prev.length ? prev[prev.length - 1].id + 1 : 1,
-      type: kind,
-      title: title.trim(),
+      type: kind, title: title.trim(),
       body: kind === "doc" ? body.trim() : undefined,
       url: kind === "video" ? url.trim() : undefined,
     }]);
@@ -647,9 +592,7 @@ function FinancialOps() {
   );
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      {/* NEW: KPI strip */}
       <KpiStrip />
-
       <Section title="Expense Summary">
         <Table keyField="id" columns={[
           { key: "category", label: "Category" },
@@ -695,16 +638,13 @@ function Stepper({ label, value, onChange, steps = [ -1000, -100, -10, -1, 1, 10
     </div>
   );
 }
-
 function OperationalKPIs() {
   const { kpis, update, editMode } = useKpis();
-
   const totals = useMemo(() => {
     const residential = kpis.customerCounts.reduce((a,b)=>a+b.residential,0);
     const commercial  = kpis.customerCounts.reduce((a,b)=>a+b.commercial,0);
     return { residential, commercial, total: residential + commercial };
   }, [kpis.customerCounts]);
-
   const usd = (n) => "$" + Number(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
   const gal = (n) => Number(n ?? 0).toLocaleString();
 
@@ -714,52 +654,37 @@ function OperationalKPIs() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(180px, 1fr))", gap: 12 }}>
           <Card title="Propane Gallons Sold" value={gal(kpis.propaneGallonsSold)} sub="gal">
             {editMode && (
-              <Stepper
-                value={kpis.propaneGallonsSold}
-                onChange={(v)=>update({ propaneGallonsSold: Math.max(0, Math.round(v)) })}
-                steps={[-10000,-1000,-100,-10,10,100,1000,10000]}
-                format="gal"
-              />
+              <Stepper value={kpis.propaneGallonsSold}
+                       onChange={(v)=>update({ propaneGallonsSold: Math.max(0, Math.round(v)) })}
+                       steps={[-10000,-1000,-100,-10,10,100,1000,10000]} format="gal" />
             )}
           </Card>
           <Card title="Unleaded Fuel Sales to C-Stores" value={usd(kpis.unleadedSalesCStores)} sub="month-to-date">
             {editMode && (
-              <Stepper
-                value={kpis.unleadedSalesCStores}
-                onChange={(v)=>update({ unleadedSalesCStores: Math.max(0, Math.round(v)) })}
-                steps={[-50000,-5000,-500,-50,50,500,5000,50000]}
-                format="usd"
-              />
+              <Stepper value={kpis.unleadedSalesCStores}
+                       onChange={(v)=>update({ unleadedSalesCStores: Math.max(0, Math.round(v)) })}
+                       steps={[-50000,-5000,-500,-50,50,500,5000,50000]} format="usd" />
             )}
           </Card>
           <Card title="Off-Road Diesel Gallons Sold" value={gal(kpis.offRoadDieselGallons)} sub="gal">
             {editMode && (
-              <Stepper
-                value={kpis.offRoadDieselGallons}
-                onChange={(v)=>update({ offRoadDieselGallons: Math.max(0, Math.round(v)) })}
-                steps={[-10000,-1000,-100,-10,10,100,1000,10000]}
-                format="gal"
-              />
+              <Stepper value={kpis.offRoadDieselGallons}
+                       onChange={(v)=>update({ offRoadDieselGallons: Math.max(0, Math.round(v)) })}
+                       steps={[-10000,-1000,-100,-10,10,100,1000,10000]} format="gal" />
             )}
           </Card>
           <Card title="New Tanks Set" value={Number(kpis.newTanksSet ?? 0).toLocaleString()} sub="installed">
             {editMode && (
-              <Stepper
-                value={kpis.newTanksSet}
-                onChange={(v)=>update({ newTanksSet: Math.max(0, Math.round(v)) })}
-                steps={[-50,-10,-5,-1,1,5,10,50]}
-                format="int"
-              />
+              <Stepper value={kpis.newTanksSet}
+                       onChange={(v)=>update({ newTanksSet: Math.max(0, Math.round(v)) })}
+                       steps={[-50,-10,-5,-1,1,5,10,50]} format="int" />
             )}
           </Card>
           <Card title="Service Revenue" value={usd(kpis.serviceRevenue)} sub="month-to-date">
             {editMode && (
-              <Stepper
-                value={kpis.serviceRevenue}
-                onChange={(v)=>update({ serviceRevenue: Math.max(0, Math.round(v)) })}
-                steps={[-20000,-2000,-200,-20,20,200,2000,20000]}
-                format="usd"
-              />
+              <Stepper value={kpis.serviceRevenue}
+                       onChange={(v)=>update({ serviceRevenue: Math.max(0, Math.round(v)) })}
+                       steps={[-20000,-2000,-200,-20,20,200,2000,20000]} format="usd" />
             )}
           </Card>
         </div>
@@ -789,22 +714,18 @@ function OperationalKPIs() {
             {kpis.customerCounts.map((r, idx) => (
               <div key={r.state} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr auto", gap: 8, marginTop: 8 }}>
                 <input readOnly value={r.state} style={{ padding: "8px 10px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#F9FAFB" }} />
-                <input
-                  type="number" value={r.residential}
-                  onChange={(e)=> {
-                    const n = Math.max(0, Math.round(Number(e.target.value||0)));
-                    const next = [...kpis.customerCounts]; next[idx] = { ...next[idx], residential: n }; update({ customerCounts: next });
-                  }}
-                  style={{ padding: "8px 10px", border: "1px solid #E5E7EB", borderRadius: 8 }}
-                />
-                <input
-                  type="number" value={r.commercial}
-                  onChange={(e)=> {
-                    const n = Math.max(0, Math.round(Number(e.target.value||0)));
-                    const next = [...kpis.customerCounts]; next[idx] = { ...next[idx], commercial: n }; update({ customerCounts: next });
-                  }}
-                  style={{ padding: "8px 10px", border: "1px solid #E5E7EB", borderRadius: 8 }}
-                />
+                <input type="number" value={r.residential}
+                       onChange={(e)=> {
+                         const n = Math.max(0, Math.round(Number(e.target.value||0)));
+                         const next = [...kpis.customerCounts]; next[idx] = { ...next[idx], residential: n }; update({ customerCounts: next });
+                       }}
+                       style={{ padding: "8px 10px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
+                <input type="number" value={r.commercial}
+                       onChange={(e)=> {
+                         const n = Math.max(0, Math.round(Number(e.target.value||0)));
+                         const next = [...kpis.customerCounts]; next[idx] = { ...next[idx], commercial: n }; update({ customerCounts: next });
+                       }}
+                       style={{ padding: "8px 10px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
                 <button onClick={()=>{
                   const next = kpis.customerCounts.filter((_,i)=>i!==idx);
                   update({ customerCounts: next });
@@ -827,14 +748,150 @@ function OperationalKPIs() {
     </div>
   );
 }
-
 function Budget() {
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      {/* NEW: KPI strip */}
       <KpiStrip />
-
       <div><h2>Budget</h2></div>
+    </div>
+  );
+}
+
+/* ========================= Export Center (CSV / DOC) ========================= */
+function ExportCenter() {
+  const { kpis } = useKpis();
+  const [dataset, setDataset] = useState("kpis"); // kpis | customerCounts | tickets | invoices
+  const [format, setFormat] = useState("csv");    // csv | doc
+  const [tickets] = useState(seedTickets(160));
+  const invoices = useMemo(() => seedInvoices(tickets), [tickets]);
+
+  function toCSV(rows, columns) {
+    const esc = (v) => {
+      if (v == null) return "";
+      const s = String(v);
+      if (/[",\n]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
+      return s;
+    };
+    const header = columns.map(c=>esc(c.label)).join(",");
+    const body = rows.map(r => columns.map(c => esc(typeof c.renderCsv === "function" ? c.renderCsv(r[c.key], r) : r[c.key])).join(",")).join("\n");
+    return header + "\n" + body;
+  }
+  function download(filename, mime, content) {
+    const blob = new Blob([content], { type: mime });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+  }
+  function toDOC(tableTitle, rows, columns) {
+    // Simple HTML -> .doc that Word can open
+    const style = `
+      <style>
+        body{font-family:Arial,sans-serif;}
+        h2{margin:0 0 12px 0;}
+        table{border-collapse:collapse;width:100%;}
+        th,td{border:1px solid #999;padding:6px 8px;font-size:12px;}
+        th{background:#eee;text-align:left;}
+      </style>`;
+    const header = `<tr>${columns.map(c=>`<th>${c.label}</th>`).join("")}</tr>`;
+    const body = rows.map(r => `<tr>${columns.map(c=>{
+      const val = typeof c.renderCsv === "function" ? c.renderCsv(r[c.key], r) : (r[c.key] ?? "");
+      return `<td>${String(val).replace(/&/g,"&amp;").replace(/</g,"&lt;")}</td>`;
+    }).join("")}</tr>`).join("");
+    return `<!DOCTYPE html><html><head><meta charset="utf-8" />${style}</head><body><h2>${tableTitle}</h2><table>${header}${body}</table></body></html>`;
+  }
+
+  function getData() {
+    if (dataset === "kpis") {
+      const rows = [
+        { metric: "Propane Gallons Sold", value: kpis.propaneGallonsSold },
+        { metric: "Unleaded Fuel Sales to C-Stores ($)", value: kpis.unleadedSalesCStores },
+        { metric: "Off-Road Diesel Gallons Sold", value: kpis.offRoadDieselGallons },
+        { metric: "New Tanks Set", value: kpis.newTanksSet },
+        { metric: "Service Revenue ($)", value: kpis.serviceRevenue },
+      ];
+      const columns = [
+        { key: "metric", label: "Metric" },
+        { key: "value",  label: "Value"  },
+      ];
+      return { title: "Operational KPIs", rows, columns, filename: "kpis" };
+    }
+    if (dataset === "customerCounts") {
+      const rows = kpis.customerCounts.map(r => ({ ...r, total: r.residential + r.commercial }));
+      const columns = [
+        { key: "state", label: "State" },
+        { key: "residential", label: "Residential" },
+        { key: "commercial", label: "Commercial" },
+        { key: "total", label: "Total" },
+      ];
+      return { title: "Propane Customer Counts", rows, columns, filename: "customer_counts" };
+    }
+    if (dataset === "tickets") {
+      const rows = tickets;
+      const columns = [
+        { key: "ticketId", label: "Ticket" },
+        { key: "date",     label: "Date" },
+        { key: "store",    label: "Store" },
+        { key: "product",  label: "Product" },
+        { key: "driver",   label: "Driver" },
+        { key: "gallons",  label: "Gallons" },
+        { key: "price",    label: "Price/gal" },
+        { key: "amount",   label: "Amount" },
+        { key: "status",   label: "Status" },
+        { key: "notes",    label: "Notes"  },
+      ];
+      return { title: "Delivery Tickets", rows, columns, filename: "tickets" };
+    }
+    // invoices
+    const rows = invoices;
+    const columns = [
+      { key: "invoiceNo", label: "Invoice" },
+      { key: "store",     label: "Store" },
+      { key: "created",   label: "Created" },
+      { key: "status",    label: "Status" },
+      { key: "total",     label: "Total" },
+    ];
+    return { title: "Store Invoices", rows, columns, filename: "invoices" };
+  }
+
+  function handleExport() {
+    const { title, rows, columns, filename } = getData();
+    if (format === "csv") {
+      const csv = toCSV(rows, columns);
+      download(`${filename}.csv`, "text/csv;charset=utf-8", csv);
+    } else {
+      const doc = toDOC(title, rows, columns);
+      download(`${filename}.doc`, "application/msword;charset=utf-8", doc);
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <KpiStrip />
+      <Section title="Export Data">
+        <div style={{ display: "grid", gridTemplateColumns: "220px 220px auto", gap: 8, alignItems: "center" }}>
+          <select value={dataset} onChange={(e)=>setDataset(e.target.value)}
+                  style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+            <option value="kpis">Operational KPIs (summary)</option>
+            <option value="customerCounts">Customer Counts (by State & Type)</option>
+            <option value="tickets">Delivery Tickets (seeded)</option>
+            <option value="invoices">Store Invoices (seeded)</option>
+          </select>
+          <select value={format} onChange={(e)=>setFormat(e.target.value)}
+                  style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+            <option value="csv">Excel (CSV)</option>
+            <option value="doc">Word (DOC)</option>
+          </select>
+          <button onClick={handleExport}
+                  style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}>
+            Export
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 8 }}>
+          Tip: CSV opens in Excel. DOC is a Word-compatible table.
+        </div>
+      </Section>
     </div>
   );
 }
@@ -843,12 +900,13 @@ function Budget() {
 const TABS = [
   { key: "dashboard",    label: "Dashboard",        adminOnly: false, Component: LegacyDashboard },
   { key: "financial",    label: "Financial Ops",    adminOnly: false, Component: FinancialOps },
-  // Nested under Operations group (see sidebar below)
-  { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,  Component: StoreInvoicing },
-  { key: "tickets",      label: "Delivery Tickets", adminOnly: true,  Component: DeliveryTickets },
   { key: "ops",          label: "Operational KPIs", adminOnly: false, Component: OperationalKPIs },
   { key: "budget",       label: "Budget",           adminOnly: false, Component: Budget },
+  { key: "export",       label: "Export",           adminOnly: false, Component: ExportCenter },
   { key: "procedures",   label: "Procedures",       adminOnly: false, Component: Procedures },
+  // Admin-only group:
+  { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,  Component: StoreInvoicing },
+  { key: "tickets",      label: "Delivery Tickets", adminOnly: true,  Component: DeliveryTickets },
 ];
 
 /* ========================= Debug overlay (quick state) ========================= */
@@ -858,10 +916,8 @@ function SelfCheck({ session }) {
   const expectedRedirect = new URL("/KPI-Dashboard/", window.location.href).href;
   return (
     <div style={{ position: "fixed", left: 16, bottom: 16, zIndex: 9999 }}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: open ? "#111827" : "white", color: open ? "white" : "#111827", cursor: "pointer" }}
-      >
+      <button onClick={() => setOpen((v) => !v)}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: open ? "#111827" : "white", color: open ? "white" : "#111827", cursor: "pointer" }}>
         {open ? "Hide" : "Show"} Debug
       </button>
       {open && (
@@ -886,14 +942,8 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [checking, setChecking] = useState(true);
 
-  // Sidebar collapsible groups
-  const [groupsOpen, setGroupsOpen] = useState({
-    operations: true,
-  });
-
-  function toggleGroup(name) {
-    setGroupsOpen((g) => ({ ...g, [name]: !g[name] }));
-  }
+  const [groupsOpen, setGroupsOpen] = useState({ operations: true });
+  function toggleGroup(name) { setGroupsOpen((g) => ({ ...g, [name]: !g[name] })); }
 
   useEffect(() => {
     let mounted = true;
@@ -914,8 +964,7 @@ export default function App() {
     init();
     const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
       if (!mounted) return;
-      setSession(s);
-      setChecking(false);
+      setSession(s); setChecking(false);
     });
     return () => { mounted = false; sub?.subscription?.unsubscribe?.(); };
   }, []);
@@ -930,31 +979,23 @@ export default function App() {
       </div>
     );
   }
-
   if (!session) return <SignInCard />;
 
   const Current = TABS.find((t) => t.key === active) || TABS[0];
 
-  // Wrap the whole app in KPIProvider so values are available everywhere
   return (
     <ErrorBoundary>
       <KPIProvider>
-        <Header active={active} setActive={setActive} />
+        <Header />
         <RoleBadge />
         <SelfCheck session={session} />
-        <AppBody
-          active={active}
-          setActive={setActive}
-          groupsOpen={groupsOpen}
-          toggleGroup={toggleGroup}
-          Current={Current}
-        />
+        <AppBody active={active} setActive={setActive} groupsOpen={groupsOpen} toggleGroup={toggleGroup} Current={Current} />
       </KPIProvider>
     </ErrorBoundary>
   );
 }
 
-function Header({ active, setActive }) {
+function Header() {
   const { editMode, setEditMode } = useKpis();
   return (
     <header style={{
@@ -999,9 +1040,9 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
       }}>
         <nav style={{ padding: 12 }}>
           {/* Top-level tabs */}
-          {["dashboard","financial","ops","budget","procedures"].map((key) => {
+          {["dashboard","financial","ops","budget","export","procedures"].map((key) => {
             const tab = TABS.find(t => t.key === key);
-            const isActive = active === key;
+            const isActive = Current.key === key;
             return (
               <button
                 key={key}
@@ -1019,7 +1060,7 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
             );
           })}
 
-          {/* Collapsible group: Operations */}
+          {/* Collapsible group: Operations (admin-only items inside) */}
           <div style={{ marginTop: 10, marginBottom: 6, fontSize: 12, color: "#6B7280" }}>GROUP</div>
           <div style={{ border: "1px solid #E5E7EB", borderRadius: 10, overflow: "hidden", background: "white" }}>
             <button
@@ -1039,13 +1080,12 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
 
             {groupsOpen.operations && (
               <div style={{ borderTop: "1px solid #F3F4F6", padding: 8 }}>
-                {/* Child: Store Invoicing (admin) */}
                 <AdminOnly fallback={null}>
                   <button
                     onClick={() => setActive("invoicing")}
                     style={{
                       display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
-                      borderRadius: 8, border: "1px solid #E5E7EB", background: active === "invoicing" ? "#EEF2FF" : "white",
+                      borderRadius: 8, border: "1px solid #E5E7EB", background: Current.key === "invoicing" ? "#EEF2FF" : "white",
                       cursor: "pointer", fontWeight: 500, marginBottom: 6
                     }}
                   >
@@ -1053,13 +1093,12 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
                   </button>
                 </AdminOnly>
 
-                {/* Child: Delivery Tickets (admin) */}
                 <AdminOnly fallback={null}>
                   <button
                     onClick={() => setActive("tickets")}
                     style={{
                       display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
-                      borderRadius: 8, border: "1px solid #E5E7EB", background: active === "tickets" ? "#EEF2FF" : "white",
+                      borderRadius: 8, border: "1px solid #E5E7EB", background: Current.key === "tickets" ? "#EEF2FF" : "white",
                       cursor: "pointer", fontWeight: 500
                     }}
                   >
@@ -1067,7 +1106,6 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
                   </button>
                 </AdminOnly>
 
-                {/* If not admin, show helpful note */}
                 <AdminOnly
                   fallback={
                     <div style={{ fontSize: 12, color: "#6B7280", padding: "6px 12px" }}>
