@@ -9,11 +9,11 @@ export default function AdminOnly({ children, fallback = null }) {
   useEffect(() => {
     let cancelled = false
     async function check() {
-      // Get session
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { if (!cancelled){ setLoaded(true); setAllowed(false) } ; return }
-
-      // 🔹 Direct role check (no RPC)
+      if (!session) {
+        if (!cancelled) { setAllowed(false); setLoaded(true) }
+        return
+      }
       const { data, error } = await supabase
         .from('app_roles')
         .select('role')
@@ -22,10 +22,14 @@ export default function AdminOnly({ children, fallback = null }) {
 
       if (!cancelled) {
         if (error) {
-          console.error('AdminOnly app_roles error:', error)
+          console.warn('AdminOnly app_roles error:', error)
           setAllowed(false)
         } else {
-          setAllowed((data?.role ?? 'user') === 'admin')
+          const isAdmin = (data?.role ?? 'user') === 'admin'
+          setAllowed(isAdmin)
+          if (!isAdmin) {
+            console.warn('AdminOnly: user is not admin; role =', data?.role)
+          }
         }
         setLoaded(true)
       }
@@ -34,5 +38,5 @@ export default function AdminOnly({ children, fallback = null }) {
   }, [])
 
   if (!loaded) return <div>Loading…</div>
-  return allowed ? children : (fallback ?? <div>Admins only</div>)
+  return allowed ? children : (fallback ?? null)
 }
