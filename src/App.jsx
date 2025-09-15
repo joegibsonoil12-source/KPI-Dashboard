@@ -578,7 +578,72 @@ function FinancialOps() {
     </div>
   );
 }
-function OperationalKPIs() { return <div><h2>Operational KPIs</h2></div>; }
+
+/* ========================= Operational KPIs (front & center) ========================= */
+function OperationalKPIs() {
+  // Placeholder values — wire to Supabase later without changing UI.
+  const KPIS = {
+    propaneGallonsSold: 428_310,      // gal
+    unleadedSalesCStores: 1_318_550,  // $
+    offRoadDieselGallons: 96_440,     // gal
+    newTanksSet: 42,                  // #
+    serviceRevenue: 264_900,          // $
+  };
+
+  // Example propane customer counts by state & type (replace with DB results)
+  const customerCounts = [
+    { state: "TX", residential: 1240, commercial: 310 },
+    { state: "NM", residential: 460,  commercial: 120 },
+    { state: "OK", residential: 380,  commercial: 95  },
+  ].map(r => ({ ...r, total: r.residential + r.commercial }));
+
+  const totals = {
+    residential: customerCounts.reduce((a,b)=>a+b.residential,0),
+    commercial:  customerCounts.reduce((a,b)=>a+b.commercial,0),
+  };
+  totals.total = totals.residential + totals.commercial;
+
+  const usd = (n) => "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const gal = (n) => n.toLocaleString();
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Section
+        title="Operational KPIs"
+        actions={<span style={{ fontSize: 12, color: "#6B7280" }}>Snapshot</span>}
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(180px, 1fr))", gap: 12 }}>
+          <Card title="Propane Gallons Sold" value={gal(KPIS.propaneGallonsSold)} sub="gal" />
+          <Card title="Unleaded Fuel Sales to C-Stores" value={usd(KPIS.unleadedSalesCStores)} sub="month-to-date" />
+          <Card title="Off-Road Diesel Gallons Sold" value={gal(KPIS.offRoadDieselGallons)} sub="gal" />
+          <Card title="New Tanks Set" value={KPIS.newTanksSet.toLocaleString()} sub="installed" />
+          <Card title="Service Revenue" value={usd(KPIS.serviceRevenue)} sub="month-to-date" />
+        </div>
+      </Section>
+
+      <Section
+        title="Propane Customer Count (by State & Type)"
+        actions={
+          <div style={{ fontSize: 12, color: "#6B7280" }}>
+            Res: {totals.residential.toLocaleString()} • Com: {totals.commercial.toLocaleString()} • Total: {totals.total.toLocaleString()}
+          </div>
+        }
+      >
+        <Table
+          keyField="state"
+          columns={[
+            { key: "state", label: "State" },
+            { key: "residential", label: "Residential", render: (v)=>v.toLocaleString() },
+            { key: "commercial", label: "Commercial", render: (v)=>v.toLocaleString() },
+            { key: "total", label: "Total", render: (v)=>v.toLocaleString() },
+          ]}
+          rows={customerCounts}
+        />
+      </Section>
+    </div>
+  );
+}
+
 function Budget() { return <div><h2>Budget</h2></div>; }
 
 /* ========================= Tab registry ========================= */
