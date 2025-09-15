@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useContext, useCallback } from "react";
 import { supabase } from "./lib/supabaseClient";
 
 /* ========================= Error Boundary ========================= */
@@ -182,6 +182,68 @@ function Table({ columns, rows, keyField }) {
       </table>
     </div>
   );
+}
+
+/* ========================= App-wide KPI Store (Context + localStorage) ========================= */
+const KPIContext = React.createContext(null);
+
+const DEFAULT_KPIS = {
+  propaneGallonsSold: 428_310,       // gal
+  unleadedSalesCStores: 1_318_550,   // $
+  offRoadDieselGallons: 96_440,      // gal
+  newTanksSet: 42,                   // #
+  serviceRevenue: 264_900,           // $
+  // Customer counts
+  customerCounts: [
+    { state: "TX", residential: 1240, commercial: 310 },
+    { state: "NM", residential: 460,  commercial: 120 },
+    { state: "OK", residential: 380,  commercial: 95  },
+  ],
+};
+
+const KPI_STORE_KEY = "kpi-store-v1";
+
+function KPIProvider({ children }) {
+  const [kpis, setKpis] = useState(() => {
+    try {
+      const raw = localStorage.getItem(KPI_STORE_KEY);
+      return raw ? JSON.parse(raw) : DEFAULT_KPIS;
+    } catch {
+      return DEFAULT_KPIS;
+    }
+  });
+  const [editMode, setEditMode] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(KPI_STORE_KEY, JSON.stringify(kpis));
+    } catch {}
+  }, [kpis]);
+
+  const update = useCallback((patch) => {
+    setKpis((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  const value = { kpis, setKpis, update, editMode, setEditMode };
+  return <KPIContext.Provider value={value}>{children}</KPIContext.Provider>;
+}
+
+function useKpis() {
+  const ctx = useContext(KPIContext);
+  if (!ctx) throw new Error("useKpis must be used within KPIProvider");
+  return ctx;
+}
+
+// Helper to print any KPI anywhere with consistent formatting
+function KPIValue({ path, format = "int" }) {
+  const { kpis } = useKpis();
+  const value = kpis[path];
+  const fmt = (v) => {
+    if (format === "usd") return "$" + Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    if (format === "gal") return Number(v ?? 0).toLocaleString();
+    return Number(v ?? 0).toLocaleString();
+  };
+  return <>{fmt(value)}</>;
 }
 
 /* ========================= Mock data (placeholders kept ON) ========================= */
@@ -579,45 +641,105 @@ function FinancialOps() {
   );
 }
 
-/* ========================= Operational KPIs (front & center) ========================= */
+/* ========================= Operational KPIs (front & center, now editable) ========================= */
+function Stepper({ label, value, onChange, steps = [ -1000, -100, -10, -1, 1, 10, 100, 1000 ], format = "int" }) {
+  const fmt = (v) => {
+    if (format === "usd") return "$" + Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    if (format === "gal") return Number(v ?? 0).toLocaleString();
+    return Number(v ?? 0).toLocaleString();
+  };
+  const [raw, setRaw] = useState(String(value ?? 0));
+  useEffect(() => { setRaw(String(value ?? 0)); }, [value]);
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {steps.map((s, i) => (
+          <button key={i} onClick={() => onChange((Number(value)||0) + s)} title={(s>0?"+":"") + s}
+            style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer", fontSize: 12 }}>
+            {(s>0?"+":"")}{s}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+        <input
+          value={raw}
+          onChange={(e)=>setRaw(e.target.value)}
+          onBlur={() => { const n = Number(raw.replace(/[^0-9.-]/g,"")); onChange(Number.isFinite(n) ? n : value); }}
+          style={{ padding: "6px 8px", border: "1px solid #E5E7EB", borderRadius: 8, width: 140, fontSize: 12 }}
+        />
+        <div style={{ alignSelf: "center", fontSize: 12, color: "#6B7280" }}>{fmt(value)}</div>
+      </div>
+    </div>
+  );
+}
+
 function OperationalKPIs() {
-  // Placeholder values — wire to Supabase later without changing UI.
-  const KPIS = {
-    propaneGallonsSold: 428_310,      // gal
-    unleadedSalesCStores: 1_318_550,  // $
-    offRoadDieselGallons: 96_440,     // gal
-    newTanksSet: 42,                  // #
-    serviceRevenue: 264_900,          // $
-  };
+  const { kpis, update, editMode } = useKpis();
 
-  // Example propane customer counts by state & type (replace with DB results)
-  const customerCounts = [
-    { state: "TX", residential: 1240, commercial: 310 },
-    { state: "NM", residential: 460,  commercial: 120 },
-    { state: "OK", residential: 380,  commercial: 95  },
-  ].map(r => ({ ...r, total: r.residential + r.commercial }));
+  const totals = useMemo(() => {
+    const residential = kpis.customerCounts.reduce((a,b)=>a+b.residential,0);
+    const commercial  = kpis.customerCounts.reduce((a,b)=>a+b.commercial,0);
+    return { residential, commercial, total: residential + commercial };
+  }, [kpis.customerCounts]);
 
-  const totals = {
-    residential: customerCounts.reduce((a,b)=>a+b.residential,0),
-    commercial:  customerCounts.reduce((a,b)=>a+b.commercial,0),
-  };
-  totals.total = totals.residential + totals.commercial;
-
-  const usd = (n) => "$" + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  const gal = (n) => n.toLocaleString();
+  const usd = (n) => "$" + Number(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const gal = (n) => Number(n ?? 0).toLocaleString();
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <Section
-        title="Operational KPIs"
-        actions={<span style={{ fontSize: 12, color: "#6B7280" }}>Snapshot</span>}
-      >
+      <Section title="Operational KPIs" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>Snapshot</span>}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(180px, 1fr))", gap: 12 }}>
-          <Card title="Propane Gallons Sold" value={gal(KPIS.propaneGallonsSold)} sub="gal" />
-          <Card title="Unleaded Fuel Sales to C-Stores" value={usd(KPIS.unleadedSalesCStores)} sub="month-to-date" />
-          <Card title="Off-Road Diesel Gallons Sold" value={gal(KPIS.offRoadDieselGallons)} sub="gal" />
-          <Card title="New Tanks Set" value={KPIS.newTanksSet.toLocaleString()} sub="installed" />
-          <Card title="Service Revenue" value={usd(KPIS.serviceRevenue)} sub="month-to-date" />
+          <Card title="Propane Gallons Sold" value={gal(kpis.propaneGallonsSold)} sub="gal">
+            {editMode && (
+              <Stepper
+                value={kpis.propaneGallonsSold}
+                onChange={(v)=>update({ propaneGallonsSold: Math.max(0, Math.round(v)) })}
+                steps={[-10000,-1000,-100,-10,10,100,1000,10000]}
+                format="gal"
+              />
+            )}
+          </Card>
+          <Card title="Unleaded Fuel Sales to C-Stores" value={usd(kpis.unleadedSalesCStores)} sub="month-to-date">
+            {editMode && (
+              <Stepper
+                value={kpis.unleadedSalesCStores}
+                onChange={(v)=>update({ unleadedSalesCStores: Math.max(0, Math.round(v)) })}
+                steps={[-50000,-5000,-500,-50,50,500,5000,50000]}
+                format="usd"
+              />
+            )}
+          </Card>
+          <Card title="Off-Road Diesel Gallons Sold" value={gal(kpis.offRoadDieselGallons)} sub="gal">
+            {editMode && (
+              <Stepper
+                value={kpis.offRoadDieselGallons}
+                onChange={(v)=>update({ offRoadDieselGallons: Math.max(0, Math.round(v)) })}
+                steps={[-10000,-1000,-100,-10,10,100,1000,10000]}
+                format="gal"
+              />
+            )}
+          </Card>
+          <Card title="New Tanks Set" value={Number(kpis.newTanksSet ?? 0).toLocaleString()} sub="installed">
+            {editMode && (
+              <Stepper
+                value={kpis.newTanksSet}
+                onChange={(v)=>update({ newTanksSet: Math.max(0, Math.round(v)) })}
+                steps={[-50,-10,-5,-1,1,5,10,50]}
+                format="int"
+              />
+            )}
+          </Card>
+          <Card title="Service Revenue" value={usd(kpis.serviceRevenue)} sub="month-to-date">
+            {editMode && (
+              <Stepper
+                value={kpis.serviceRevenue}
+                onChange={(v)=>update({ serviceRevenue: Math.max(0, Math.round(v)) })}
+                steps={[-20000,-2000,-200,-20,20,200,2000,20000]}
+                format="usd"
+              />
+            )}
+          </Card>
         </div>
       </Section>
 
@@ -633,12 +755,52 @@ function OperationalKPIs() {
           keyField="state"
           columns={[
             { key: "state", label: "State" },
-            { key: "residential", label: "Residential", render: (v)=>v.toLocaleString() },
-            { key: "commercial", label: "Commercial", render: (v)=>v.toLocaleString() },
-            { key: "total", label: "Total", render: (v)=>v.toLocaleString() },
+            { key: "residential", label: "Residential", render: (v,i,idx)=>v.toLocaleString() },
+            { key: "commercial",  label: "Commercial",  render: (v)=>v.toLocaleString() },
+            { key: "total",       label: "Total",       render: (_v,row)=> (row.residential + row.commercial).toLocaleString() },
           ]}
-          rows={customerCounts}
+          rows={kpis.customerCounts.map(r => ({ ...r, total: r.residential + r.commercial }))}
         />
+        {editMode && (
+          <div style={{ marginTop: 12, border: "1px dashed #CBD5E1", borderRadius: 10, padding: 12 }}>
+            <strong style={{ fontSize: 13 }}>Edit Customer Counts</strong>
+            {kpis.customerCounts.map((r, idx) => (
+              <div key={r.state} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr auto", gap: 8, marginTop: 8 }}>
+                <input readOnly value={r.state} style={{ padding: "8px 10px", border: "1px solid #E5E7EB", borderRadius: 8, background: "#F9FAFB" }} />
+                <input
+                  type="number" value={r.residential}
+                  onChange={(e)=> {
+                    const n = Math.max(0, Math.round(Number(e.target.value||0)));
+                    const next = [...kpis.customerCounts]; next[idx] = { ...next[idx], residential: n }; update({ customerCounts: next });
+                  }}
+                  style={{ padding: "8px 10px", border: "1px solid #E5E7EB", borderRadius: 8 }}
+                />
+                <input
+                  type="number" value={r.commercial}
+                  onChange={(e)=> {
+                    const n = Math.max(0, Math.round(Number(e.target.value||0)));
+                    const next = [...kpis.customerCounts]; next[idx] = { ...next[idx], commercial: n }; update({ customerCounts: next });
+                  }}
+                  style={{ padding: "8px 10px", border: "1px solid #E5E7EB", borderRadius: 8 }}
+                />
+                <button onClick={()=>{
+                  const next = kpis.customerCounts.filter((_,i)=>i!==idx);
+                  update({ customerCounts: next });
+                }} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <div style={{ marginTop: 10 }}>
+              <button onClick={()=>{
+                const next = [...kpis.customerCounts, { state: "NEW", residential: 0, commercial: 0 }];
+                update({ customerCounts: next });
+              }} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}>
+                Add Row
+              </button>
+            </div>
+          </div>
+        )}
       </Section>
     </div>
   );
@@ -687,7 +849,7 @@ function SelfCheck({ session }) {
   );
 }
 
-/* ========================= App Shell (with collapsible group) ========================= */
+/* ========================= App Shell (with collapsible group + Edit toggle) ========================= */
 export default function App() {
   const [active, setActive] = useState("dashboard");
   const [session, setSession] = useState(null);
@@ -695,7 +857,7 @@ export default function App() {
 
   // Sidebar collapsible groups
   const [groupsOpen, setGroupsOpen] = useState({
-    operations: true, // default open: contains Store Invoicing + Delivery Tickets
+    operations: true,
   });
 
   function toggleGroup(name) {
@@ -742,135 +904,166 @@ export default function App() {
 
   const Current = TABS.find((t) => t.key === active) || TABS[0];
 
+  // Wrap the whole app in KPIProvider so values are available everywhere
   return (
     <ErrorBoundary>
-      <div style={{ position: "relative", minHeight: "100vh", background: "#F8FAFC" }}>
+      <KPIProvider>
+        <Header active={active} setActive={setActive} />
         <RoleBadge />
         <SelfCheck session={session} />
+        <AppBody
+          active={active}
+          setActive={setActive}
+          groupsOpen={groupsOpen}
+          toggleGroup={toggleGroup}
+          Current={Current}
+        />
+      </KPIProvider>
+    </ErrorBoundary>
+  );
+}
 
-        {/* Header */}
-        <header style={{
-          padding: "16px 24px", borderBottom: "1px solid #E5E7EB",
-          background: "white", position: "sticky", top: 0, zIndex: 5,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas — KPI Dashboard</h1>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-              <button
-                onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }}
-                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}
-              >
-                Sign out
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {/* Layout */}
-        <div style={{ display: "flex" }}>
-          {/* Sidebar */}
-          <aside style={{
-            width: 260, borderRight: "1px solid #E5E7EB", background: "white",
-            minHeight: "calc(100vh - 60px)", position: "sticky", top: 60, alignSelf: "flex-start",
-          }}>
-            <nav style={{ padding: 12 }}>
-              {/* Top-level tabs */}
-              {["dashboard","financial","ops","budget","procedures"].map((key) => {
-                const tab = TABS.find(t => t.key === key);
-                const isActive = active === key;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => setActive(key)}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left",
-                      padding: "10px 12px", marginBottom: 6, borderRadius: 8,
-                      border: "1px solid #E5E7EB",
-                      background: isActive ? "#EEF2FF" : "white",
-                      cursor: "pointer", fontWeight: 500,
-                    }}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-
-              {/* Collapsible group: Operations */}
-              <div style={{ marginTop: 10, marginBottom: 6, fontSize: 12, color: "#6B7280" }}>GROUP</div>
-              <div style={{ border: "1px solid #E5E7EB", borderRadius: 10, overflow: "hidden", background: "white" }}>
-                <button
-                  onClick={() => toggleGroup("operations")}
-                  style={{
-                    display: "flex", gap: 8, alignItems: "center", width: "100%", padding: "10px 12px",
-                    border: "none", background: "white", cursor: "pointer", fontWeight: 600
-                  }}
-                >
-                  <span style={{
-                    display: "inline-block", width: 18, textAlign: "center",
-                    transform: groupsOpen.operations ? "rotate(90deg)" : "rotate(0deg)",
-                    transition: "transform 0.15s ease"
-                  }}>▶</span>
-                  Operations
-                </button>
-
-                {groupsOpen.operations && (
-                  <div style={{ borderTop: "1px solid #F3F4F6", padding: 8 }}>
-                    {/* Child: Store Invoicing (admin) */}
-                    <AdminOnly fallback={null}>
-                      <button
-                        onClick={() => setActive("invoicing")}
-                        style={{
-                          display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
-                          borderRadius: 8, border: "1px solid #E5E7EB", background: active === "invoicing" ? "#EEF2FF" : "white",
-                          cursor: "pointer", fontWeight: 500, marginBottom: 6
-                        }}
-                      >
-                        Store Invoicing 🔒
-                      </button>
-                    </AdminOnly>
-
-                    {/* Child: Delivery Tickets (admin) */}
-                    <AdminOnly fallback={null}>
-                      <button
-                        onClick={() => setActive("tickets")}
-                        style={{
-                          display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
-                          borderRadius: 8, border: "1px solid #E5E7EB", background: active === "tickets" ? "#EEF2FF" : "white",
-                          cursor: "pointer", fontWeight: 500
-                        }}
-                      >
-                        Delivery Tickets 🔒
-                      </button>
-                    </AdminOnly>
-
-                    {/* If not admin, show helpful note */}
-                    <AdminOnly
-                      fallback={
-                        <div style={{ fontSize: 12, color: "#6B7280", padding: "6px 12px" }}>
-                          Admin-only tools live here.
-                        </div>
-                      }
-                    >
-                      {null}
-                    </AdminOnly>
-                  </div>
-                )}
-              </div>
-            </nav>
-          </aside>
-
-          {/* Content */}
-          <main style={{ flex: 1, padding: 24 }}>
-            {Current.adminOnly ? (
-              <AdminOnly fallback={<div>Admins only.</div>}>
-                <Current.Component />
-              </AdminOnly>
-            ) : (
-              <Current.Component />
-            )}
-          </main>
+function Header({ active, setActive }) {
+  const { editMode, setEditMode } = useKpis();
+  return (
+    <header style={{
+      padding: "16px 24px", borderBottom: "1px solid #E5E7EB",
+      background: "white", position: "sticky", top: 0, zIndex: 5,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas — KPI Dashboard</h1>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <AdminOnly
+            fallback={null}
+          >
+            <button
+              onClick={() => setEditMode(!editMode)}
+              style={{
+                padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB",
+                background: editMode ? "#111827" : "white", color: editMode ? "white" : "#111827",
+                cursor: "pointer"
+              }}
+              title="Toggle edit mode for manual KPI updates"
+            >
+              {editMode ? "Editing KPIs…" : "Edit KPIs"}
+            </button>
+          </AdminOnly>
+          <button
+            onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }}
+            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}
+          >
+            Sign out
+          </button>
         </div>
       </div>
-    </ErrorBoundary>
+    </header>
+  );
+}
+
+function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
+  return (
+    <div style={{ display: "flex", background: "#F8FAFC", minHeight: "calc(100vh - 60px)" }}>
+      {/* Sidebar */}
+      <aside style={{
+        width: 260, borderRight: "1px solid #E5E7EB", background: "white",
+        minHeight: "calc(100vh - 60px)", position: "sticky", top: 60, alignSelf: "flex-start",
+      }}>
+        <nav style={{ padding: 12 }}>
+          {/* Top-level tabs */}
+          {["dashboard","financial","ops","budget","procedures"].map((key) => {
+            const tab = TABS.find(t => t.key === key);
+            const isActive = active === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setActive(key)}
+                style={{
+                  display: "block", width: "100%", textAlign: "left",
+                  padding: "10px 12px", marginBottom: 6, borderRadius: 8,
+                  border: "1px solid #E5E7EB",
+                  background: isActive ? "#EEF2FF" : "white",
+                  cursor: "pointer", fontWeight: 500,
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+
+          {/* Collapsible group: Operations */}
+          <div style={{ marginTop: 10, marginBottom: 6, fontSize: 12, color: "#6B7280" }}>GROUP</div>
+          <div style={{ border: "1px solid #E5E7EB", borderRadius: 10, overflow: "hidden", background: "white" }}>
+            <button
+              onClick={() => toggleGroup("operations")}
+              style={{
+                display: "flex", gap: 8, alignItems: "center", width: "100%", padding: "10px 12px",
+                border: "none", background: "white", cursor: "pointer", fontWeight: 600
+              }}
+            >
+              <span style={{
+                display: "inline-block", width: 18, textAlign: "center",
+                transform: groupsOpen.operations ? "rotate(90deg)" : "rotate(0deg)",
+                transition: "transform 0.15s ease"
+              }}>▶</span>
+              Operations
+            </button>
+
+            {groupsOpen.operations && (
+              <div style={{ borderTop: "1px solid #F3F4F6", padding: 8 }}>
+                {/* Child: Store Invoicing (admin) */}
+                <AdminOnly fallback={null}>
+                  <button
+                    onClick={() => setActive("invoicing")}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
+                      borderRadius: 8, border: "1px solid #E5E7EB", background: active === "invoicing" ? "#EEF2FF" : "white",
+                      cursor: "pointer", fontWeight: 500, marginBottom: 6
+                    }}
+                  >
+                    Store Invoicing 🔒
+                  </button>
+                </AdminOnly>
+
+                {/* Child: Delivery Tickets (admin) */}
+                <AdminOnly fallback={null}>
+                  <button
+                    onClick={() => setActive("tickets")}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
+                      borderRadius: 8, border: "1px solid #E5E7EB", background: active === "tickets" ? "#EEF2FF" : "white",
+                      cursor: "pointer", fontWeight: 500
+                    }}
+                  >
+                    Delivery Tickets 🔒
+                  </button>
+                </AdminOnly>
+
+                {/* If not admin, show helpful note */}
+                <AdminOnly
+                  fallback={
+                    <div style={{ fontSize: 12, color: "#6B7280", padding: "6px 12px" }}>
+                      Admin-only tools live here.
+                    </div>
+                  }
+                >
+                  {null}
+                </AdminOnly>
+              </div>
+            )}
+          </div>
+        </nav>
+      </aside>
+
+      {/* Content */}
+      <main style={{ flex: 1, padding: 24 }}>
+        {Current.adminOnly ? (
+          <AdminOnly fallback={<div>Admins only.</div>}>
+            <Current.Component />
+          </AdminOnly>
+        ) : (
+          <Current.Component />
+        )}
+      </main>
+    </div>
   );
 }
