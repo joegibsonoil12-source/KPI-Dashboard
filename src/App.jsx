@@ -193,7 +193,6 @@ const DEFAULT_KPIS = {
   offRoadDieselGallons: 96_440,      // gal
   newTanksSet: 42,                   // #
   serviceRevenue: 264_900,           // $
-  // Customer counts
   customerCounts: [
     { state: "TX", residential: 1240, commercial: 310 },
     { state: "NM", residential: 460,  commercial: 120 },
@@ -287,6 +286,24 @@ function seedInvoices(tickets) {
   }));
 }
 
+/* ========================= Reusable KPI strip (read-only) ========================= */
+function KpiStrip() {
+  const usd = (n) => "$" + Number(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  const gal = (n) => Number(n ?? 0).toLocaleString();
+  const { kpis } = useKpis();
+  return (
+    <Section title="Operations Snapshot">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(180px, 1fr))", gap: 12 }}>
+        <Card title="Propane Gallons Sold" value={gal(kpis.propaneGallonsSold)} sub="gal" />
+        <Card title="Unleaded Fuel Sales to C-Stores" value={usd(kpis.unleadedSalesCStores)} sub="MTD" />
+        <Card title="Off-Road Diesel Gallons Sold" value={gal(kpis.offRoadDieselGallons)} sub="gal" />
+        <Card title="New Tanks Set" value={Number(kpis.newTanksSet ?? 0).toLocaleString()} sub="installed" />
+        <Card title="Service Revenue" value={usd(kpis.serviceRevenue)} sub="MTD" />
+      </div>
+    </Section>
+  );
+}
+
 /* ========================= Dashboard pieces ========================= */
 function Filters({ value, onChange }) {
   const [q, setQ] = useState(value.q || "");
@@ -375,7 +392,7 @@ function TicketsTable({ rows }) {
           padding: "4px 8px", borderRadius: 999, fontSize: 12,
           background: v === "Delivered" ? "#DCFCE7" : v === "Scheduled" ? "#E0E7FF" : "#FEE2E2",
           color: v === "Delivered" ? "#166534" : v === "Scheduled" ? "#3730A3" : "#991B1B",
-          border: "1px solid " + (v === "Delivered" ? "#BBF7D0" : v === "Scheduled" ? "#C7D2FE" : "#FECACA")
+          border: "1px solid " + (v === "Delivered" ? "#BBF7D0" : "Scheduled" ? "#C7D2FE" : "#FECACA")
         }}>{v}</span>
       ),
     },
@@ -447,6 +464,9 @@ function LegacyDashboard() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {/* NEW: KPI strip */}
+      <KpiStrip />
+
       <Section title="Filters" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span>}>
         <Filters value={filter} onChange={setFilter} />
       </Section>
@@ -530,7 +550,6 @@ function Procedures() {
     { id: 3, type: "video", title: "Service Tech: Pump Priming", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
   ]);
 
-  // composer state
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState("doc"); // 'doc' | 'video'
   const [body, setBody] = useState("");
@@ -628,6 +647,9 @@ function FinancialOps() {
   );
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {/* NEW: KPI strip */}
+      <KpiStrip />
+
       <Section title="Expense Summary">
         <Table keyField="id" columns={[
           { key: "category", label: "Category" },
@@ -641,7 +663,7 @@ function FinancialOps() {
   );
 }
 
-/* ========================= Operational KPIs (front & center, now editable) ========================= */
+/* ========================= Operational KPIs (editable) ========================= */
 function Stepper({ label, value, onChange, steps = [ -1000, -100, -10, -1, 1, 10, 100, 1000 ], format = "int" }) {
   const fmt = (v) => {
     if (format === "usd") return "$" + Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -755,7 +777,7 @@ function OperationalKPIs() {
           keyField="state"
           columns={[
             { key: "state", label: "State" },
-            { key: "residential", label: "Residential", render: (v,i,idx)=>v.toLocaleString() },
+            { key: "residential", label: "Residential", render: (v)=>v.toLocaleString() },
             { key: "commercial",  label: "Commercial",  render: (v)=>v.toLocaleString() },
             { key: "total",       label: "Total",       render: (_v,row)=> (row.residential + row.commercial).toLocaleString() },
           ]}
@@ -806,7 +828,16 @@ function OperationalKPIs() {
   );
 }
 
-function Budget() { return <div><h2>Budget</h2></div>; }
+function Budget() {
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      {/* NEW: KPI strip */}
+      <KpiStrip />
+
+      <div><h2>Budget</h2></div>
+    </div>
+  );
+}
 
 /* ========================= Tab registry ========================= */
 const TABS = [
@@ -933,9 +964,7 @@ function Header({ active, setActive }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas — KPI Dashboard</h1>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <AdminOnly
-            fallback={null}
-          >
+          <AdminOnly fallback={null}>
             <button
               onClick={() => setEditMode(!editMode)}
               style={{
