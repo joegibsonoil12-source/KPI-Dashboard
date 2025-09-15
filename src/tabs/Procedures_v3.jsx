@@ -202,7 +202,7 @@ export default function Procedures() {
                   <input
                     placeholder="Add video to this procedure (YouTube or Loom URL)…"
                     value={inlineVideo[p.id] || ''}
-                    onChange={e=>setInlineVideo(x => ({ ...x, [pid]: e.target.value }))}
+                    onChange={e=>setInlineVideo(x => ({ ...x, [p.id]: e.target.value }))}
                     style={{ flex:1 }}
                   />
                   <button type="button" onClick={()=>addVideoInline(p.id)}>Add video</button>
