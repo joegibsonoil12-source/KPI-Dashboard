@@ -491,51 +491,210 @@ function StoreInvoicing() {
   );
 }
 
-/* ========================= Procedures (How-tos & Videos) ========================= */
+/* ========================= Procedures (How-tos & Videos) — with file uploads ========================= */
 function Procedures() {
   const [items, setItems] = useState([
-    { id: 1, type: "doc", title: "Office: End-of-day Closeout", body: "Checklist for closing cash drawer, meter logs, and daily report." },
-    { id: 2, type: "doc", title: "Drivers: Pre-Trip Inspection", body: "Walk-around, fluids, tires, lights, ELD status." },
-    { id: 3, type: "video", title: "Service Tech: Pump Priming", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
+    { id: 1, type: "doc",        title: "Office: End-of-day Closeout", body: "Checklist for closing cash drawer, meter logs, and daily report." },
+    { id: 2, type: "doc",        title: "Drivers: Pre-Trip Inspection", body: "Walk-around, fluids, tires, lights, ELD status." },
+    { id: 3, type: "video-url",  title: "Service Tech: Pump Priming",   url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
   ]);
-  const [title, setTitle] = useState(""); const [kind, setKind] = useState("doc");
-  const [body, setBody] = useState(""); const [url, setUrl] = useState("");
 
-  function addItem() {
-    if (kind === "doc" && !title.trim()) return;
-    if (kind === "video" && (!title.trim() || !url.trim())) return;
-    setItems(prev => [...prev, {
-      id: prev.length ? prev[prev.length - 1].id + 1 : 1,
-      type: kind, title: title.trim(),
-      body: kind === "doc" ? body.trim() : undefined,
-      url: kind === "video" ? url.trim() : undefined,
-    }]);
-    setTitle(""); setBody(""); setUrl("");
+  // composer state
+  const [mode, setMode] = useState("doc"); // 'doc' | 'video-url' | 'video-upload'
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [url, setUrl] = useState("");
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  function resetComposer() {
+    setTitle(""); setBody(""); setUrl(""); setFile(null); setMode("doc"); setBusy(false); setError("");
   }
+
+  async function handleAdd() {
+    setError("");
+    if (!title.trim()) { setError("Title is required."); return; }
+
+    if (mode === "doc") {
+      setItems(prev => [...prev, {
+        id: prev.length ? prev[prev.length - 1].id + 1 : 1,
+        type: "doc",
+        title: title.trim(),
+        body: body.trim(),
+      }]);
+      resetComposer();
+      return;
+    }
+
+    if (mode === "video-url") {
+      if (!url.trim()) { setError("Paste a video URL."); return; }
+      setItems(prev => [...prev, {
+        id: prev.length ? prev[prev.length - 1].id + 1 : 1,
+        type: "video-url",
+        title: title.trim(),
+        url: url.trim(),
+      }]);
+      resetComposer();
+      return;
+    }
+
+    // Upload to Supabase Storage (bucket: 'procedures')
+    if (mode === "video-upload") {
+      if (!file) { setError("Choose a video file to upload."); return; }
+      try {
+        setBusy(true);
+        const { data: auth } = await supabase.auth.getUser();
+        const uid = auth?.user?.id || "anon";
+        const ts = Date.now();
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const objectPath = `${uid}/${ts}-${safeName}`;
+        const { error: upErr } = await supabase.storage.from("procedures").upload(objectPath, file, { cacheControl: "3600", upsert: false });
+        if (upErr) throw upErr;
+        const { data: pub } = supabase.storage.from("procedures").getPublicUrl(objectPath);
+        const publicUrl = pub?.publicUrl;
+        if (!publicUrl) throw new Error("Could not resolve public URL.");
+
+        setItems(prev => [...prev, {
+          id: prev.length ? prev[prev.length - 1].id + 1 : 1,
+          type: "video-upload",
+          title: title.trim(),
+          url: publicUrl,
+          fileName: file.name,
+        }]);
+        resetComposer();
+      } catch (e) {
+        console.error("Upload failed:", e);
+        setError(e.message || "Upload failed.");
+      } finally {
+        setBusy(false);
+      }
+    }
+  }
+
   function removeItem(id) { setItems(prev => prev.filter(i => i.id !== id)); }
+
+  function renderVideo(item) {
+    const isDirectFile = item.type === "video-upload" || (item.url && !/youtu\.?be|loom\.com/i.test(item.url));
+    if (isDirectFile) {
+      return (
+        <div style={{ marginTop: 10 }}>
+          <video
+            controls
+            src={item.url}
+            style={{ width: "100%", maxHeight: 420, border: "1px solid #E5E7EB", borderRadius: 12, background: "#000" }}
+          />
+          <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
+            File: <a href={item.url} target="_blank" rel="noreferrer">{item.fileName || item.url}</a>
+          </div>
+        </div>
+      );
+    }
+
+    try {
+      const u = new URL(item.url);
+      if (u.hostname.includes("youtube.com") || u.hostname.includes("youtu.be")) {
+        const id = u.searchParams.get("v") || u.pathname.replace("/", "");
+        if (id) {
+          return (
+            <iframe
+              title={item.title}
+              src={`https://www.youtube.com/embed/${id}`}
+              style={{ width: "100%", height: 360, border: "1px solid #E5E7EB", borderRadius: 12 }}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          );
+        }
+      }
+      if (u.hostname.includes("loom.com")) {
+        return (
+          <iframe
+            title={item.title}
+            src={item.url.replace("/share/", "/embed/")}
+            style={{ width: "100%", height: 360, border: "1px solid #E5E7EB", borderRadius: 12 }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        );
+      }
+    } catch { /* ignore */ }
+
+    return (
+      <div style={{ marginTop: 10 }}>
+        <video
+          controls
+          src={item.url}
+          style={{ width: "100%", maxHeight: 420, border: "1px solid #E5E7EB", borderRadius: 12, background: "#000" }}
+        />
+        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
+          Source: <a href={item.url} target="_blank" rel="noreferrer">{item.url}</a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <Section title="Add Procedure / Video">
-        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr auto", gap: 8 }}>
-          <select value={kind} onChange={(e) => setKind(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
+      <Section title="Add Procedure / Video" actions={busy ? <span style={{ fontSize: 12, color: "#6B7280" }}>Uploading…</span> : null}>
+        <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 1fr auto", gap: 8 }}>
+          <select value={mode} onChange={(e) => { setMode(e.target.value); setError(""); }} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
             <option value="doc">Procedure (Text)</option>
-            <option value="video">Video (Embed)</option>
+            <option value="video-url">Video (Paste URL)</option>
+            <option value="video-upload">Video (Upload File)</option>
           </select>
-          <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
-                 style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
-          {kind === "doc" ? (
-            <input placeholder="Short description / steps" value={body} onChange={(e) => setBody(e.target.value)}
-                   style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
-          ) : (
-            <input placeholder="Video URL (YouTube, Loom, etc.)" value={url} onChange={(e) => setUrl(e.target.value)}
-                   style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
+
+          <input
+            placeholder="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}
+          />
+
+          {mode === "doc" && (
+            <input
+              placeholder="Short description / steps"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}
+            />
           )}
-          <button onClick={addItem} style={{
-            padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB",
-            background: "#111827", color: "white", cursor: "pointer"
-          }}>Add</button>
+
+          {mode === "video-url" && (
+            <input
+              placeholder="Video URL (YouTube, Loom, or direct .mp4)"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}
+            />
+          )}
+
+          {mode === "video-upload" && (
+            <input
+              type="file"
+              accept="video/*"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              style={{ padding: "8px 10px", border: "1px solid #E5E7EB", borderRadius: 8, background: "white" }}
+            />
+          )}
+
+          <button
+            disabled={busy}
+            onClick={handleAdd}
+            style={{
+              padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB",
+              background: busy ? "#9CA3AF" : "#111827", color: "white", cursor: busy ? "not-allowed" : "pointer"
+            }}
+          >
+            {mode === "video-upload" ? "Upload & Add" : "Add"}
+          </button>
         </div>
+        {!!error && <div style={{ color: "#b91c1c", fontSize: 12, marginTop: 8 }}>{error}</div>}
+        {mode === "video-upload" && (
+          <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
+            Tip: MP4 (H.264 + AAC) plays everywhere. MKV/WebM may not play on iOS/Safari.
+          </div>
+        )}
       </Section>
 
       <Section title="Procedures & Training">
@@ -546,29 +705,19 @@ function Procedures() {
                 <strong>{i.title}</strong>
                 <span style={{
                   marginLeft: 8, fontSize: 12, padding: "2px 8px", borderRadius: 999,
-                  background: i.type === "video" ? "#E0E7FF" : "#DCFCE7",
-                  color: i.type === "video" ? "#3730A3" : "#166534", border: "1px solid #E5E7EB"
-                }}>{i.type === "video" ? "Video" : "Procedure"}</span>
+                  background: i.type.startsWith("video") ? "#E0E7FF" : "#DCFCE7",
+                  color: i.type.startsWith("video") ? "#3730A3" : "#166534", border: "1px solid #E5E7EB"
+                }}>{i.type.startsWith("video") ? "Video" : "Procedure"}</span>
                 <button onClick={() => removeItem(i.id)} style={{
                   marginLeft: "auto", padding: "6px 8px", borderRadius: 8,
                   border: "1px solid #E5E7EB", background: "white", cursor: "pointer", fontSize: 12
                 }}>Remove</button>
               </div>
+
               {i.type === "doc" ? (
                 <p style={{ marginTop: 8 }}>{i.body}</p>
               ) : (
-                <div style={{ marginTop: 10 }}>
-                  <iframe
-                    title={i.title}
-                    src={i.url.replace("watch?v=", "embed/")}
-                    style={{ width: "100%", height: 360, border: "1px solid #E5E7EB", borderRadius: 12 }}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                  />
-                  <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
-                    Source: <a href={i.url} target="_blank" rel="noreferrer">{i.url}</a>
-                  </div>
-                </div>
+                renderVideo(i)
               )}
             </div>
           ))}
@@ -785,7 +934,6 @@ function ExportCenter() {
     setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
   }
   function toDOC(tableTitle, rows, columns) {
-    // Simple HTML -> .doc that Word can open
     const style = `
       <style>
         body{font-family:Arial,sans-serif;}
@@ -843,7 +991,6 @@ function ExportCenter() {
       ];
       return { title: "Delivery Tickets", rows, columns, filename: "tickets" };
     }
-    // invoices
     const rows = invoices;
     const columns = [
       { key: "invoiceNo", label: "Invoice" },
@@ -867,270 +1014,4 @@ function ExportCenter() {
   }
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <KpiStrip />
-      <Section title="Export Data">
-        <div style={{ display: "grid", gridTemplateColumns: "220px 220px auto", gap: 8, alignItems: "center" }}>
-          <select value={dataset} onChange={(e)=>setDataset(e.target.value)}
-                  style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-            <option value="kpis">Operational KPIs (summary)</option>
-            <option value="customerCounts">Customer Counts (by State & Type)</option>
-            <option value="tickets">Delivery Tickets (seeded)</option>
-            <option value="invoices">Store Invoices (seeded)</option>
-          </select>
-          <select value={format} onChange={(e)=>setFormat(e.target.value)}
-                  style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-            <option value="csv">Excel (CSV)</option>
-            <option value="doc">Word (DOC)</option>
-          </select>
-          <button onClick={handleExport}
-                  style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB", background: "#111827", color: "white", cursor: "pointer" }}>
-            Export
-          </button>
-        </div>
-        <div style={{ fontSize: 12, color: "#6B7280", marginTop: 8 }}>
-          Tip: CSV opens in Excel. DOC is a Word-compatible table.
-        </div>
-      </Section>
-    </div>
-  );
-}
-
-/* ========================= Tab registry ========================= */
-const TABS = [
-  { key: "dashboard",    label: "Dashboard",        adminOnly: false, Component: LegacyDashboard },
-  { key: "financial",    label: "Financial Ops",    adminOnly: false, Component: FinancialOps },
-  { key: "ops",          label: "Operational KPIs", adminOnly: false, Component: OperationalKPIs },
-  { key: "budget",       label: "Budget",           adminOnly: false, Component: Budget },
-  { key: "export",       label: "Export",           adminOnly: false, Component: ExportCenter },
-  { key: "procedures",   label: "Procedures",       adminOnly: false, Component: Procedures },
-  // Admin-only group:
-  { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,  Component: StoreInvoicing },
-  { key: "tickets",      label: "Delivery Tickets", adminOnly: true,  Component: DeliveryTickets },
-];
-
-/* ========================= Debug overlay (quick state) ========================= */
-function SelfCheck({ session }) {
-  const [open, setOpen] = useState(false);
-  const supaKeys = Object.keys(localStorage).filter((k) => k.startsWith("sb-")).slice(0, 5);
-  const expectedRedirect = new URL("/KPI-Dashboard/", window.location.href).href;
-  return (
-    <div style={{ position: "fixed", left: 16, bottom: 16, zIndex: 9999 }}>
-      <button onClick={() => setOpen((v) => !v)}
-              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: open ? "#111827" : "white", color: open ? "white" : "#111827", cursor: "pointer" }}>
-        {open ? "Hide" : "Show"} Debug
-      </button>
-      {open && (
-        <pre style={{ marginTop: 8, maxWidth: 420, maxHeight: 260, overflow: "auto", background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: 12, fontSize: 12 }}>
-{JSON.stringify({
-  session: session?.user ? { id: session.user.id, email: session.user.email } : null,
-  access_token: session?.access_token ? "[present]" : null,
-  expectedRedirect,
-  path: window.location.pathname,
-  hasSupabaseKeys: supaKeys.length > 0,
-  supabaseKeysPreview: supaKeys,
-}, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
-}
-
-/* ========================= App Shell (with collapsible group + Edit toggle) ========================= */
-export default function App() {
-  const [active, setActive] = useState("dashboard");
-  const [session, setSession] = useState(null);
-  const [checking, setChecking] = useState(true);
-
-  const [groupsOpen, setGroupsOpen] = useState({ operations: true });
-  function toggleGroup(name) { setGroupsOpen((g) => ({ ...g, [name]: !g[name] })); }
-
-  useEffect(() => {
-    let mounted = true;
-    async function init() {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) console.error("getSession error:", error);
-        if (!mounted) return;
-        setSession(data?.session ?? null);
-      } catch (e) {
-        console.error("Auth init threw:", e);
-        if (!mounted) return;
-        setSession(null);
-      } finally {
-        if (mounted) setChecking(false);
-      }
-    }
-    init();
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => {
-      if (!mounted) return;
-      setSession(s); setChecking(false);
-    });
-    return () => { mounted = false; sub?.subscription?.unsubscribe?.(); };
-  }, []);
-
-  if (checking) {
-    return (
-      <div style={{ padding: 24 }}>
-        <div style={{ fontSize: 18, marginBottom: 8 }}>Restoring session…</div>
-        <div style={{ fontSize: 13, color: "#6B7280" }}>
-          If this never finishes, try <a href={new URL("/KPI-Dashboard/", window.location.href).href}>reloading</a>.
-        </div>
-      </div>
-    );
-  }
-  if (!session) return <SignInCard />;
-
-  const Current = TABS.find((t) => t.key === active) || TABS[0];
-
-  return (
-    <ErrorBoundary>
-      <KPIProvider>
-        <Header />
-        <RoleBadge />
-        <SelfCheck session={session} />
-        <AppBody active={active} setActive={setActive} groupsOpen={groupsOpen} toggleGroup={toggleGroup} Current={Current} />
-      </KPIProvider>
-    </ErrorBoundary>
-  );
-}
-
-function Header() {
-  const { editMode, setEditMode } = useKpis();
-  return (
-    <header style={{
-      padding: "16px 24px", borderBottom: "1px solid #E5E7EB",
-      background: "white", position: "sticky", top: 0, zIndex: 5,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas — KPI Dashboard</h1>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <AdminOnly fallback={null}>
-            <button
-              onClick={() => setEditMode(!editMode)}
-              style={{
-                padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB",
-                background: editMode ? "#111827" : "white", color: editMode ? "white" : "#111827",
-                cursor: "pointer"
-              }}
-              title="Toggle edit mode for manual KPI updates"
-            >
-              {editMode ? "Editing KPIs…" : "Edit KPIs"}
-            </button>
-          </AdminOnly>
-          <button
-            onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }}
-            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", cursor: "pointer" }}
-          >
-            Sign out
-          </button>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
-  return (
-    <div style={{ display: "flex", background: "#F8FAFC", minHeight: "calc(100vh - 60px)" }}>
-      {/* Sidebar */}
-      <aside style={{
-        width: 260, borderRight: "1px solid #E5E7EB", background: "white",
-        minHeight: "calc(100vh - 60px)", position: "sticky", top: 60, alignSelf: "flex-start",
-      }}>
-        <nav style={{ padding: 12 }}>
-          {/* Top-level tabs */}
-          {["dashboard","financial","ops","budget","export","procedures"].map((key) => {
-            const tab = TABS.find(t => t.key === key);
-            const isActive = Current.key === key;
-            return (
-              <button
-                key={key}
-                onClick={() => setActive(key)}
-                style={{
-                  display: "block", width: "100%", textAlign: "left",
-                  padding: "10px 12px", marginBottom: 6, borderRadius: 8,
-                  border: "1px solid #E5E7EB",
-                  background: isActive ? "#EEF2FF" : "white",
-                  cursor: "pointer", fontWeight: 500,
-                }}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-
-          {/* Collapsible group: Operations (admin-only items inside) */}
-          <div style={{ marginTop: 10, marginBottom: 6, fontSize: 12, color: "#6B7280" }}>GROUP</div>
-          <div style={{ border: "1px solid #E5E7EB", borderRadius: 10, overflow: "hidden", background: "white" }}>
-            <button
-              onClick={() => toggleGroup("operations")}
-              style={{
-                display: "flex", gap: 8, alignItems: "center", width: "100%", padding: "10px 12px",
-                border: "none", background: "white", cursor: "pointer", fontWeight: 600
-              }}
-            >
-              <span style={{
-                display: "inline-block", width: 18, textAlign: "center",
-                transform: groupsOpen.operations ? "rotate(90deg)" : "rotate(0deg)",
-                transition: "transform 0.15s ease"
-              }}>▶</span>
-              Operations
-            </button>
-
-            {groupsOpen.operations && (
-              <div style={{ borderTop: "1px solid #F3F4F6", padding: 8 }}>
-                <AdminOnly fallback={null}>
-                  <button
-                    onClick={() => setActive("invoicing")}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
-                      borderRadius: 8, border: "1px solid #E5E7EB", background: Current.key === "invoicing" ? "#EEF2FF" : "white",
-                      cursor: "pointer", fontWeight: 500, marginBottom: 6
-                    }}
-                  >
-                    Store Invoicing 🔒
-                  </button>
-                </AdminOnly>
-
-                <AdminOnly fallback={null}>
-                  <button
-                    onClick={() => setActive("tickets")}
-                    style={{
-                      display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
-                      borderRadius: 8, border: "1px solid #E5E7EB", background: Current.key === "tickets" ? "#EEF2FF" : "white",
-                      cursor: "pointer", fontWeight: 500
-                    }}
-                  >
-                    Delivery Tickets 🔒
-                  </button>
-                </AdminOnly>
-
-                <AdminOnly
-                  fallback={
-                    <div style={{ fontSize: 12, color: "#6B7280", padding: "6px 12px" }}>
-                      Admin-only tools live here.
-                    </div>
-                  }
-                >
-                  {null}
-                </AdminOnly>
-              </div>
-            )}
-          </div>
-        </nav>
-      </aside>
-
-      {/* Content */}
-      <main style={{ flex: 1, padding: 24 }}>
-        {Current.adminOnly ? (
-          <AdminOnly fallback={<div>Admins only.</div>}>
-            <Current.Component />
-          </AdminOnly>
-        ) : (
-          <Current.Component />
-        )}
-      </main>
-    </div>
-  );
-}
+    <div style={{ display: "
