@@ -1014,4 +1014,4 @@ function ExportCenter() {
   }
 
   return (
-    <div style={{ display: "
+    <div style={{ display: "flex" }}>
