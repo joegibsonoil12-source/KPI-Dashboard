@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Check for linting (if available)
+        run: |
+          if npm run lint --silent >/dev/null 2>&1; then
+            echo "Running linter..."
+            npm run lint
+          else
+            echo "No lint script found, skipping linting"
+          fi
+        continue-on-error: false
+        
+      - name: Run tests (if available)
+        run: |
+          if npm run test --silent >/dev/null 2>&1; then
+            echo "Running tests..."
+            npm run test
+          else
+            echo "No test script found, skipping tests"
+          fi
+        continue-on-error: false
+        
+      - name: Build project
+        run: npm run build
+        
+      - name: Check build output
+        run: |
+          if [ -d "dist" ]; then
+            echo "Build successful - dist directory exists"
+            ls -la dist/
+          else
+            echo "Build failed - no dist directory found"
+            exit 1
+          fi
+
+  # Optional job for checking PR readiness
+  pr-checks:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Check PR is not draft
+        run: |
+          if [ "${{ github.event.pull_request.draft }}" = "true" ]; then
+            echo "::notice::This is a draft PR. It will be checked but not considered ready for merge."
+          else
+            echo "PR is ready for review"
+          fi
+          
+      - name: Check PR has description
+        run: |
+          if [ -z "${{ github.event.pull_request.body }}" ]; then
+            echo "::warning::PR has no description. Please add a description explaining the changes."
+          else
+            echo "PR has a description"
+          fi

@@ -20,53 +20,101 @@ export default function SupabaseSettings({ onClientReady = null }) {
   }
 
   return (
-    <div style={{ background: '#fff', padding: 16, borderRadius: 8, maxWidth: 600, margin: '0 auto' }}>
-      <h2>Supabase Settings</h2>
-      <p style={{ color: '#666', marginBottom: 16 }}>
-        Configure your Supabase project to enable video uploads and cloud storage.
+    <div style={{ 
+      background: 'white', 
+      border: '1px solid #E5E7EB', 
+      borderRadius: 12, 
+      padding: 16,
+      marginBottom: 16
+    }}>
+      <h3 style={{ margin: '0 0 12px 0', fontSize: 16 }}>Supabase Settings</h3>
+      <p style={{ margin: '0 0 12px 0', fontSize: 14, color: '#6B7280' }}>
+        Configure your Supabase connection (stored in browser localStorage)
       </p>
       
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ display: 'block', marginBottom: 4 }}>Project URL</label>
-        <input 
-          value={url} 
-          onChange={e => setUrl(e.target.value)} 
-          placeholder="https://your-project.supabase.co"
-          style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
-        />
+      <div style={{ display: 'grid', gap: 12, marginBottom: 12 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 12, color: '#6B7280', marginBottom: 4 }}>
+            Supabase URL
+          </label>
+          <input
+            type="url"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://your-project.supabase.co"
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #E5E7EB',
+              borderRadius: 8,
+              fontSize: 14
+            }}
+          />
+        </div>
+        
+        <div>
+          <label style={{ display: 'block', fontSize: 12, color: '#6B7280', marginBottom: 4 }}>
+            Anon Key
+          </label>
+          <input
+            type="password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #E5E7EB',
+              borderRadius: 8,
+              fontSize: 14
+            }}
+          />
+        </div>
       </div>
-      
-      <div style={{ marginBottom: 12 }}>
-        <label style={{ display: 'block', marginBottom: 4 }}>Anonymous Key</label>
-        <input 
-          value={key} 
-          onChange={e => setKey(e.target.value)} 
-          placeholder="your-anon-key"
-          type="password"
-          style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
-        />
-      </div>
-      
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button onClick={save} style={{ padding: '8px 16px', background: '#0070f3', color: '#fff', border: 'none', borderRadius: 4 }}>
-          Save
+        <button
+          onClick={save}
+          style={{
+            padding: '8px 16px',
+            background: '#111827',
+            color: 'white',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer',
+            fontSize: 14
+          }}
+        >
+          Save Settings
         </button>
-        <button onClick={clear} style={{ padding: '8px 16px', background: '#f3f4f6', color: '#111', border: 'none', borderRadius: 4 }}>
+        <button
+          onClick={clear}
+          style={{
+            padding: '8px 16px',
+            background: '#F3F4F6',
+            color: '#111827',
+            border: '1px solid #E5E7EB',
+            borderRadius: 8,
+            cursor: 'pointer',
+            fontSize: 14
+          }}
+        >
           Clear
         </button>
       </div>
-      
-      {msg && <p style={{ color: '#059669', fontSize: 14 }}>{msg}</p>}
-      
-      <div style={{ background: '#f9fafb', padding: 12, borderRadius: 4, fontSize: 14, color: '#4b5563' }}>
-        <strong>Setup Instructions:</strong>
-        <ol style={{ marginLeft: 16, marginTop: 8 }}>
-          <li>Create a Supabase project at <a href="https://supabase.com" target="_blank" rel="noopener noreferrer">supabase.com</a></li>
-          <li>Get your project URL and anon key from Settings → API</li>
-          <li>Create a public storage bucket named "videos"</li>
-          <li>Create a "videos" table with id, title, description, url, and created_at columns</li>
-        </ol>
-      </div>
+
+      {msg && (
+        <div style={{
+          padding: 8,
+          background: '#F0FDF4',
+          border: '1px solid #BBF7D0',
+          borderRadius: 8,
+          fontSize: 12,
+          color: '#166534'
+        }}>
+          {msg}
+        </div>
+      )}
     </div>
   );
 }
