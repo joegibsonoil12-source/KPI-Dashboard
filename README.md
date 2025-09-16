@@ -4,15 +4,23 @@ Upload these files to your repo root. The GitHub Actions workflow will build and
 
 ## Features
 
-### Videos
-The dashboard includes a Videos feature that allows users to add and manage training videos and documentation. The Videos page supports:
+The KPI Dashboard provides comprehensive business intelligence and operational management capabilities including:
 
-- **URL-based videos**: Add external video links (YouTube, Vimeo, etc.)
-- **File uploads**: Upload video files directly (requires Supabase configuration)
-- **Local storage fallback**: Videos are stored in browser localStorage when Supabase is not configured
-- **Supabase integration**: Optional integration with Supabase for persistent storage and file uploads
+- **Dashboard**: Overview of key performance indicators and metrics
+- **Financial Ops**: Financial operations and expense tracking
+- **Operational KPIs**: Editable key performance indicators with real-time updates
+- **Budget**: Budget planning and tracking tools
+- **Export**: Data export functionality for reports and analysis
+- **Procedures**: Standard operating procedures with embedded documentation and training videos
 
-To configure Supabase uploads, ensure your Supabase client is properly configured and you have a public storage bucket named 'videos' (or pass a custom bucket name to the component).
+### Video Management
+
+Videos are managed exclusively through the **Procedures** section. Each procedure can have associated training videos and documentation. The Procedures feature supports:
+
+- **URL-based videos**: Add external video links (YouTube, Vimeo, etc.) to procedures
+- **File uploads**: Upload video files directly to procedures (requires Supabase configuration) 
+- **Embedded viewing**: Videos are displayed inline with procedure documentation
+- **Supabase integration**: Optional integration with Supabase for persistent storage
 
 ## Local dev
 ```bash

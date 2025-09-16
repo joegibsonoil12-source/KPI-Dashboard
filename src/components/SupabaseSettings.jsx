@@ -8,7 +8,7 @@ export default function SupabaseSettings({ onClientReady = null }) {
   function save() {
     localStorage.setItem('SUPABASE_URL', url);
     localStorage.setItem('SUPABASE_ANON_KEY', key);
-    setMsg('Saved to browser localStorage. The Videos page will try to create a client automatically.');
+    setMsg('Saved to browser localStorage. The Procedures page will try to create a client automatically for video uploads.');
     if (onClientReady) onClientReady({ url, key });
   }
 
