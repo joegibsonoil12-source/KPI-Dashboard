@@ -7,6 +7,7 @@
 
 import React, { useEffect, useMemo, useState, useContext, useCallback } from "react";
 import { supabase } from "./lib/supabaseClient";
+import KPIs from "./pages/KPIs";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -941,6 +942,7 @@ function ExportCenter() {
 /* ========================================================================== */
 const TABS = [
   { key: "dashboard",    label: "Dashboard",        adminOnly: false, Component: LegacyDashboard },
+  { key: "kpis",         label: "KPIs",             adminOnly: false, Component: KPIs },
   { key: "financial",    label: "Financial Ops",    adminOnly: false, Component: FinancialOps },
   { key: "ops",          label: "Operational KPIs", adminOnly: false, Component: OperationalKPIs },
   { key: "budget",       label: "Budget",           adminOnly: false, Component: Budget },
@@ -1086,7 +1088,7 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
       }}>
         <nav style={{ padding: 12 }}>
           {/* Top-level tabs */}
-          {["dashboard","financial","ops","budget","export","procedures"].map((key) => {
+          {["dashboard","kpis","financial","ops","budget","export","procedures"].map((key) => {
             const tab = TABS.find(t => t.key === key);
             const isActive = Current.key === key;
             return (

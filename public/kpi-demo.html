@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KPI Dashboard Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            margin: 0;
+            padding: 24px;
+            background-color: #f8fafc;
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 16px;
+            color: #111827;
+        }
+        h3 {
+            margin-bottom: 12px;
+            color: #374151;
+        }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        .kpi-card {
+            background-color: white;
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+        .demo-label {
+            font-size: 10px;
+            color: #F59E0B;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+        .kpi-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: #6B7280;
+            margin-bottom: 8px;
+        }
+        .kpi-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #111827;
+            margin-bottom: 4px;
+        }
+        .kpi-subtitle {
+            font-size: 12px;
+            color: #9CA3AF;
+        }
+        .tables-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .table-container {
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead {
+            background-color: #F9FAFB;
+        }
+        th {
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            color: #374151;
+        }
+        td {
+            padding: 12px 16px;
+            font-size: 14px;
+            border-top: 1px solid #E5E7EB;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            font-size: 12px;
+            background-color: #D1FAE5;
+            color: #065F46;
+            border-radius: 4px;
+        }
+        .warning-box {
+            padding: 20px;
+            background-color: #FEF3C7;
+            border: 1px solid #F59E0B;
+            border-radius: 8px;
+            color: #92400E;
+            margin-bottom: 24px;
+        }
+        .warning-box h3 {
+            margin: 0 0 8px 0;
+            color: #92400E;
+        }
+        .warning-box p {
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>KPI Dashboard</h1>
+    
+    <div class="warning-box">
+        <h3>Supabase Configuration Required</h3>
+        <p>To view live KPI data, please configure your Supabase settings in the app. Make sure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set in your environment.</p>
+    </div>
+    
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="demo-label">Demo Data</div>
+            <div class="kpi-title">Revenue Month-to-Date</div>
+            <div class="kpi-value">$45,672.50</div>
+            <div class="kpi-subtitle">Total revenue this month</div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="demo-label">Demo Data</div>
+            <div class="kpi-title">Gallons Sold MTD</div>
+            <div class="kpi-value">18,945</div>
+            <div class="kpi-subtitle">Gallons delivered this month</div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="demo-label">Demo Data</div>
+            <div class="kpi-title">Avg Order Value</div>
+            <div class="kpi-value">$1,287.30</div>
+            <div class="kpi-subtitle">Average invoice amount</div>
+        </div>
+        
+        <div class="kpi-card">
+            <div class="demo-label">Demo Data</div>
+            <div class="kpi-title">On-Time Deliveries</div>
+            <div class="kpi-value">94.2%</div>
+            <div class="kpi-subtitle">Delivered on or before scheduled date</div>
+        </div>
+    </div>
+    
+    <!-- Data Tables -->
+    <div class="tables-grid">
+        <div>
+            <h3>Recent Deliveries (Demo)</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Delivery #</th>
+                            <th>Customer</th>
+                            <th>Gallons</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>DEL2024005</td>
+                            <td>Odessa Truck Stop</td>
+                            <td>1,200</td>
+                            <td><span class="status-badge">Delivered</span></td>
+                        </tr>
+                        <tr>
+                            <td>DEL2024004</td>
+                            <td>Desert Rose Restaurant</td>
+                            <td>510</td>
+                            <td><span class="status-badge">Delivered</span></td>
+                        </tr>
+                        <tr>
+                            <td>DEL2024003</td>
+                            <td>Midland Manufacturing Co</td>
+                            <td>680</td>
+                            <td><span class="status-badge">Delivered</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div>
+            <h3>Outstanding Invoices (Demo)</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Invoice #</th>
+                            <th>Customer</th>
+                            <th>Amount</th>
+                            <th>Due Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>INV2024002</td>
+                            <td>Johnson Residence</td>
+                            <td>$436.59</td>
+                            <td>2025-01-01</td>
+                        </tr>
+                        <tr>
+                            <td>INV2024004</td>
+                            <td>Desert Rose Restaurant</td>
+                            <td>$1,349.46</td>
+                            <td>2025-01-03</td>
+                        </tr>
+                        <tr>
+                            <td>INV2024003</td>
+                            <td>West Texas Diner</td>
+                            <td>$892.25</td>
+                            <td>2024-12-31</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
