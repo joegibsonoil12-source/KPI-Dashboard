@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Videos Component Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8fafc;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .header h1 {
+            color: #1a202c;
+            margin-bottom: 8px;
+        }
+        .header p {
+            color: #718096;
+        }
+        .demo-info {
+            background: #e6fffa;
+            border: 1px solid #81e6d9;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        .demo-info h3 {
+            margin: 0 0 8px 0;
+            color: #234e52;
+        }
+        .demo-info ul {
+            margin: 8px 0 0 20px;
+            color: #2d3748;
+        }
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .feature {
+            background: #f7fafc;
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid #3182ce;
+        }
+        .feature h4 {
+            margin: 0 0 8px 0;
+            color: #2d3748;
+        }
+        .feature p {
+            margin: 0;
+            color: #4a5568;
+            font-size: 14px;
+        }
+        .code-example {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 16px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="header">
+            <h1>🎥 Enhanced Videos Component</h1>
+            <p>Polished UI with YouTube/Vimeo embed support, Supabase settings, and responsive design</p>
+        </div>
+
+        <div class="demo-info">
+            <h3>✨ Key Features Implemented</h3>
+            <ul>
+                <li><strong>Smart Embed Detection:</strong> Automatically detects and embeds YouTube/Vimeo videos</li>
+                <li><strong>Professional Styling:</strong> CSS modules with responsive grid layout</li>
+                <li><strong>Supabase Settings UI:</strong> localStorage-based configuration panel</li>
+                <li><strong>Accessibility:</strong> Proper ARIA labels and semantic HTML</li>
+                <li><strong>Fallback Support:</strong> Works with localStorage when Supabase is unavailable</li>
+                <li><strong>Mobile Responsive:</strong> Adapts to different screen sizes</li>
+            </ul>
+        </div>
+
+        <div class="features">
+            <div class="feature">
+                <h4>🎯 Enhanced UI/UX</h4>
+                <p>Professional styling with CSS modules, improved form layouts, and visual feedback for user actions.</p>
+            </div>
+            <div class="feature">
+                <h4>📺 YouTube/Vimeo Embeds</h4>
+                <p>Automatic detection and embedding of popular video platforms with proper aspect ratios.</p>
+            </div>
+            <div class="feature">
+                <h4>⚙️ Settings Management</h4>
+                <p>Dedicated UI for configuring Supabase credentials with helpful setup instructions.</p>
+            </div>
+            <div class="feature">
+                <h4>♿ Accessibility</h4>
+                <p>Screen reader support, keyboard navigation, and semantic HTML for inclusive design.</p>
+            </div>
+        </div>
+
+        <h3>📋 Component Usage</h3>
+        <div class="code-example">
+// Basic usage with Supabase client
+&lt;Videos supabase={supabaseClient} /&gt;
+
+// Embedded mode (no header)
+&lt;Videos supabase={supabaseClient} embedded={true} /&gt;
+
+// With custom bucket
+&lt;Videos supabase={supabaseClient} bucket="my-videos" /&gt;
+
+// Standalone with localStorage fallback
+&lt;Videos /&gt;
+        </div>
+
+        <h3>🎨 CSS Module Classes</h3>
+        <div class="code-example">
+.wrapper     - Main container
+.header      - Page header section
+.form        - Video upload form
+.grid        - Responsive video grid
+.card        - Individual video cards
+.embed       - Embedded video players
+.primary     - Primary action buttons
+.delete      - Delete buttons
+        </div>
+
+        <h3>🗃️ Files Added</h3>
+        <ul>
+            <li><code>src/components/Videos.jsx</code> - Enhanced main component</li>
+            <li><code>src/components/Videos.module.css</code> - Professional styling</li>
+            <li><code>src/components/SupabaseSettings.jsx</code> - Settings UI</li>
+            <li><code>public/videos.html</code> - Standalone demo page</li>
+            <li><code>db/videos-table.md</code> - SQL documentation</li>
+        </ul>
+
+        <h3>🚀 Integration</h3>
+        <p>The component has been integrated into the main application:</p>
+        <ul>
+            <li>Added to the TABS array in <code>App.jsx</code></li>
+            <li>Added "Videos" link to the sidebar navigation</li>
+            <li>Positioned after "Procedures" in the navigation order</li>
+            <li>Includes Supabase client prop for full functionality</li>
+        </ul>
+
+        <h3>📱 Responsive Design</h3>
+        <p>The Videos component features a responsive grid layout that automatically adjusts to different screen sizes:</p>
+        <ul>
+            <li><strong>Desktop:</strong> Multi-column grid with optimal spacing</li>
+            <li><strong>Tablet:</strong> Adapts to fewer columns with maintained readability</li>
+            <li><strong>Mobile:</strong> Single column layout for touch-friendly interaction</li>
+        </ul>
+
+        <div style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+            <p style="color: #718096;">
+                This enhanced Videos component is ready for production use and provides a complete video management solution for the KPI Dashboard.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
