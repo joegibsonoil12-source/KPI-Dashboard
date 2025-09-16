@@ -1,6 +1,6 @@
 // src/App.jsx
 // ============================================================================
-// Gibson Oil & Gas â€” KPI Dashboard
+// Gibson Oil & Gas — KPI Dashboard
 // Entire single-file React app (Vite + React).
 // Fully corrected and self-contained. Paste this into src/App.jsx.
 // ============================================================================
@@ -292,7 +292,7 @@ function Filters({ value, onChange }) {
   const [status, setStatus] = useState(value.status || "Any");
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 160px 160px 120px", gap: 8 }}>
-      <input placeholder="Search tickets, stores, products, driverâ€¦" value={q} onChange={(e) => setQ(e.target.value)}
+      <input placeholder="Search tickets, stores, products, driver…" value={q} onChange={(e) => setQ(e.target.value)}
              style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
       <select value={store} onChange={(e) => setStore(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
         <option>All</option>{STORES.map((s) => <option key={s}>{s}</option>)}
@@ -350,7 +350,7 @@ function BudgetProgress({ rows }) {
       <div style={{ height: 12, background: "#F3F4F6", borderRadius: 999, overflow: "hidden", marginTop: 10 }}>
         <div style={{ width: pct + "%", height: "100%", background: "#111827" }} />
       </div>
-      <div style={{ marginTop: 8, fontSize: 13 }}>${revenue.toLocaleString()} â€¢ {pct}%</div>
+      <div style={{ marginTop: 8, fontSize: 13 }}>${revenue.toLocaleString()} • {pct}%</div>
     </Card>
   );
 }
@@ -396,7 +396,7 @@ function NotesPanel() {
   return (
     <Card title="Notes / Next actions">
       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, marginTop: 8 }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Add a noteâ€¦"
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Add a note…"
                style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
         <button onClick={addNote} style={{
           padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB",
@@ -524,7 +524,7 @@ function StoreInvoicing() {
 }
 
 /* ========================================================================== */
-/* Procedures (How-tos & Videos) â€” URL embeds for now                         */
+/* Procedures (How-tos & Videos) — URL embeds for now                         */
 /* ========================================================================== */
 function Procedures() {
   const [items, setItems] = useState([
@@ -634,7 +634,7 @@ function FinancialOps() {
           { key: "category", label: "Category" },
           { key: "month", label: "Month" },
           { key: "amount", label: "Amount", render: (v) => "$" + v.toLocaleString() },
-          { key: "variance", label: "Variance", render: (v) => (v >= 0 ? "+" : "âˆ’") + "$" + Math.abs(v).toLocaleString() },
+          { key: "variance", label: "Variance", render: (v) => (v >= 0 ? "+" : "−") + "$" + Math.abs(v).toLocaleString() },
           { key: "note", label: "Note" },
         ]} rows={rows} />
       </Section>
@@ -732,7 +732,7 @@ function OperationalKPIs() {
         title="Propane Customer Count (by State & Type)"
         actions={
           <div style={{ fontSize: 12, color: "#6B7280" }}>
-            Res: {totals.residential.toLocaleString()} â€¢ Com: {totals.commercial.toLocaleString()} â€¢ Total: {totals.total.toLocaleString()}
+            Res: {totals.residential.toLocaleString()} • Com: {totals.commercial.toLocaleString()} • Total: {totals.total.toLocaleString()}
           </div>
         }
       >
@@ -1018,7 +1018,7 @@ export default function App() {
   if (checking) {
     return (
       <div style={{ padding: 24 }}>
-        <div style={{ fontSize: 18, marginBottom: 8 }}>Restoring sessionâ€¦</div>
+        <div style={{ fontSize: 18, marginBottom: 8 }}>Restoring session…</div>
         <div style={{ fontSize: 13, color: "#6B7280" }}>
           If this never finishes, try <a href={new URL("/KPI-Dashboard/", window.location.href).href}>reloading</a>.
         </div>
@@ -1049,7 +1049,7 @@ function Header() {
       background: "white", position: "sticky", top: 0, zIndex: 5,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas â€” KPI Dashboard</h1>
+        <h1 style={{ margin: 0, fontSize: 20 }}>Gibson Oil & Gas — KPI Dashboard</h1>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
           <AdminOnly fallback={null}>
             <button
@@ -1061,7 +1061,7 @@ function Header() {
               }}
               title="Toggle edit mode for manual KPI updates"
             >
-              {editMode ? "Editing KPIsâ€¦" : "Edit KPIs"}
+              {editMode ? "Editing KPIs…" : "Edit KPIs"}
             </button>
           </AdminOnly>
           <button
@@ -1120,7 +1120,7 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
                 display: "inline-block", width: 18, textAlign: "center",
                 transform: groupsOpen.operations ? "rotate(90deg)" : "rotate(0deg)",
                 transition: "transform 0.15s ease"
-              }}>â–¶</span>
+              }}></span>
               Operations
             </button>
 
@@ -1135,7 +1135,7 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
                       cursor: "pointer", fontWeight: 500, marginBottom: 6
                     }}
                   >
-                    Store Invoicing ðŸ”’
+                    Store Invoicing 🔒
                   </button>
                 </AdminOnly>
 
@@ -1148,7 +1148,7 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
                       cursor: "pointer", fontWeight: 500
                     }}
                   >
-                    Delivery Tickets ðŸ”’
+                    Delivery Tickets 🔒
                   </button>
                 </AdminOnly>
 
@@ -1211,7 +1211,7 @@ USAGE NOTES:
 - UI is intentionally lightweight: vanilla inline styles to keep single-file
   simplicity and avoid external CSS collisions on GitHub Pages.
 
-- If you hit a "Restoring sessionâ€¦" hang, click the reload link in the notice.
+- If you hit a "Restoring session…" hang, click the reload link in the notice.
 
 - Build tip: This code avoids template literals inside JSX "style={...}" blocks.
   Inline style objects never use backticks/strings; this prevents the esbuild
@@ -1432,7 +1432,7 @@ Happy shipping!
 // 198
 // 199
 // 200
-// (â€¦ snip: continuing to 1200 for file length â€¦)
+// (… snip: continuing to 1200 for file length …)
 
 // pad 201
 // pad 202
@@ -1982,455 +1982,3 @@ Happy shipping!
 // pad 746
 // pad 747
 // pad 748
-// pad 749
-// pad 750
-// pad 751
-// pad 752
-// pad 753
-// pad 754
-// pad 755
-// pad 756
-// pad 757
-// pad 758
-// pad 759
-// pad 760
-// pad 761
-// pad 762
-// pad 763
-// pad 764
-// pad 765
-// pad 766
-// pad 767
-// pad 768
-// pad 769
-// pad 770
-// pad 771
-// pad 772
-// pad 773
-// pad 774
-// pad 775
-// pad 776
-// pad 777
-// pad 778
-// pad 779
-// pad 780
-// pad 781
-// pad 782
-// pad 783
-// pad 784
-// pad 785
-// pad 786
-// pad 787
-// pad 788
-// pad 789
-// pad 790
-// pad 791
-// pad 792
-// pad 793
-// pad 794
-// pad 795
-// pad 796
-// pad 797
-// pad 798
-// pad 799
-// pad 800
-// pad 801
-// pad 802
-// pad 803
-// pad 804
-// pad 805
-// pad 806
-// pad 807
-// pad 808
-// pad 809
-// pad 810
-// pad 811
-// pad 812
-// pad 813
-// pad 814
-// pad 815
-// pad 816
-// pad 817
-// pad 818
-// pad 819
-// pad 820
-// pad 821
-// pad 822
-// pad 823
-// pad 824
-// pad 825
-// pad 826
-// pad 827
-// pad 828
-// pad 829
-// pad 830
-// pad 831
-// pad 832
-// pad 833
-// pad 834
-// pad 835
-// pad 836
-// pad 837
-// pad 838
-// pad 839
-// pad 840
-// pad 841
-// pad 842
-// pad 843
-// pad 844
-// pad 845
-// pad 846
-// pad 847
-// pad 848
-// pad 849
-// pad 850
-// pad 851
-// pad 852
-// pad 853
-// pad 854
-// pad 855
-// pad 856
-// pad 857
-// pad 858
-// pad 859
-// pad 860
-// pad 861
-// pad 862
-// pad 863
-// pad 864
-// pad 865
-// pad 866
-// pad 867
-// pad 868
-// pad 869
-// pad 870
-// pad 871
-// pad 872
-// pad 873
-// pad 874
-// pad 875
-// pad 876
-// pad 877
-// pad 878
-// pad 879
-// pad 880
-// pad 881
-// pad 882
-// pad 883
-// pad 884
-// pad 885
-// pad 886
-// pad 887
-// pad 888
-// pad 889
-// pad 890
-// pad 891
-// pad 892
-// pad 893
-// pad 894
-// pad 895
-// pad 896
-// pad 897
-// pad 898
-// pad 899
-// pad 900
-// pad 901
-// pad 902
-// pad 903
-// pad 904
-// pad 905
-// pad 906
-// pad 907
-// pad 908
-// pad 909
-// pad 910
-// pad 911
-// pad 912
-// pad 913
-// pad 914
-// pad 915
-// pad 916
-// pad 917
-// pad 918
-// pad 919
-// pad 920
-// pad 921
-// pad 922
-// pad 923
-// pad 924
-// pad 925
-// pad 926
-// pad 927
-// pad 928
-// pad 929
-// pad 930
-// pad 931
-// pad 932
-// pad 933
-// pad 934
-// pad 935
-// pad 936
-// pad 937
-// pad 938
-// pad 939
-// pad 940
-// pad 941
-// pad 942
-// pad 943
-// pad 944
-// pad 945
-// pad 946
-// pad 947
-// pad 948
-// pad 949
-// pad 950
-// pad 951
-// pad 952
-// pad 953
-// pad 954
-// pad 955
-// pad 956
-// pad 957
-// pad 958
-// pad 959
-// pad 960
-// pad 961
-// pad 962
-// pad 963
-// pad 964
-// pad 965
-// pad 966
-// pad 967
-// pad 968
-// pad 969
-// pad 970
-// pad 971
-// pad 972
-// pad 973
-// pad 974
-// pad 975
-// pad 976
-// pad 977
-// pad 978
-// pad 979
-// pad 980
-// pad 981
-// pad 982
-// pad 983
-// pad 984
-// pad 985
-// pad 986
-// pad 987
-// pad 988
-// pad 989
-// pad 990
-// pad 991
-// pad 992
-// pad 993
-// pad 994
-// pad 995
-// pad 996
-// pad 997
-// pad 998
-// pad 999
-// pad 1000
-// pad 1001
-// pad 1002
-// pad 1003
-// pad 1004
-// pad 1005
-// pad 1006
-// pad 1007
-// pad 1008
-// pad 1009
-// pad 1010
-// pad 1011
-// pad 1012
-// pad 1013
-// pad 1014
-// pad 1015
-// pad 1016
-// pad 1017
-// pad 1018
-// pad 1019
-// pad 1020
-// pad 1021
-// pad 1022
-// pad 1023
-// pad 1024
-// pad 1025
-// pad 1026
-// pad 1027
-// pad 1028
-// pad 1029
-// pad 1030
-// pad 1031
-// pad 1032
-// pad 1033
-// pad 1034
-// pad 1035
-// pad 1036
-// pad 1037
-// pad 1038
-// pad 1039
-// pad 1040
-// pad 1041
-// pad 1042
-// pad 1043
-// pad 1044
-// pad 1045
-// pad 1046
-// pad 1047
-// pad 1048
-// pad 1049
-// pad 1050
-// pad 1051
-// pad 1052
-// pad 1053
-// pad 1054
-// pad 1055
-// pad 1056
-// pad 1057
-// pad 1058
-// pad 1059
-// pad 1060
-// pad 1061
-// pad 1062
-// pad 1063
-// pad 1064
-// pad 1065
-// pad 1066
-// pad 1067
-// pad 1068
-// pad 1069
-// pad 1070
-// pad 1071
-// pad 1072
-// pad 1073
-// pad 1074
-// pad 1075
-// pad 1076
-// pad 1077
-// pad 1078
-// pad 1079
-// pad 1080
-// pad 1081
-// pad 1082
-// pad 1083
-// pad 1084
-// pad 1085
-// pad 1086
-// pad 1087
-// pad 1088
-// pad 1089
-// pad 1090
-// pad 1091
-// pad 1092
-// pad 1093
-// pad 1094
-// pad 1095
-// pad 1096
-// pad 1097
-// pad 1098
-// pad 1099
-// pad 1100
-// pad 1101
-// pad 1102
-// pad 1103
-// pad 1104
-// pad 1105
-// pad 1106
-// pad 1107
-// pad 1108
-// pad 1109
-// pad 1110
-// pad 1111
-// pad 1112
-// pad 1113
-// pad 1114
-// pad 1115
-// pad 1116
-// pad 1117
-// pad 1118
-// pad 1119
-// pad 1120
-// pad 1121
-// pad 1122
-// pad 1123
-// pad 1124
-// pad 1125
-// pad 1126
-// pad 1127
-// pad 1128
-// pad 1129
-// pad 1130
-// pad 1131
-// pad 1132
-// pad 1133
-// pad 1134
-// pad 1135
-// pad 1136
-// pad 1137
-// pad 1138
-// pad 1139
-// pad 1140
-// pad 1141
-// pad 1142
-// pad 1143
-// pad 1144
-// pad 1145
-// pad 1146
-// pad 1147
-// pad 1148
-// pad 1149
-// pad 1150
-// pad 1151
-// pad 1152
-// pad 1153
-// pad 1154
-// pad 1155
-// pad 1156
-// pad 1157
-// pad 1158
-// pad 1159
-// pad 1160
-// pad 1161
-// pad 1162
-// pad 1163
-// pad 1164
-// pad 1165
-// pad 1166
-// pad 1167
-// pad 1168
-// pad 1169
-// pad 1170
-// pad 1171
-// pad 1172
-// pad 1173
-// pad 1174
-// pad 1175
-// pad 1176
-// pad 1177
-// pad 1178
-// pad 1179
-// pad 1180
-// pad 1181
-// pad 1182
-// pad 1183
-// pad 1184
-// pad 1185
-// pad 1186
-// pad 1187
-// pad 1188
-// pad 1189
-// pad 1190
-// pad 1191
-// pad 1192
-// pad 1193
-// pad 1194
-// pad 1195
-// pad 1196
-// pad 1197
-// pad 1198
-// pad 1199
-// pad 1200
