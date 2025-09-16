@@ -7,7 +7,8 @@
 
 import React, { useEffect, useMemo, useState, useContext, useCallback } from "react";
 import { supabase } from "./lib/supabaseClient";
-import KPIs from "./pages/KPIs";
++import KPIs from "./pages/KPIs";
++import Videos from "./components/Videos";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -948,6 +949,7 @@ const TABS = [
   { key: "budget",       label: "Budget",           adminOnly: false, Component: Budget },
   { key: "export",       label: "Export",           adminOnly: false, Component: ExportCenter },
   { key: "procedures",   label: "Procedures",       adminOnly: false, Component: Procedures },
+  { key: "videos",       label: "Videos",           adminOnly: false, Component: () => <Videos supabase={supabase} /> },
   // Admin-only group:
   { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,  Component: StoreInvoicing },
   { key: "tickets",      label: "Delivery Tickets", adminOnly: true,  Component: DeliveryTickets },
@@ -1088,7 +1090,7 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
       }}>
         <nav style={{ padding: 12 }}>
           {/* Top-level tabs */}
-          {["dashboard","kpis","financial","ops","budget","export","procedures"].map((key) => {
++          {["dashboard","kpis","financial","ops","budget","export","procedures","videos"].map((key) => {
             const tab = TABS.find(t => t.key === key);
             const isActive = Current.key === key;
             return (
