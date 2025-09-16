@@ -1,5 +1,11 @@
 name: CI
 
+# CI workflow with improved shell script safety
+# - Uses environment variables to prevent shell injection
+# - Robust npm script detection using jq and fallback methods  
+# - No non-executable files are referenced as shell commands
+# - Proper error handling for all script checks
+
 on:
   pull_request:
     branches: [ main ]
@@ -25,7 +31,12 @@ jobs:
         
       - name: Check for linting (if available)
         run: |
-          if npm run lint --silent >/dev/null 2>&1; then
+          # Primary check: Use jq to parse package.json directly (most reliable)
+          if [ -f package.json ] && command -v jq >/dev/null 2>&1 && jq -e '.scripts.lint' package.json >/dev/null 2>&1; then
+            echo "Running linter..."
+            npm run lint
+          # Fallback: Check npm run output (less reliable but works without jq)
+          elif npm run --silent 2>/dev/null | grep -q "lint"; then
             echo "Running linter..."
             npm run lint
           else
@@ -35,7 +46,12 @@ jobs:
         
       - name: Run tests (if available)
         run: |
-          if npm run test --silent >/dev/null 2>&1; then
+          # Primary check: Use jq to parse package.json directly (most reliable)
+          if [ -f package.json ] && command -v jq >/dev/null 2>&1 && jq -e '.scripts.test' package.json >/dev/null 2>&1; then
+            echo "Running tests..."
+            npm run test
+          # Fallback: Check npm run output (less reliable but works without jq)
+          elif npm run --silent 2>/dev/null | grep -q "test"; then
             echo "Running tests..."
             npm run test
           else
@@ -74,8 +90,11 @@ jobs:
           fi
           
       - name: Check PR has description
+        env:
+          # Use environment variable to prevent shell injection from PR body content
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          if [ -z "${{ github.event.pull_request.body }}" ]; then
+          if [ -z "${PR_BODY}" ]; then
             echo "::warning::PR has no description. Please add a description explaining the changes."
           else
             echo "PR has a description"
