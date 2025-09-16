@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Videos Demo - KPI Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8fafc;
+            color: #1a202c;
+        }
+        .demo-header {
+            text-align: center;
+            margin-bottom: 32px;
+            padding: 24px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .demo-header h1 {
+            margin: 0 0 8px 0;
+            color: #2d3748;
+        }
+        .demo-header p {
+            color: #718096;
+            margin: 0;
+        }
+        #videos-root {
+            min-height: 400px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            background: white;
+            padding: 8px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .tab {
+            padding: 8px 16px;
+            background: #f7fafc;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .tab:hover {
+            background: #edf2f7;
+        }
+        .tab.active {
+            background: #3182ce;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-header">
+        <h1>Videos Component Demo</h1>
+        <p>Standalone demonstration of the Videos component with Settings panel</p>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" onclick="showTab('videos')">Videos</button>
+        <button class="tab" onclick="showTab('settings')">Supabase Settings</button>
+    </div>
+
+    <div id="videos-tab" class="tab-content active">
+        <div id="videos-root" class="loading">Loading Videos component...</div>
+    </div>
+
+    <div id="settings-tab" class="tab-content">
+        <div id="settings-root" class="loading">Loading Settings component...</div>
+    </div>
+
+    <!-- React and ReactDOM from CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        // Tab switching functionality
+        window.showTab = function(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabName + '-tab').classList.add('active');
+        };
+
+        // Videos Component (simplified version for demo)
+        function VideosDemo() {
+            const [list, setList] = React.useState([]);
+            const [title, setTitle] = React.useState('');
+            const [description, setDescription] = React.useState('');
+            const [videoUrl, setVideoUrl] = React.useState('');
+            const [loading, setLoading] = React.useState(false);
+
+            React.useEffect(() => {
+                const local = JSON.parse(localStorage.getItem('site_videos') || '[]');
+                setList(local);
+            }, []);
+
+            function resetForm() {
+                setTitle('');
+                setDescription('');
+                setVideoUrl('');
+            }
+
+            function isVideoFileUrl(url) {
+                return /\.(mp4|webm|ogg|m3u8)(\?.*)?$/i.test(url);
+            }
+
+            function parseEmbeddable(url) {
+                if (!url) return null;
+                try {
+                    const u = new URL(url);
+                    const host = u.hostname.replace('www.', '');
+                    if (host.includes('youtube.com')) {
+                        const v = u.searchParams.get('v');
+                        if (v) return { type: 'youtube', id: v };
+                    }
+                    if (host === 'youtu.be') {
+                        const id = u.pathname.slice(1);
+                        if (id) return { type: 'youtube', id };
+                    }
+                    if (host.includes('vimeo.com')) {
+                        const id = u.pathname.split('/').filter(Boolean).pop();
+                        if (id && /^\d+$/.test(id)) return { type: 'vimeo', id };
+                    }
+                } catch (e) { /* ignore */ }
+                return null;
+            }
+
+            function getEmbedElement(url, title) {
+                const emb = parseEmbeddable(url);
+                if (!emb) return null;
+                if (emb.type === 'youtube') {
+                    const src = `https://www.youtube.com/embed/${emb.id}`;
+                    return React.createElement('iframe', {
+                        title: title || 'YouTube video',
+                        src: src,
+                        frameBorder: "0",
+                        allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",
+                        allowFullScreen: true,
+                        style: { width: '100%', aspectRatio: '16/9', borderRadius: '6px' }
+                    });
+                }
+                if (emb.type === 'vimeo') {
+                    const src = `https://player.vimeo.com/video/${emb.id}`;
+                    return React.createElement('iframe', {
+                        title: title || 'Vimeo video',
+                        src: src,
+                        frameBorder: "0",
+                        allow: "autoplay; fullscreen; picture-in-picture",
+                        allowFullScreen: true,
+                        style: { width: '100%', aspectRatio: '16/9', borderRadius: '6px' }
+                    });
+                }
+                return null;
+            }
+
+            function handleSubmit(e) {
+                e.preventDefault();
+                if (!title.trim()) {
+                    alert('Please add a title.');
+                    return;
+                }
+                if (!videoUrl.trim()) {
+                    alert('Please add a video URL.');
+                    return;
+                }
+                
+                const item = {
+                    id: `vid_${Date.now()}`,
+                    title: title.trim(),
+                    description: description.trim(),
+                    url: videoUrl.trim(),
+                    created_at: new Date().toISOString()
+                };
+                
+                const arr = JSON.parse(localStorage.getItem('site_videos') || '[]');
+                arr.unshift(item);
+                localStorage.setItem('site_videos', JSON.stringify(arr));
+                setList(arr);
+                resetForm();
+            }
+
+            function handleDelete(id) {
+                if (!window.confirm('Delete this video?')) return;
+                const arr = JSON.parse(localStorage.getItem('site_videos') || '[]').filter(v => v.id !== id);
+                localStorage.setItem('site_videos', JSON.stringify(arr));
+                setList(arr);
+            }
+
+            return (
+                <div style={{ padding: '20px', maxWidth: '1100px', margin: '0 auto' }}>
+                    <header style={{ marginBottom: '12px' }}>
+                        <h1 style={{ margin: '0 0 6px 0', fontSize: '1.6rem' }}>Videos</h1>
+                        <p style={{ margin: '0 0 12px 0', color: '#444' }}>Add videos by URL (demo version - no file uploads).</p>
+                    </header>
+
+                    <section style={{ marginBottom: '18px' }}>
+                        <form onSubmit={handleSubmit} style={{ background: '#fff', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                            <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px' }}>
+                                Title
+                                <input 
+                                    style={{ width: '100%', padding: '8px', marginTop: '6px', boxSizing: 'border-box', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                                    value={title} 
+                                    onChange={e => setTitle(e.target.value)} 
+                                    required 
+                                />
+                            </label>
+
+                            <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px' }}>
+                                Description
+                                <textarea 
+                                    style={{ width: '100%', padding: '8px', marginTop: '6px', boxSizing: 'border-box', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                                    value={description} 
+                                    onChange={e => setDescription(e.target.value)} 
+                                    rows={2} 
+                                />
+                            </label>
+
+                            <label style={{ display: 'block', fontSize: '0.9rem', marginBottom: '8px' }}>
+                                Video URL
+                                <input 
+                                    style={{ width: '100%', padding: '8px', marginTop: '6px', boxSizing: 'border-box', border: '1px solid #e5e7eb', borderRadius: '6px' }}
+                                    value={videoUrl} 
+                                    onChange={e => setVideoUrl(e.target.value)} 
+                                    placeholder="https://www.youtube.com/watch?v=dQw4w9WgXcQ" 
+                                />
+                            </label>
+
+                            <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
+                                <button type="submit" style={{ padding: '8px 12px', background: '#0070f3', color: '#fff', border: 'none', borderRadius: '6px' }}>
+                                    Save
+                                </button>
+                                <button type="button" onClick={resetForm} style={{ padding: '8px 12px', background: '#f3f4f6', color: '#111', border: 'none', borderRadius: '6px' }}>
+                                    Clear
+                                </button>
+                            </div>
+                            <p style={{ color: '#6b7280', fontSize: '0.9rem', marginTop: '8px' }}>
+                                Try adding a YouTube or Vimeo URL to see embed support!
+                            </p>
+                        </form>
+                    </section>
+
+                    <hr style={{ border: 'none', borderTop: '1px solid #e6eef8', margin: '18px 0' }} />
+
+                    <section>
+                        <h2 style={{ margin: '0 0 12px 0' }}>Your videos</h2>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+                            {list && list.length ? list.map(item => (
+                                <article key={item.id} style={{ background: '#fff', padding: '12px', borderRadius: '8px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                                    <h3 style={{ margin: '0 0 8px 0', fontSize: '1rem' }}>{item.title}</h3>
+                                    <div style={{ marginBottom: '8px' }}>
+                                        {getEmbedElement(item.url, item.title) || (
+                                            isVideoFileUrl(item.url) ? (
+                                                <video controls src={item.url} style={{ width: '100%', borderRadius: '6px' }} />
+                                            ) : (
+                                                <div style={{ background: '#000', color: '#fff', padding: '8px', borderRadius: '6px', textAlign: 'center' }}>
+                                                    <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ color: '#fff' }}>Open link</a>
+                                                </div>
+                                            )
+                                        )}
+                                    </div>
+                                    {item.description ? <p style={{ color: '#4b5563', margin: '8px 0' }}>{item.description}</p> : null}
+                                    <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+                                        {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
+                                    </div>
+                                    <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                                        <button 
+                                            onClick={() => handleDelete(item.id)} 
+                                            style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: '6px' }}
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </article>
+                            )) : <p style={{ color: '#6b7280' }}>No videos yet.</p>}
+                        </div>
+                    </section>
+                </div>
+            );
+        }
+
+        // Supabase Settings Component
+        function SupabaseSettingsDemo() {
+            const [url, setUrl] = React.useState(localStorage.getItem('SUPABASE_URL') || '');
+            const [key, setKey] = React.useState(localStorage.getItem('SUPABASE_ANON_KEY') || '');
+            const [msg, setMsg] = React.useState('');
+
+            function save() {
+                localStorage.setItem('SUPABASE_URL', url);
+                localStorage.setItem('SUPABASE_ANON_KEY', key);
+                setMsg('Saved to browser localStorage. The Videos component will use these settings.');
+            }
+
+            function clear() {
+                localStorage.removeItem('SUPABASE_URL');
+                localStorage.removeItem('SUPABASE_ANON_KEY');
+                setUrl('');
+                setKey('');
+                setMsg('Cleared.');
+            }
+
+            return (
+                <div style={{ background: '#fff', padding: '16px', borderRadius: '8px', maxWidth: '600px', margin: '0 auto' }}>
+                    <h2>Supabase Settings</h2>
+                    <p style={{ color: '#666', marginBottom: '16px' }}>
+                        Configure your Supabase project to enable video uploads and cloud storage.
+                    </p>
+                    
+                    <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', marginBottom: '4px' }}>Project URL</label>
+                        <input 
+                            value={url} 
+                            onChange={e => setUrl(e.target.value)} 
+                            placeholder="https://your-project.supabase.co"
+                            style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                        />
+                    </div>
+                    
+                    <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', marginBottom: '4px' }}>Anonymous Key</label>
+                        <input 
+                            value={key} 
+                            onChange={e => setKey(e.target.value)} 
+                            placeholder="your-anon-key"
+                            type="password"
+                            style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                        />
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                        <button onClick={save} style={{ padding: '8px 16px', background: '#0070f3', color: '#fff', border: 'none', borderRadius: '4px' }}>
+                            Save
+                        </button>
+                        <button onClick={clear} style={{ padding: '8px 16px', background: '#f3f4f6', color: '#111', border: 'none', borderRadius: '4px' }}>
+                            Clear
+                        </button>
+                    </div>
+                    
+                    {msg && <p style={{ color: '#059669', fontSize: '14px' }}>{msg}</p>}
+                    
+                    <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '4px', fontSize: '14px', color: '#4b5563' }}>
+                        <strong>Setup Instructions:</strong>
+                        <ol style={{ marginLeft: '16px', marginTop: '8px' }}>
+                            <li>Create a Supabase project at <a href="https://supabase.com" target="_blank" rel="noopener noreferrer">supabase.com</a></li>
+                            <li>Get your project URL and anon key from Settings → API</li>
+                            <li>Create a public storage bucket named "videos"</li>
+                            <li>Create a "videos" table with id, title, description, url, and created_at columns</li>
+                        </ol>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render components
+        ReactDOM.render(React.createElement(VideosDemo), document.getElementById('videos-root'));
+        ReactDOM.render(React.createElement(SupabaseSettingsDemo), document.getElementById('settings-root'));
+    </script>
+</body>
+</html>
