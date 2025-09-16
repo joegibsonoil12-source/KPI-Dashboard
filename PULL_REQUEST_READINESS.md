@@ -10,6 +10,8 @@ This document provides step-by-step instructions for making the draft pull reque
 - Verified that the application builds successfully (`npm run build` ✅)
 - Verified that the development server runs correctly (`npm run dev` ✅)
 
+**Note**: As of issue #10, the Videos functionality has been merged into the Procedures tab. All video-related PRs are no longer needed as the functionality is now part of the main application.
+
 ## Pull Requests to Make Ready
 
 ### 1. PR #4: "Add KPI Dashboard with SQL schema, views, and React components" 
@@ -30,55 +32,14 @@ This document provides step-by-step instructions for making the draft pull reque
 2. Click "Ready for review" button to remove draft status
 3. The CI workflow will automatically run and validate the build
 
-### 2. PR #3: "Wire SupabaseSettings into Videos page - minimal integration"
-**Status**: Draft ➜ Needs review before making ready
+## Videos PRs Status
 
-**What it includes:**
-- Supabase settings integration into Videos page
-- React components for settings management
-- Minimal integration approach
+~~Previously, there were several PRs (#1, #2, #3) related to Videos functionality. As of issue #10, all video functionality has been integrated into the Procedures tab, so these PRs are no longer needed and can be closed.~~
 
-**To review and make ready:**
-1. Go to https://github.com/joegibsonoil12-source/KPI-Dashboard/pull/3
-2. Review the file changes to ensure they don't conflict with other PRs
-3. Test that the integration works correctly
-4. Click "Ready for review" when satisfied
+## Recommended Next Steps
 
-### 3. PR #2: "Enhance Videos Component with Polished UI, YouTube/Vimeo Embeds, and Supabase Settings"
-**Status**: Draft ➜ Needs review before making ready
-
-**What it includes:**
-- Enhanced UI for Videos component
-- YouTube/Vimeo embed support
-- CSS modules for styling
-- Supabase settings UI
-
-**To review and make ready:**
-1. Go to https://github.com/joegibsonoil12-source/KPI-Dashboard/pull/2
-2. Review the file changes and test the UI enhancements
-3. Verify YouTube/Vimeo embeds work correctly
-4. Click "Ready for review" when satisfied
-
-### 4. PR #1: "Add Videos page/component and sidebar link"
-**Status**: ✅ Already ready for review (not in draft status)
-
-**What it includes:**
-- Basic Videos component
-- Sidebar integration
-- Foundation for video management
-
-**Action needed:**
-- This PR is already marked as ready for review
-- Consider merging this first as it provides the foundation for the other video-related PRs
-
-## Recommended Merge Order
-
-To avoid conflicts, consider merging in this order:
-
-1. **PR #1** (Videos foundation) - Already ready ✅
-2. **PR #4** (KPI Dashboard) - Independent feature ✅  
-3. **PR #2** (Enhanced Videos UI) - Builds on PR #1
-4. **PR #3** (Supabase integration) - Final integration layer
+1. **PR #4** (KPI Dashboard) - Ready to review and merge ✅  
+2. **Close Videos PRs** - PRs #1, #2, #3 can be closed as functionality is now in Procedures tab
 
 ## Testing Instructions
 
@@ -100,11 +61,11 @@ npm run dev
 2. Verify demo data displays correctly when Supabase is not configured
 3. Verify the SQL files contain valid schema (no syntax errors)
 
-### For Video PRs (#1, #2, #3):
-1. Navigate to the Videos tab in the app  
-2. Test video URL input and display
-3. Verify Supabase settings interface (if included)
-4. Test YouTube/Vimeo embed functionality (if included)
+### For Procedures Tab (Video Functionality):
+1. Navigate to the Procedures tab in the app  
+2. Test video URL input and attachment to procedures
+3. Verify YouTube/Vimeo/Loom embed functionality
+4. Test video file upload (if Supabase is configured)
 
 ## CI/CD Workflow
 
@@ -138,9 +99,9 @@ Once PRs are merged to `main`, GitHub Actions will automatically deploy to GitHu
 ## Next Steps
 
 1. **Immediate**: Mark PR #4 as ready for review (it's the most complete and independent)
-2. **Review**: Examine PRs #2 and #3 for any conflicts or issues
-3. **Test**: Verify each PR works correctly in isolation  
-4. **Merge**: Follow the recommended order to avoid conflicts
+2. **Close**: Close video-related PRs #1, #2, #3 as functionality is now in Procedures tab
+3. **Test**: Verify PR #4 works correctly in isolation  
+4. **Merge**: Merge PR #4 to main
 5. **Deploy**: Changes will auto-deploy to GitHub Pages once merged
 
 ## Support
