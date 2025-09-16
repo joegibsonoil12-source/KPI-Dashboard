@@ -1,0 +1,97 @@
+{
+  "kpi": {
+    "revenue": 4403867.97,
+    "headcount": 10,
+    "revenuePerEmployee": 440386.797,
+    "newCustomers": null,
+    "salesMktgSpend": null,
+    "cac": null,
+    "currentAssets": 689226.11,
+    "currentLiabilities": 256516.57,
+    "workingCapital": 432709.54,
+    "grossMargin": 0.1300,
+    "sgaPct": 0.2569,
+    "ebitdaPct": 0.1300,
+    "trainingPct": null,
+    "poorQualityPct": null
+  },
+  "kpiTargets": {
+    "grossMargin": 0.5,
+    "ebitdaPct": 0.18,
+    "sgaPct": 0.2,
+    "revenuePerEmployee": 120000,
+    "cac": 2500,
+    "workingCapital": 200000,
+    "trainingPct": 0.02,
+    "poorQualityPct": 0.015
+  },
+  "history": [
+    {
+      "month": "Jan",
+      "grossMargin": 0.3629,
+      "ebitdaPct": 0.2574,
+      "sgaPct": 0.1055,
+      "workingCapital": 1400513.26
+    },
+    {
+      "month": "Feb",
+      "grossMargin": 0.3832,
+      "ebitdaPct": 0.1707,
+      "sgaPct": 0.2124,
+      "workingCapital": 1474776.60
+    },
+    {
+      "month": "Mar",
+      "grossMargin": 0.4456,
+      "ebitdaPct": 0.2363,
+      "sgaPct": 0.2091,
+      "workingCapital": 1610659.06
+    },
+    {
+      "month": "Apr",
+      "grossMargin": -0.1736,
+      "ebitdaPct": -0.4180,
+      "sgaPct": 0.2446,
+      "workingCapital": 1379574.76
+    },
+    {
+      "month": "May",
+      "grossMargin": 0.0368,
+      "ebitdaPct": -0.2447,
+      "sgaPct": 0.2814,
+      "workingCapital": 1257300.00
+    },
+    {
+      "month": "Jun",
+      "grossMargin": 0.2498,
+      "ebitdaPct": -0.0084,
+      "sgaPct": 0.2582,
+      "workingCapital": 1228448.42
+    },
+    {
+      "month": "Jul",
+      "grossMargin": 0.2147,
+      "ebitdaPct": -0.0686,
+      "sgaPct": 0.2833,
+      "workingCapital": 1181681.98
+    },
+    {
+      "month": "Aug",
+      "grossMargin": 2.6355,
+      "ebitdaPct": 3.2002,
+      "sgaPct": -0.5665,
+      "workingCapital": 511454.71
+    },
+    {
+      "month": "Sep",
+      "grossMargin": 1.5590,
+      "ebitdaPct": 2.2875,
+      "sgaPct": -0.7293,
+      "workingCapital": 432709.54
+    }
+  ],
+  "meta": {
+    "source": "QuickBooks P&L and Balance Sheet",
+    "generated": "2025-09-06"
+  }
+}
