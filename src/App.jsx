@@ -7,7 +7,7 @@
 
 import React, { useEffect, useMemo, useState, useContext, useCallback } from "react";
 import { supabase } from "./lib/supabaseClient";
-import Videos from "./components/Videos";
+import Procedures from "./tabs/Procedures_v3";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -519,95 +519,6 @@ function StoreInvoicing() {
           { key: "status", label: "Status" },
           { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
         ]} rows={invoices} />
-      </Section>
-    </div>
-  );
-}
-
-/* ========================================================================== */
-/* Procedures (How-tos & Videos) — URL embeds for now                         */
-/* ========================================================================== */
-function Procedures() {
-  const [items, setItems] = useState([
-    { id: 1, type: "doc", title: "Office: End-of-day Closeout", body: "Checklist for closing cash drawer, meter logs, and daily report." },
-    { id: 2, type: "doc", title: "Drivers: Pre-Trip Inspection", body: "Walk-around, fluids, tires, lights, ELD status." },
-    { id: 3, type: "video", title: "Service Tech: Pump Priming", url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ" },
-  ]);
-  const [title, setTitle] = useState(""); const [kind, setKind] = useState("doc");
-  const [body, setBody] = useState(""); const [url, setUrl] = useState("");
-
-  function addItem() {
-    if (kind === "doc" && !title.trim()) return;
-    if (kind === "video" && (!title.trim() || !url.trim())) return;
-    setItems(prev => [...prev, {
-      id: prev.length ? prev[prev.length - 1].id + 1 : 1,
-      type: kind, title: title.trim(),
-      body: kind === "doc" ? body.trim() : undefined,
-      url: kind === "video" ? url.trim() : undefined,
-    }]);
-    setTitle(""); setBody(""); setUrl("");
-  }
-  function removeItem(id) { setItems(prev => prev.filter(i => i.id !== id)); }
-
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <Section title="Add Procedure / Video">
-        <div style={{ display: "grid", gridTemplateColumns: "160px 1fr 1fr auto", gap: 8 }}>
-          <select value={kind} onChange={(e) => setKind(e.target.value)} style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }}>
-            <option value="doc">Procedure (Text)</option>
-            <option value="video">Video (Embed)</option>
-          </select>
-          <input placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)}
-                 style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
-          {kind === "doc" ? (
-            <input placeholder="Short description / steps" value={body} onChange={(e) => setBody(e.target.value)}
-                   style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
-          ) : (
-            <input placeholder="Video URL (YouTube, Loom, etc.)" value={url} onChange={(e) => setUrl(e.target.value)}
-                   style={{ padding: "10px 12px", border: "1px solid #E5E7EB", borderRadius: 8 }} />
-          )}
-          <button onClick={addItem} style={{
-            padding: "10px 12px", borderRadius: 8, border: "1px solid #E5E7EB",
-            background: "#111827", color: "white", cursor: "pointer"
-          }}>Add</button>
-        </div>
-      </Section>
-
-      <Section title="Procedures & Training">
-        <div style={{ display: "grid", gap: 12 }}>
-          {items.map(i => (
-            <div key={i.id} style={{ background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <strong>{i.title}</strong>
-                <span style={{
-                  marginLeft: 8, fontSize: 12, padding: "2px 8px", borderRadius: 999,
-                  background: i.type === "video" ? "#E0E7FF" : "#DCFCE7",
-                  color: i.type === "video" ? "#3730A3" : "#166534", border: "1px solid #E5E7EB"
-                }}>{i.type === "video" ? "Video" : "Procedure"}</span>
-                <button onClick={() => removeItem(i.id)} style={{
-                  marginLeft: "auto", padding: "6px 8px", borderRadius: 8,
-                  border: "1px solid #E5E7EB", background: "white", cursor: "pointer", fontSize: 12
-                }}>Remove</button>
-              </div>
-              {i.type === "doc" ? (
-                <p style={{ marginTop: 8 }}>{i.body}</p>
-              ) : (
-                <div style={{ marginTop: 10 }}>
-                  <iframe
-                    title={i.title}
-                    src={i.url.replace("watch?v=", "embed/")}
-                    style={{ width: "100%", height: 360, border: "1px solid #E5E7EB", borderRadius: 12 }}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    allowFullScreen
-                  />
-                  <div style={{ fontSize: 12, color: "#6B7280", marginTop: 6 }}>
-                    Source: <a href={i.url} target="_blank" rel="noreferrer">{i.url}</a>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
       </Section>
     </div>
   );
