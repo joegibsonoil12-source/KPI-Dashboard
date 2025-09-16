@@ -1,20 +1,58 @@
+# Build artifacts
+dist/
+build/
+
+# Coverage
+coverage/
+*.lcov
+.nyc_output
+
 # Dependencies
 node_modules/
+*.tgz
 .pnp
 .pnp.js
+
+# Package manager files
+.yarn-integrity
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Production builds
 dist/
 build/
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# IDE/Editor files
+# Temporary files and caches
+.cache
+.parcel-cache
+.tmp/
+tmp/
+temp/
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+.vscode-test
+
+# Vite
+.vite/
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Parcel / Snowpack / microbundle
+web_modules/
+
+# Editor / IDE files
 .vscode/
 .idea/
 *.swp
@@ -30,32 +68,29 @@ build/
 ehthumbs.db
 Thumbs.db
 
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-
-# nyc test coverage
+# Coverage tools
 .nyc_output
 
 # ESLint cache
 .eslintcache
 
-# Vite
-.vite/
+# Optional npm cache directory
+.npm
 
-# Temporary files
-.tmp/
-tmp/
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# dotenv environment variables files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.test
+
+# Misc
+*.tmp
+*.temp
