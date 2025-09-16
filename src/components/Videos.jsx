@@ -37,9 +37,10 @@ export default function Videos({ supabase = null, bucket = 'videos', embedded = 
   }, []);
 
   async function load() {
-    if (supabaseClient) {
+    const client = supabaseClient || supabase;
+    if (client) {
       try {
-        const { data, error } = await supabaseClient.from('videos').select('*').order('created_at', { ascending: false });
+        const { data, error } = await client.from('videos').select('*').order('created_at', { ascending: false });
         if (!error && Array.isArray(data)) { setList(data); return; }
       } catch (err) { console.warn('Supabase load failed, falling back to localStorage', err); }
     }
@@ -48,7 +49,11 @@ export default function Videos({ supabase = null, bucket = 'videos', embedded = 
   }
 
   function resetForm() {
-    setTitle(''); setDescription(''); setSourceType('url'); setVideoUrl(''); setFile(null);
+    setTitle('');
+    setDescription('');
+    setSourceType('url');
+    setVideoUrl('');
+    setFile(null);
   }
 
   function isVideoFileUrl(url) {
@@ -74,7 +79,9 @@ export default function Videos({ supabase = null, bucket = 'videos', embedded = 
         const id = u.pathname.split('/').filter(Boolean).pop();
         if (id && /^\d+$/.test(id)) return { type: 'vimeo', id };
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      // ignore error
+    }
     return null;
   }
 
@@ -115,17 +122,22 @@ export default function Videos({ supabase = null, bucket = 'videos', embedded = 
   }
 
   async function uploadFileToSupabase(fileToUpload) {
+    const client = supabaseClient || supabase;
+    if (!client) {
+      throw new Error('Supabase client not provided');
+    }
     const filename = `${Date.now()}_${fileToUpload.name.replace(/\s+/g, '_')}`;
-    const { data, error } = await supabaseClient.storage.from(bucket).upload(filename, fileToUpload, { cacheControl: '3600', upsert: false });
+    const { data, error } = await client.storage.from(bucket).upload(filename, fileToUpload, { cacheControl: '3600', upsert: false });
     if (error) throw error;
-    const { data: publicData } = supabaseClient.storage.from(bucket).getPublicUrl(filename);
+    const { data: publicData } = client.storage.from(bucket).getPublicUrl(filename);
     return publicData.publicUrl;
   }
 
   async function saveMetadata(item) {
-    if (supabaseClient) {
+    const client = supabaseClient || supabase;
+    if (client) {
       try {
-        const { error } = await supabaseClient.from('videos').insert([item]);
+        const { error } = await client.from('videos').insert([item]);
         if (!error) { await load(); return; }
       } catch (err) { console.warn('Supabase insert failed, falling back to localStorage', err); }
     }
@@ -146,7 +158,12 @@ export default function Videos({ supabase = null, bucket = 'videos', embedded = 
         url = videoUrl.trim();
       } else {
         if (!file) { alert('Select a file to upload.'); setLoading(false); return; }
-        if (!supabaseClient) { alert('File upload requires a Supabase client. Configure the Supabase settings.'); setLoading(false); return; }
+        const client = supabaseClient || supabase;
+        if (!client) {
+          alert('File upload requires a Supabase client. Please configure Supabase settings or provide the `supabase` prop.');
+          setLoading(false);
+          return;
+        }
         url = await uploadFileToSupabase(file);
       }
       const item = { id: `vid_${Date.now()}`, title: title.trim(), description: description.trim(), url, created_at: new Date().toISOString() };
@@ -157,11 +174,14 @@ export default function Videos({ supabase = null, bucket = 'videos', embedded = 
 
   async function handleDelete(id) {
     if (!window.confirm('Delete this video?')) return;
-    if (supabaseClient) {
+    const client = supabaseClient || supabase;
+    if (client) {
       try {
-        const { error } = await supabaseClient.from('videos').delete().eq('id', id);
+        const { error } = await client.from('videos').delete().eq('id', id);
         if (!error) { await load(); return; }
-      } catch (err) { console.warn('Supabase deletion failed, falling back to localStorage', err); }
+      } catch (err) { 
+        console.warn('Supabase deletion failed, falling back to localStorage', err); 
+      }
     }
     const arr = JSON.parse(localStorage.getItem('site_videos') || '[]').filter(v => v.id !== id);
     localStorage.setItem('site_videos', JSON.stringify(arr));

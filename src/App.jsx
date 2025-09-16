@@ -947,7 +947,7 @@ const TABS = [
   { key: "budget",       label: "Budget",           adminOnly: false, Component: Budget },
   { key: "export",       label: "Export",           adminOnly: false, Component: ExportCenter },
   { key: "procedures",   label: "Procedures",       adminOnly: false, Component: Procedures },
-  { key: "videos",       label: "Videos",           adminOnly: false, Component: Videos },
+{ key: "videos", label: "Videos", adminOnly: false, Component: () => <Videos supabase={supabase} /> },
   // Admin-only group:
   { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,  Component: StoreInvoicing },
   { key: "tickets",      label: "Delivery Tickets", adminOnly: true,  Component: DeliveryTickets },
