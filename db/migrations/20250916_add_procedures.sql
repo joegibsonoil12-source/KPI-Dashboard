@@ -1,0 +1,1 @@
+DO $$\nBEGIN\n    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'your_constraint_name') THEN\n        ALTER TABLE your_table_name ADD CONSTRAINT your_constraint_name your_constraint_definition;\n    END IF;\nEND $$;
