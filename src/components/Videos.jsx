@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import SupabaseSettings from './SupabaseSettings';
 
 /*
-  Videos.jsx (minimal version)
+  Videos.jsx (modern + minimal version)
   - Improved UI and accessibility
   - Embeds YouTube/Vimeo when possible
   - Reads optional Supabase config from localStorage keys SUPABASE_URL and SUPABASE_ANON_KEY
@@ -26,7 +26,6 @@ export default function Videos({ supabase = null, bucket = 'videos', embedded = 
       const url = localStorage.getItem('SUPABASE_URL') || '';
       const key = localStorage.getItem('SUPABASE_ANON_KEY') || '';
       if (url && key) {
-        // lazy import to avoid bundling requirement for servers without supabase
         import('@supabase/supabase-js').then(({ createClient }) => {
           try { setSupabaseClient(createClient(url, key)); } catch (e) { console.warn('Failed to create supabase client', e); }
         }).catch(() => console.warn('supabase-js not available'));
@@ -157,7 +156,6 @@ export default function Videos({ supabase = null, bucket = 'videos', embedded = 
         if (!videoUrl.trim()) { alert('Please add a video URL.'); setLoading(false); return; }
         url = videoUrl.trim();
       } else {
-        if (!file) { alert('Select a file to upload.'); setLoading(false); return; }
         const client = supabaseClient || supabase;
         if (!client) {
           alert('File upload requires a Supabase client. Please configure Supabase settings or provide the `supabase` prop.');

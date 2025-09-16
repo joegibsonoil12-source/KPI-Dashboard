@@ -1,8 +1,15 @@
 # Dependencies
 node_modules/
+*.tgz
+.pnp
+.pnp.js
+
+# Logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Build artifacts
 dist/
@@ -13,60 +20,27 @@ coverage/
 *.lcov
 .nyc_output
 
-# Dependencies
-node_modules/
-*.tgz
-.pnp
-.pnp.js
-
 # Package manager files
 .yarn-integrity
 .pnpm-debug.log*
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
 
 # Production builds
 dist/
 build/
 
-# Runtime data
-# Temporary files and caches
-.cache
-.parcel-cache
-.tmp/
-tmp/
-temp/
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
-.vscode-test
-
-# Vite
-.vite/
-vite.config.js.timestamp-*
-vite.config.ts.timestamp-*
-
-# Parcel / Snowpack / microbundle
-web_modules/
-
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Optional npm cache directory
-.npm
-
-# Environment files
+# Environment variables
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.test
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
 # Temporary files and caches
 .cache
@@ -104,12 +78,6 @@ web_modules/
 ehthumbs.db
 Thumbs.db
 
-# Package-lock files (if not needed)
-package-lock.json
-
-# Coverage tools
-.nyc_output
-
 # ESLint cache
 .eslintcache
 
@@ -119,17 +87,9 @@ package-lock.json
 # Optional REPL history
 .node_repl_history
 
-# Output of 'npm pack'
-*.tgz
-
-# dotenv environment variables files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.test
-
 # Misc
 *.tmp
 *.temp
+
+# Package-lock files (if not needed)
+package-lock.json

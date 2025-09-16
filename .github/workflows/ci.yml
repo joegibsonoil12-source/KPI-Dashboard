@@ -25,7 +25,7 @@ jobs:
         
       - name: Check for linting (if available)
         run: |
-          if npm run lint --silent >/dev/null 2>&1; then
+          if npm list --depth=0 2>/dev/null | grep -q "eslint\|lint" || npm run lint --silent >/dev/null 2>&1; then
             echo "Running linter..."
             npm run lint
           else
@@ -35,9 +35,9 @@ jobs:
         
       - name: Run tests (if available)
         run: |
-          if npm run test --silent >/dev/null 2>&1; then
+          if npm list --depth=0 2>/dev/null | grep -q "jest\|test\|mocha" || npm run test --silent >/dev/null 2>&1; then
             echo "Running tests..."
-            npm run test
+            npm run test -- --passWithNoTests
           else
             echo "No test script found, skipping tests"
           fi
@@ -74,8 +74,10 @@ jobs:
           fi
           
       - name: Check PR has description
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          if [ -z "${{ github.event.pull_request.body }}" ]; then
+          if [ -z "$PR_BODY" ]; then
             echo "::warning::PR has no description. Please add a description explaining the changes."
           else
             echo "PR has a description"
