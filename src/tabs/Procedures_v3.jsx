@@ -236,26 +236,26 @@ export default function Procedures() {
       </div>
 
       {/* TOP COMPOSER */}
-      <AdminOnly>
-        <div style={{ marginTop: 12, marginBottom: 16, border: '1px solid #eee', borderRadius: 10, padding: 12, background: '#fafbfd' }}>
-          <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:10 }}>
-            <select value={mode} onChange={e=>setMode(e.target.value)} style={{ minWidth: 220 }}>
-              <option value="procedure">Procedure (Text)</option>
-              <option value="video">Video for… (attach to procedure)</option>
-            </select>
-            <div style={{ opacity:0.7, fontSize:12 }}>
-              Tip: You can also add videos inline on each procedure card below. Supports YouTube, Vimeo, Loom, and file uploads.
-            </div>
+      <div style={{ marginTop: 12, marginBottom: 16, border: '1px solid #eee', borderRadius: 10, padding: 12, background: '#fafbfd' }}>
+        <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:10 }}>
+          <select value={mode} onChange={e=>setMode(e.target.value)} style={{ minWidth: 220 }}>
+            <option value="procedure">Procedure (Text)</option>
+            <option value="video">Video for… (attach to procedure)</option>
+          </select>
+          <div style={{ opacity:0.7, fontSize:12 }}>
+            Tip: You can also add videos inline on each procedure card below. Supports YouTube, Vimeo, Loom, and file uploads.
           </div>
+        </div>
 
-          {mode === 'procedure' ? (
-            <form onSubmit={addProcedure}
-              style={{ display:'grid', gridTemplateColumns:'1fr 1fr 96px', gap:10 }}>
-              <input placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} required />
-              <input placeholder="Short description / steps" value={body} onChange={e=>setBody(e.target.value)} />
-              <button type="submit">Add</button>
-            </form>
-          ) : (
+        {mode === 'procedure' ? (
+          <form onSubmit={addProcedure}
+            style={{ display:'grid', gridTemplateColumns:'1fr 1fr 96px', gap:10 }}>
+            <input placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+            <input placeholder="Short description / steps" value={body} onChange={e=>setBody(e.target.value)} />
+            <button type="submit">Add</button>
+          </form>
+        ) : (
+          <AdminOnly>
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                 <select value={attachToId} onChange={e=>setAttachToId(e.target.value)} required>
@@ -290,9 +290,9 @@ export default function Procedures() {
                 </button>
               </form>
             </div>
-          )}
-        </div>
-      </AdminOnly>
+          </AdminOnly>
+        )}
+      </div>
 
       <h2 style={{ fontSize: 16, margin: '12px 0' }}>Procedures & Training</h2>
 
