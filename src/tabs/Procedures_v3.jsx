@@ -95,6 +95,7 @@ function VideoEmbed({ url }) {
 export default function Procedures() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
   // Composer state
   const [mode, setMode] = useState('procedure') // 'procedure' | 'video'
@@ -113,11 +114,22 @@ export default function Procedures() {
 
   async function load() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('procedures')
-      .select('id,title,body,created_at,procedure_videos(id,url,created_at)')
-      .order('created_at', { ascending: false })
-    if (!error) setItems(data || [])
+    setError(null)
+    try {
+      const { data, error } = await supabase
+        .from('procedures')
+        .select('id,title,body,created_at,procedure_videos(id,url,created_at)')
+        .order('created_at', { ascending: false })
+      if (error) {
+        setError('Failed to load procedures: ' + error.message)
+        setItems([])
+      } else {
+        setItems(data || [])
+      }
+    } catch (err) {
+      setError('Failed to load procedures: ' + err.message)
+      setItems([])
+    }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -296,7 +308,32 @@ export default function Procedures() {
 
       <h2 style={{ fontSize: 16, margin: '12px 0' }}>Procedures & Training</h2>
 
-      {loading ? <div>Loading…</div> : (
+      {loading ? (
+        <div>Loading…</div>
+      ) : error ? (
+        <div style={{ 
+          padding: 16, 
+          background: '#fee2e2', 
+          border: '1px solid #fca5a5', 
+          borderRadius: 8, 
+          color: '#991b1b',
+          marginBottom: 16
+        }}>
+          <strong>Error:</strong> {error}
+        </div>
+      ) : items.length === 0 ? (
+        <div style={{ 
+          padding: 16, 
+          background: '#f3f4f6', 
+          border: '1px solid #d1d5db', 
+          borderRadius: 8, 
+          color: '#6b7280',
+          textAlign: 'center',
+          marginBottom: 16
+        }}>
+          No procedures found. Admins can add procedures using the form above.
+        </div>
+      ) : (
         <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 14 }}>
           {items.map(p => (
             <li key={p.id} style={{ border: '1px solid #e6e6e6', borderRadius: 12, padding: 16, background: '#fff' }}>
