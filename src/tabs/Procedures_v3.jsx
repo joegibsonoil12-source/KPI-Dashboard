@@ -106,6 +106,7 @@ export default function Procedures() {
   const [videoFile, setVideoFile] = useState(null)
   const [videoSourceType, setVideoSourceType] = useState('url') // 'url' | 'file'
   const [uploadingVideo, setUploadingVideo] = useState(false)
+  const [addError, setAddError] = useState(null)
 
   // Inline per-procedure add state
   const [inlineVideo, setInlineVideo] = useState({})
@@ -152,14 +153,34 @@ export default function Procedures() {
 
   async function addProcedure(e) {
     e.preventDefault()
-    if (!title.trim()) return alert('Title is required.')
-    const { error } = await supabase.from('procedures').insert({
-      title: title.trim(),
-      body: body.trim() || null,
-    })
-    if (error) return alert(error.message)
-    setTitle(''); setBody('')
-    load()
+    setAddError(null) // Clear any previous errors
+    
+    if (!title.trim()) {
+      setAddError('Title is required.')
+      return
+    }
+    
+    try {
+      const { error } = await supabase.from('procedures').insert({
+        title: title.trim(),
+        body: body.trim() || null,
+      })
+      
+      if (error) {
+        console.error('Supabase error adding procedure:', error)
+        setAddError(`Failed to add procedure: ${error.message}`)
+        return // Don't clear form on error
+      }
+      
+      // Success - clear form and reload
+      setTitle('')
+      setBody('')
+      setAddError(null)
+      load()
+    } catch (err) {
+      console.error('Unexpected error adding procedure:', err)
+      setAddError(`Unexpected error: ${err.message}`)
+    }
   }
 
   async function addVideoTop(e) {
@@ -261,12 +282,27 @@ export default function Procedures() {
           </div>
 
           {mode === 'procedure' ? (
-            <form onSubmit={addProcedure}
-              style={{ display:'grid', gridTemplateColumns:'1fr 1fr 96px', gap:10 }}>
-              <input placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} required />
-              <input placeholder="Short description / steps" value={body} onChange={e=>setBody(e.target.value)} />
-              <button type="submit">Add</button>
-            </form>
+            <div>
+              <form onSubmit={addProcedure}
+                style={{ display:'grid', gridTemplateColumns:'1fr 1fr 96px', gap:10 }}>
+                <input placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} required />
+                <input placeholder="Short description / steps" value={body} onChange={e=>setBody(e.target.value)} />
+                <button type="submit">Add</button>
+              </form>
+              {addError && (
+                <div style={{ 
+                  background: '#fee', 
+                  border: '1px solid #fcc', 
+                  color: '#c33', 
+                  padding: '8px 12px', 
+                  borderRadius: 6, 
+                  marginTop: 10,
+                  fontSize: 14
+                }}>
+                  {addError}
+                </div>
+              )}
+            </div>
           ) : (
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
