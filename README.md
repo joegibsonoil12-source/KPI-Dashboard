@@ -4,15 +4,17 @@ Upload these files to your repo root. The GitHub Actions workflow will build and
 
 ## Features
 
-### Videos
-The dashboard includes a Videos feature that allows users to add and manage training videos and documentation. The Videos page supports:
+### Video Management
+Video management is integrated into the **Procedures tab** for training and documentation purposes. The Procedures page supports:
 
-- **URL-based videos**: Add external video links (YouTube, Vimeo, etc.)
-- **File uploads**: Upload video files directly (requires Supabase configuration)
-- **Local storage fallback**: Videos are stored in browser localStorage when Supabase is not configured
+- **URL-based videos**: Add external video links (YouTube, Vimeo, Loom) directly to procedures
+- **File uploads**: Upload video files directly (requires Supabase configuration)  
+- **Procedure-based organization**: Videos are attached to specific procedures for better organization
 - **Supabase integration**: Optional integration with Supabase for persistent storage and file uploads
 
-To configure Supabase uploads, ensure your Supabase client is properly configured and you have a public storage bucket named 'videos' (or pass a custom bucket name to the component).
+To configure Supabase uploads, ensure your Supabase client is properly configured and you have a public storage bucket named 'videos'.
+
+**Note**: The standalone Videos tab has been removed. All video management is now done through the Procedures tab for better organization and workflow.
 
 ## Local dev
 ```bash

@@ -95,6 +95,7 @@ function VideoEmbed({ url }) {
 export default function Procedures() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   // Composer state
   const [mode, setMode] = useState('procedure') // 'procedure' | 'video'
@@ -113,11 +114,22 @@ export default function Procedures() {
 
   async function load() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('procedures')
-      .select('id,title,body,created_at,procedure_videos(id,url,created_at)')
-      .order('created_at', { ascending: false })
-    if (!error) setItems(data || [])
+    setError('')
+    try {
+      const { data, error } = await supabase
+        .from('procedures')
+        .select('id,title,body,created_at,procedure_videos(id,url,created_at)')
+        .order('created_at', { ascending: false })
+      if (error) {
+        setError(`Failed to load procedures: ${error.message}`)
+        setItems([])
+      } else {
+        setItems(data || [])
+      }
+    } catch (err) {
+      setError(`Connection error: Unable to connect to database. ${err.message}`)
+      setItems([])
+    }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -296,7 +308,36 @@ export default function Procedures() {
 
       <h2 style={{ fontSize: 16, margin: '12px 0' }}>Procedures & Training</h2>
 
-      {loading ? <div>Loading…</div> : (
+      {error && (
+        <div style={{ 
+          padding: 12, 
+          marginBottom: 16, 
+          border: '1px solid #f5c6cb', 
+          borderRadius: 8, 
+          background: '#f8d7da', 
+          color: '#721c24' 
+        }}>
+          <strong>Error:</strong> {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div>Loading…</div>
+      ) : items.length === 0 ? (
+        <div style={{ 
+          padding: 24, 
+          textAlign: 'center', 
+          border: '1px solid #e6e6e6', 
+          borderRadius: 12, 
+          background: '#f8f9fa',
+          color: '#6c757d' 
+        }}>
+          <p style={{ margin: '0 0 8px 0', fontSize: 16 }}>No procedures found.</p>
+          <p style={{ margin: 0, fontSize: 14 }}>
+            {error ? 'Please check your connection and try again.' : 'Use the form above to add your first procedure.'}
+          </p>
+        </div>
+      ) : (
         <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 14 }}>
           {items.map(p => (
             <li key={p.id} style={{ border: '1px solid #e6e6e6', borderRadius: 12, padding: 16, background: '#fff' }}>
