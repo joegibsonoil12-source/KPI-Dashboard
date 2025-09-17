@@ -19,65 +19,176 @@ To configure Supabase uploads, ensure your Supabase client is properly configure
 
 ## Supabase Configuration
 
-### Row-Level Security (RLS) for Procedures Table
+### Complete Database Setup
 
-The application requires proper Supabase Row-Level Security (RLS) configuration for the procedures table to function correctly. Without proper RLS policies, users may encounter permission errors when trying to add procedures.
+This application requires a comprehensive Supabase database setup including tables for KPIs, procedures, and video management. Follow these steps to configure your Supabase project:
 
-#### Required Database Setup
+#### 1. Quick Setup with Demo Schema (Recommended for Development)
 
-1. **Enable RLS on the procedures table:**
+For development and testing, you can use the provided complete schema file that includes all tables, demo data, and RLS policies:
+
+1. **Download and run the schema file:**
+   - Copy the SQL from `sql/kpi_dashboard_schema_demo.sql`
+   - Open your Supabase Dashboard → SQL Editor
+   - Paste and execute the SQL
+
+⚠️ **Warning:** This schema file will drop and recreate tables. Only use in development environments.
+
+#### 2. Manual Database Setup (Production)
+
+For production environments, set up tables individually:
+
+##### Core Tables Setup
 ```sql
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Create core business tables
+CREATE TABLE customers (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  email text,
+  phone text,
+  created_at timestamptz DEFAULT now(),
+  metadata jsonb DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE addresses (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id uuid REFERENCES customers(id) ON DELETE CASCADE,
+  address_line text,
+  city text,
+  state text,
+  postal_code text,
+  latitude double precision,
+  longitude double precision,
+  created_at timestamptz DEFAULT now(),
+  is_primary boolean DEFAULT true
+);
+
+-- Additional tables: tanks, products, jobs, deliveries, invoices, payments, employees, expenses
+-- See sql/kpi_dashboard_schema_demo.sql for complete schema
+```
+
+##### Procedures and Video Tables
+```sql
+-- Procedures table
+CREATE TABLE procedures (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  body text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Procedure videos table
+CREATE TABLE procedure_videos (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  procedure_id uuid REFERENCES procedures(id) ON DELETE CASCADE,
+  url text NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+```
+
+#### 3. Row-Level Security (RLS) Setup
+
+Enable RLS and create policies for proper access control:
+
+```sql
+-- Enable RLS on procedures table
 ALTER TABLE procedures ENABLE ROW LEVEL SECURITY;
-```
 
-2. **Create a policy to allow authenticated users to insert procedures:**
-```sql
 CREATE POLICY "Allow authenticated users to insert procedures" 
-ON procedures 
-FOR INSERT 
-TO authenticated 
-WITH CHECK (true);
-```
+ON procedures FOR INSERT TO authenticated WITH CHECK (true);
 
-3. **Create a policy to allow authenticated users to read procedures:**
-```sql
 CREATE POLICY "Allow authenticated users to read procedures" 
-ON procedures 
-FOR SELECT 
-TO authenticated 
-USING (true);
-```
+ON procedures FOR SELECT TO authenticated USING (true);
 
-4. **Create a policy to allow authenticated users to update their procedures:**
-```sql
 CREATE POLICY "Allow authenticated users to update procedures" 
-ON procedures 
-FOR UPDATE 
-TO authenticated 
-USING (true) 
-WITH CHECK (true);
-```
+ON procedures FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
 
-5. **Create a policy to allow authenticated users to delete procedures:**
-```sql
 CREATE POLICY "Allow authenticated users to delete procedures" 
-ON procedures 
-FOR DELETE 
-TO authenticated 
-USING (true);
-```
+ON procedures FOR DELETE TO authenticated USING (true);
 
-#### Similar setup for procedure_videos table:
-```sql
+-- Enable RLS on procedure_videos table
 ALTER TABLE procedure_videos ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow authenticated users to manage procedure videos" 
-ON procedure_videos 
-FOR ALL 
-TO authenticated 
-USING (true) 
-WITH CHECK (true);
+ON procedure_videos FOR ALL TO authenticated USING (true) WITH CHECK (true);
 ```
+
+#### 4. Storage Configuration
+
+Set up file storage for video uploads:
+
+1. **Create storage bucket:**
+   - Go to Supabase Dashboard → Storage
+   - Create a new bucket named `videos`
+   - Set it as public for easier access
+
+2. **Configure storage policies (if needed):**
+```sql
+-- Allow authenticated users to upload videos
+CREATE POLICY "Allow authenticated users to upload videos"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'videos');
+
+-- Allow public access to videos
+CREATE POLICY "Allow public access to videos"
+ON storage.objects FOR SELECT TO public
+USING (bucket_id = 'videos');
+```
+
+#### 5. Environment Variables
+
+Create a `.env.local` file in your project root:
+
+```env
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+#### 6. Authentication Setup
+
+1. **Enable authentication providers** in Supabase Dashboard → Authentication → Providers
+2. **Configure email templates** if using email auth
+3. **Set up redirect URLs** for your domain
+
+### Video Upload Features
+
+The application supports comprehensive video management:
+
+- **MKV Support**: Upload .mkv files using the VideoUploader component
+- **Format Conversion**: Use the provided `scripts/convert_mkv_to_mp4.sh` script to convert MKV files to MP4 for better browser compatibility
+- **Multiple Sources**: Support for file uploads and external URLs (YouTube, Vimeo, Loom)
+- **Storage Integration**: Automatic upload to Supabase Storage with public URLs
+
+#### Converting MKV to MP4
+
+For better browser compatibility, convert MKV files to MP4 using the included script:
+
+```bash
+# Make script executable (first time only)
+chmod +x scripts/convert_mkv_to_mp4.sh
+
+# Convert single file
+./scripts/convert_mkv_to_mp4.sh input.mkv output.mp4
+
+# Convert with auto-generated name
+./scripts/convert_mkv_to_mp4.sh input.mkv
+
+# Convert multiple files
+./scripts/convert_mkv_to_mp4.sh *.mkv
+```
+
+**Requirements:**
+- FFmpeg must be installed on your system
+- Script optimizes videos for web playback with H.264/AAC encoding
+
+**Installation:**
+- macOS: `brew install ffmpeg`
+- Ubuntu/Debian: `sudo apt install ffmpeg`
+- Windows: Download from https://ffmpeg.org/download.html
 
 ### Troubleshooting Common Supabase Permission Errors
 
