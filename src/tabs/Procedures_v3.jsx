@@ -95,6 +95,7 @@ function VideoEmbed({ url }) {
 export default function Procedures() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(null)
 
   // Composer state
   const [mode, setMode] = useState('procedure') // 'procedure' | 'video'
@@ -113,11 +114,22 @@ export default function Procedures() {
 
   async function load() {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('procedures')
-      .select('id,title,body,created_at,procedure_videos(id,url,created_at)')
-      .order('created_at', { ascending: false })
-    if (!error) setItems(data || [])
+    setLoadError(null)
+    try {
+      const { data, error } = await supabase
+        .from('procedures')
+        .select('id,title,body,created_at,procedure_videos(id,url,created_at)')
+        .order('created_at', { ascending: false })
+      if (error) {
+        setLoadError(`Failed to load procedures: ${error.message}`)
+        setItems([])
+      } else {
+        setItems(data || [])
+      }
+    } catch (err) {
+      setLoadError(`Supabase connection error: ${err.message}`)
+      setItems([])
+    }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -296,9 +308,36 @@ export default function Procedures() {
 
       <h2 style={{ fontSize: 16, margin: '12px 0' }}>Procedures & Training</h2>
 
+      {/* Error message */}
+      {loadError && (
+        <div style={{ 
+          background: '#fee', 
+          border: '1px solid #fcc', 
+          color: '#c33', 
+          padding: '12px 16px', 
+          borderRadius: 8, 
+          marginBottom: 16 
+        }}>
+          {loadError}
+        </div>
+      )}
+
       {loading ? <div>Loading…</div> : (
-        <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 14 }}>
-          {items.map(p => (
+        <>
+          {items.length === 0 ? (
+            <div style={{ 
+              padding: '20px', 
+              textAlign: 'center', 
+              color: '#666', 
+              background: '#f8f9fa', 
+              border: '1px solid #e9ecef', 
+              borderRadius: 8 
+            }}>
+              No procedures found.
+            </div>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 14 }}>
+              {items.map(p => (
             <li key={p.id} style={{ border: '1px solid #e6e6e6', borderRadius: 12, padding: 16, background: '#fff' }}>
               {/* header */}
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom: 12 }}>
@@ -417,6 +456,8 @@ export default function Procedures() {
             </li>
           ))}
         </ul>
+          )}
+        </>
       )}
     </div>
   )
