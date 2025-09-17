@@ -1,0 +1,15 @@
+{
+  "name": "kpi-data-parser",
+  "version": "1.0.0",
+  "description": "Backend for parsing uploaded spreadsheets/CSVs and saving KPI data to Supabase (or returning SQL).",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    "node-fetch": "^2.6.7",
+    "cors": "^2.8.5"
+  }
+}
