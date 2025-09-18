@@ -1,0 +1,24 @@
+:root {
+  --gibson-1: #21253F; /* dark */
+  --gibson-2: #B6BE82; /* accent */
+  --gibson-3: #FFFFFF; /* white */
+  --gibson-foreground: #FFFFFF;
+}
+
+.gibson-bg {
+  background: linear-gradient(180deg, rgba(33,37,63,1) 0%, rgba(43,47,80,1) 40%, rgba(182,190,130,0.06) 100%);
+  color: var(--gibson-foreground);
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
+.gibson-bg h2, .gibson-bg h3, .gibson-bg h4 {
+  color: var(--gibson-foreground);
+}
+
+.gibson-card {
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
