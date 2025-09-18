@@ -18,6 +18,9 @@ jobs:
   deploy:
     name: Deploy Supabase
     runs-on: ubuntu-latest
+    concurrency:
+      group: supabase-deploy-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,7 +66,6 @@ jobs:
             sudo apt-get install -y postgresql-client
             for f in migrations/*.sql; do
               echo "Applying $f"
-              # Use PGPASSWORD for psql, but avoid echoing it
               PGPASSWORD="$(echo "$SUPABASE_DB_URL" | sed -n 's#.*://[^:]*:\([^@]*\)@.*#\1#p')" \
                 psql "$SUPABASE_DB_URL" -f "$f"
             done
