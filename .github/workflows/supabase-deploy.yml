@@ -1,4 +1,4 @@
-name: Supabase Deploy (db + functions)
+name: Supabase Deploy
 
 on:
   push:
@@ -7,12 +7,17 @@ on:
     paths:
       - 'migrations/**'
       - 'db/**'
+      - 'sql/**'
       - 'functions/**'
       - '.github/workflows/**'
       - 'package.json'
       - 'yarn.lock'
       - 'pnpm-lock.yaml'
       - 'src/**'
+
+concurrency:
+  group: supabase-deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -27,64 +32,210 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install supabase CLI
+      - name: Install Supabase CLI
         run: npm install -g supabase@latest
 
-      - name: Authenticate supabase CLI
+      - name: Authenticate Supabase CLI
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo "❌ SUPABASE_ACCESS_TOKEN not found in secrets"
+            echo "Please add your Supabase access token to repository secrets"
+            exit 1
+          fi
+          echo "🔑 Authenticating with Supabase CLI..."
           supabase login --token "$SUPABASE_ACCESS_TOKEN"
+          echo "✅ Successfully authenticated with Supabase"
 
-      - name: Link project
+      - name: Link Supabase project
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
-          supabase link --project-ref "$SUPABASE_PROJECT_REF" || true
+          if [ -z "${SUPABASE_PROJECT_REF:-}" ]; then
+            echo "⚠️  SUPABASE_PROJECT_REF not provided - skipping project linking"
+            echo "Add SUPABASE_PROJECT_REF to secrets if you want to link a specific project"
+          else
+            echo "🔗 Linking to Supabase project: $SUPABASE_PROJECT_REF"
+            if supabase link --project-ref "$SUPABASE_PROJECT_REF"; then
+              echo "✅ Successfully linked to project"
+            else
+              echo "⚠️  Failed to link project - continuing anyway"
+            fi
+          fi
 
-      - name: Push CLI-managed migrations
+      - name: Push CLI-managed database changes
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
-          echo "Running supabase db push"
-          supabase db push --project-ref "$SUPABASE_PROJECT_REF"
+          if [ ! -d "supabase" ]; then
+            echo "📁 No supabase/ directory found"
+            echo "Skipping supabase db push (only for CLI-managed projects)"
+          else
+            echo "🚀 Running supabase db push for CLI-managed migrations..."
+            if [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
+              supabase db push --project-ref "$SUPABASE_PROJECT_REF"
+              echo "✅ Database push completed"
+            else
+              echo "❌ SUPABASE_PROJECT_REF required for db push"
+              exit 1
+            fi
+          fi
 
-      - name: Run direct SQL migrations (psql) if SUPABASE_DB_URL provided
+      - name: Apply raw SQL migrations
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -euo pipefail
-          if [ -n "${SUPABASE_DB_URL:-}" ] && [ -d "migrations" ]; then
-            echo "Applying SQL migrations from migrations/ using psql"
-            sudo apt-get update -y
-            sudo apt-get install -y postgresql-client
-            for f in migrations/*.sql; do
-              echo "Applying $f"
-              # Use PGPASSWORD for psql, but avoid echoing it
-              PGPASSWORD="$(echo "$SUPABASE_DB_URL" | sed -n 's#.*://[^:]*:\([^@]*\)@.*#\1#p')" \
-                psql "$SUPABASE_DB_URL" -f "$f"
+          
+          # Function to apply SQL files from a directory
+          apply_sql_files() {
+            local dir=$1
+            local found_files=0
+            
+            if [ -d "$dir" ]; then
+              for f in "$dir"/*.sql; do
+                if [ -f "$f" ]; then
+                  found_files=1
+                  echo "📄 Applying: $f"
+                  # Extract password from URL safely and apply SQL
+                  PGPASSWORD="$(echo "$SUPABASE_DB_URL" | sed -n 's#.*://[^:]*:\([^@]*\)@.*#\1#p')" \
+                    psql "$SUPABASE_DB_URL" -f "$f" -v ON_ERROR_STOP=1
+                fi
+              done
+            fi
+            return $found_files
+          }
+          
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "⚠️  SUPABASE_DB_URL not provided"
+            echo "Add SUPABASE_DB_URL to secrets to enable direct SQL migrations"
+            echo "Checking for SQL files anyway..."
+            
+            # Still check for files to inform user
+            total_sql_files=0
+            for dir in migrations db sql; do
+              if [ -d "$dir" ]; then
+                sql_count=$(find "$dir" -name "*.sql" -type f 2>/dev/null | wc -l)
+                if [ "$sql_count" -gt 0 ]; then
+                  echo "📁 Found $sql_count SQL file(s) in $dir/"
+                  total_sql_files=$((total_sql_files + sql_count))
+                fi
+              fi
             done
+            
+            if [ $total_sql_files -gt 0 ]; then
+              echo "💡 $total_sql_files SQL file(s) found but skipped (no database URL)"
+            else
+              echo "📁 No SQL files found in migrations/, db/, or sql/ directories"
+            fi
           else
-            echo "No SUPABASE_DB_URL or no migrations/ directory — skipping direct SQL migrations"
+            echo "🗄️  Installing PostgreSQL client..."
+            sudo apt-get update -y -qq
+            sudo apt-get install -y postgresql-client
+            
+            echo "🔍 Searching for SQL files to apply..."
+            total_applied=0
+            
+            # Apply from each directory in order
+            for dir in migrations db sql; do
+              if apply_sql_files "$dir"; then
+                applied_count=$(find "$dir" -name "*.sql" -type f 2>/dev/null | wc -l)
+                echo "✅ Applied $applied_count file(s) from $dir/"
+                total_applied=$((total_applied + applied_count))
+              fi
+            done
+            
+            if [ $total_applied -eq 0 ]; then
+              echo "📁 No SQL files found in migrations/, db/, or sql/ directories"
+            else
+              echo "✅ Successfully applied $total_applied SQL file(s)"
+            fi
           fi
 
-      - name: Deploy Edge Functions (only if functions/ exists)
+      - name: Deploy Edge Functions
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
-          if [ -d "./functions" ]; then
-            echo "Found ./functions directory — deploying functions"
-            for d in ./functions/*; do
-              if [ -d "$d" ]; then
-                name=$(basename "$d")
-                echo "Deploying function: $name"
-                supabase functions deploy "$name" --project-ref "$SUPABASE_PROJECT_REF"
+          if [ ! -d "./functions" ]; then
+            echo "📁 No ./functions directory found"
+            echo "Skipping Edge Functions deployment"
+          else
+            echo "🔍 Found ./functions directory"
+            
+            if [ -z "${SUPABASE_PROJECT_REF:-}" ]; then
+              echo "❌ SUPABASE_PROJECT_REF required for functions deployment"
+              exit 1
+            fi
+            
+            deployed_count=0
+            for func_dir in ./functions/*; do
+              if [ -d "$func_dir" ]; then
+                func_name=$(basename "$func_dir")
+                echo "🚀 Processing function: $func_name"
+                
+                # Check if function has package.json
+                if [ -f "$func_dir/package.json" ]; then
+                  echo "📦 Installing dependencies for $func_name..."
+                  cd "$func_dir"
+                  npm ci
+                  
+                  # Check if build script exists
+                  if npm run build --silent >/dev/null 2>&1; then
+                    echo "🔨 Building $func_name..."
+                    npm run build
+                  else
+                    echo "ℹ️  No build script found for $func_name, skipping build"
+                  fi
+                  cd - >/dev/null
+                fi
+                
+                echo "🚀 Deploying function: $func_name"
+                supabase functions deploy "$func_name" --project-ref "$SUPABASE_PROJECT_REF"
+                deployed_count=$((deployed_count + 1))
+                echo "✅ Successfully deployed $func_name"
               fi
             done
-          else
-            echo "No ./functions directory found — skipping functions deploy"
+            
+            if [ $deployed_count -eq 0 ]; then
+              echo "📁 No function subdirectories found in ./functions"
+            else
+              echo "✅ Successfully deployed $deployed_count function(s)"
+            fi
           fi
+
+      - name: Deployment summary
+        run: |
+          echo "🎉 Supabase deployment workflow completed"
+          echo ""
+          echo "📋 Summary:"
+          echo "  • Supabase CLI: ✅ Authenticated"
+          if [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
+            echo "  • Project Link: ✅ Linked to $SUPABASE_PROJECT_REF"
+          else
+            echo "  • Project Link: ⚠️  Skipped (no SUPABASE_PROJECT_REF)"
+          fi
+          if [ -d "supabase" ]; then
+            echo "  • DB Push: ✅ Executed (supabase/ found)"
+          else
+            echo "  • DB Push: ⚠️  Skipped (no supabase/ directory)"
+          fi
+          if [ -n "${SUPABASE_DB_URL:-}" ]; then
+            echo "  • SQL Migrations: ✅ Processed"
+          else
+            echo "  • SQL Migrations: ⚠️  Skipped (no SUPABASE_DB_URL)"
+          fi
+          if [ -d "./functions" ]; then
+            echo "  • Edge Functions: ✅ Processed"
+          else
+            echo "  • Edge Functions: ⚠️  Skipped (no functions/ directory)"
+          fi
+          echo ""
+          echo "💡 Next steps:"
+          echo "  1. Check the workflow logs above for any warnings or errors"
+          echo "  2. Verify your Supabase project has the expected changes"
+          echo "  3. Test your application to ensure everything works correctly"
