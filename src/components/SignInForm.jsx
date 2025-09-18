@@ -2,7 +2,7 @@
 import React from "react";
 import { supabase } from "../lib/supabaseClient";
 
-export default function SignInForm() {
+export default function SignInForm({ connectionError }) {
   const [mode, setMode] = React.useState("password"); // password | magic
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -13,30 +13,45 @@ export default function SignInForm() {
     e.preventDefault();
     setBusy(true);
     setMsg("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (error) setMsg(error.message);
-    else window.location.reload();
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      setBusy(false);
+      if (error) setMsg(error.message);
+      else window.location.reload();
+    } catch (err) {
+      setBusy(false);
+      setMsg(`Connection error: ${err.message}`);
+    }
   }
 
   async function signUpWithPassword(e) {
     e.preventDefault();
     setBusy(true);
     setMsg("");
-    const { error } = await supabase.auth.signUp({ email, password });
-    setBusy(false);
-    if (error) setMsg(error.message);
-    else setMsg("Check your email to confirm your account, then sign in.");
+    try {
+      const { error } = await supabase.auth.signUp({ email, password });
+      setBusy(false);
+      if (error) setMsg(error.message);
+      else setMsg("Check your email to confirm your account, then sign in.");
+    } catch (err) {
+      setBusy(false);
+      setMsg(`Connection error: ${err.message}`);
+    }
   }
 
   async function sendMagicLink(e) {
     e.preventDefault();
     setBusy(true);
     setMsg("");
-    const { error } = await supabase.auth.signInWithOtp({ email });
-    setBusy(false);
-    if (error) setMsg(error.message);
-    else setMsg("Magic link sent. Check your email.");
+    try {
+      const { error } = await supabase.auth.signInWithOtp({ email });
+      setBusy(false);
+      if (error) setMsg(error.message);
+      else setMsg("Magic link sent. Check your email.");
+    } catch (err) {
+      setBusy(false);
+      setMsg(`Connection error: ${err.message}`);
+    }
   }
 
   return (

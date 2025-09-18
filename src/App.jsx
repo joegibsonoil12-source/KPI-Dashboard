@@ -6,7 +6,7 @@
 // ============================================================================
 
 import React, { useEffect, useMemo, useState, useContext, useCallback } from "react";
-import { supabase } from "./lib/supabaseClient";
+import { supabase, isDevelopmentMode } from "./lib/supabaseClient";
 import Procedures from "./tabs/Procedures_v3";
 
 /* ========================================================================== */
@@ -905,6 +905,14 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
+    
+    // If in development mode, skip auth entirely
+    if (isDevelopmentMode) {
+      setSession({ user: { email: "dev@example.com", id: "dev-user" } }); // Mock session
+      setChecking(false);
+      return;
+    }
+    
     async function init() {
       try {
         const { data, error } = await supabase.auth.getSession();
