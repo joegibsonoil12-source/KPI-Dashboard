@@ -13,6 +13,7 @@ on:
       - 'yarn.lock'
       - 'pnpm-lock.yaml'
       - 'src/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -44,47 +45,110 @@ jobs:
           set -euo pipefail
           supabase link --project-ref "$SUPABASE_PROJECT_REF" || true
 
-      - name: Push CLI-managed migrations
+      - name: Push CLI-managed migrations (only if supabase/ exists)
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
-          echo "Running supabase db push"
-          supabase db push --project-ref "$SUPABASE_PROJECT_REF"
+          if [ -d "supabase" ]; then
+            echo "Found supabase/ directory — running supabase db push"
+            supabase db push --project-ref "$SUPABASE_PROJECT_REF"
+          else
+            echo "No supabase/ directory found — skipping CLI-managed migrations"
+          fi
 
       - name: Run direct SQL migrations (psql) if SUPABASE_DB_URL provided
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -euo pipefail
-          if [ -n "${SUPABASE_DB_URL:-}" ] && [ -d "migrations" ]; then
-            echo "Applying SQL migrations from migrations/ using psql"
-            sudo apt-get update -y
-            sudo apt-get install -y postgresql-client
-            for f in migrations/*.sql; do
-              echo "Applying $f"
-              # Use PGPASSWORD for psql, but avoid echoing it
-              PGPASSWORD="$(echo "$SUPABASE_DB_URL" | sed -n 's#.*://[^:]*:\([^@]*\)@.*#\1#p')" \
-                psql "$SUPABASE_DB_URL" -f "$f"
+          if [ -n "${SUPABASE_DB_URL:-}" ]; then
+            echo "SUPABASE_DB_URL provided — checking for SQL migration directories"
+            
+            # Check for SQL files in migrations/, db/, or sql/ directories
+            migration_dirs=("migrations" "db" "sql")
+            sql_files_found=false
+            
+            for dir in "${migration_dirs[@]}"; do
+              if [ -d "$dir" ] && [ "$(find "$dir" -name "*.sql" | wc -l)" -gt 0 ]; then
+                echo "Found SQL files in $dir/ — applying migrations"
+                sudo apt-get update -y
+                sudo apt-get install -y postgresql-client
+                
+                for f in "$dir"/*.sql; do
+                  if [ -f "$f" ]; then
+                    echo "Applying $f"
+                    # Use PGPASSWORD for psql, but avoid echoing it
+                    PGPASSWORD="$(echo "$SUPABASE_DB_URL" | sed -n 's#.*://[^:]*:\([^@]*\)@.*#\1#p')" \
+                      psql "$SUPABASE_DB_URL" -f "$f"
+                  fi
+                done
+                sql_files_found=true
+                break
+              fi
             done
+            
+            if [ "$sql_files_found" = false ]; then
+              echo "No SQL files found in any migration directories (${migration_dirs[*]}) — skipping direct SQL migrations"
+            fi
           else
-            echo "No SUPABASE_DB_URL or no migrations/ directory — skipping direct SQL migrations"
+            echo "No SUPABASE_DB_URL provided — skipping direct SQL migrations"
           fi
 
-      - name: Deploy Edge Functions (only if functions/ exists)
+      - name: Deploy Edge Functions (check multiple locations)
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
-          if [ -d "./functions" ]; then
-            echo "Found ./functions directory — deploying functions"
-            for d in ./functions/*; do
+          
+          # Candidate directories to check for functions (in order of preference)
+          candidates=("./functions" "./server/functions" "./services/functions" "./server" "./services")
+          functions_dir=""
+          
+          # Find the first directory that exists and contains subdirectories or function files
+          for dir in "${candidates[@]}"; do
+            if [ -d "$dir" ]; then
+              # Check if directory contains subdirectories (function folders) or .js/.ts files
+              if [ "$(find "$dir" -maxdepth 1 -type d ! -path "$dir" | wc -l)" -gt 0 ] || \
+                 [ "$(find "$dir" -maxdepth 1 -name "*.js" -o -name "*.ts" | wc -l)" -gt 0 ]; then
+                functions_dir="$dir"
+                echo "Found functions in: $functions_dir"
+                break
+              fi
+            fi
+          done
+          
+          if [ -n "$functions_dir" ]; then
+            echo "Deploying functions from: $functions_dir"
+            for d in "$functions_dir"/*; do
               if [ -d "$d" ]; then
                 name=$(basename "$d")
+                echo "Processing function directory: $name"
+                
+                # Check if package.json exists and install dependencies
+                if [ -f "$d/package.json" ]; then
+                  echo "Found package.json in $name, installing dependencies"
+                  cd "$d"
+                  npm ci
+                  
+                  # Check if build script exists and run it
+                  if npm run --silent 2>/dev/null | grep -q "build"; then
+                    echo "Running build script for $name"
+                    npm run build
+                  fi
+                  cd - > /dev/null
+                fi
+                
+                # Deploy the function
                 echo "Deploying function: $name"
-                supabase functions deploy "$name" --project-ref "$SUPABASE_PROJECT_REF"
+                if [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
+                  supabase functions deploy "$name" --project-ref "$SUPABASE_PROJECT_REF"
+                else
+                  supabase functions deploy "$name"
+                fi
               fi
             done
           else
-            echo "No ./functions directory found — skipping functions deploy"
+            echo "No functions directory found in any of the candidate locations: ${candidates[*]}"
+            echo "Skipping functions deployment."
           fi
