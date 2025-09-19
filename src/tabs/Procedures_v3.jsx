@@ -16,6 +16,30 @@ function normalizeUrl(input) {
   return 'https://' + trimmed
 }
 
+// Helper: get current authenticated user ID (compatible with Supabase v1 and v2)
+async function getUserId() {
+  try {
+    // Try v2 method first
+    if (supabase.auth.getUser) {
+      const { data: { user }, error } = await supabase.auth.getUser()
+      if (error) throw error
+      return user?.id || null
+    }
+    
+    // Fallback to v1 method
+    if (supabase.auth.user) {
+      const user = supabase.auth.user()
+      return user?.id || null
+    }
+    
+    // If neither method is available, return null
+    return null
+  } catch (error) {
+    console.error('Error getting user ID:', error)
+    return null
+  }
+}
+
 function VideoEmbed({ url }) {
   if (!url) return null
   
@@ -165,6 +189,7 @@ export default function Procedures() {
   )
 
   // Helper function to upload video file to Supabase storage
+  // Returns { publicUrl, filename } for use in database inserts and cleanup
   async function uploadVideoToSupabase(fileToUpload) {
     const filename = `${Date.now()}_${fileToUpload.name.replace(/\s+/g, '_')}`
     const { data, error } = await supabase.storage
@@ -172,8 +197,11 @@ export default function Procedures() {
       .upload(filename, fileToUpload, { cacheControl: '3600', upsert: false })
     if (error) throw error
     const { data: publicData } = await supabase.storage.from('videos').getPublicUrl(filename)
-    // Ensure we return a normalized URL
-    return normalizeUrl(publicData?.publicUrl || filename)
+    // Return both the normalized URL and filename for cleanup purposes
+    return {
+      publicUrl: normalizeUrl(publicData?.publicUrl || filename),
+      filename: filename
+    }
   }
 
   async function addProcedure(e) {
@@ -213,7 +241,16 @@ export default function Procedures() {
     if (!attachToId) return alert('Choose a procedure to attach the video to.')
     
     setUploadingVideo(true)
+    let uploadedFilename = null // Track uploaded file for cleanup
+    
     try {
+      // Get current user ID for ownership
+      const userId = await getUserId()
+      if (!userId) {
+        setUploadingVideo(false)
+        return alert('You must be logged in to add videos.')
+      }
+      
       let finalUrl = ''
       
       if (videoSourceType === 'url') {
@@ -236,15 +273,30 @@ export default function Procedures() {
           setUploadingVideo(false)
           return alert('Select a video file to upload.')
         }
-        finalUrl = await uploadVideoToSupabase(videoFile)
+        const uploadResult = await uploadVideoToSupabase(videoFile)
+        finalUrl = uploadResult.publicUrl
+        uploadedFilename = uploadResult.filename // Store for potential cleanup
       }
       
       const { error } = await supabase.from('procedure_videos').insert({
         procedure_id: attachToId, 
         url: finalUrl,
+        owner: userId // Include owner field for RLS
       })
+      
       if (error) {
         console.error('Supabase error adding procedure video:', error)
+        
+        // Cleanup uploaded file if DB insert failed
+        if (uploadedFilename) {
+          try {
+            await supabase.storage.from('videos').remove([uploadedFilename])
+            console.log('Cleaned up uploaded file after DB error:', uploadedFilename)
+          } catch (cleanupError) {
+            console.error('Failed to cleanup uploaded file:', cleanupError)
+          }
+        }
+        
         alert(error.message)
         setUploadingVideo(false)
         return
@@ -255,6 +307,17 @@ export default function Procedures() {
       load()
     } catch (err) {
       console.error(err)
+      
+      // Cleanup uploaded file if any unexpected error occurred
+      if (uploadedFilename) {
+        try {
+          await supabase.storage.from('videos').remove([uploadedFilename])
+          console.log('Cleaned up uploaded file after error:', uploadedFilename)
+        } catch (cleanupError) {
+          console.error('Failed to cleanup uploaded file:', cleanupError)
+        }
+      }
+      
       alert('Failed to add video: ' + err.message)
     } finally {
       setUploadingVideo(false)
@@ -263,8 +326,15 @@ export default function Procedures() {
 
   async function addVideoInline(pid) {
     const sourceType = inlineVideoSourceType[pid] || 'url'
+    let uploadedFilename = null // Track uploaded file for cleanup
     
     try {
+      // Get current user ID for ownership
+      const userId = await getUserId()
+      if (!userId) {
+        return alert('You must be logged in to add videos.')
+      }
+      
       let finalUrl = ''
       
       if (sourceType === 'url') {
@@ -275,15 +345,30 @@ export default function Procedures() {
       } else {
         const file = inlineVideoFile[pid]
         if (!file) return
-        finalUrl = await uploadVideoToSupabase(file)
+        const uploadResult = await uploadVideoToSupabase(file)
+        finalUrl = uploadResult.publicUrl
+        uploadedFilename = uploadResult.filename // Store for potential cleanup
       }
       
       const { error } = await supabase.from('procedure_videos').insert({
         procedure_id: pid, 
-        url: finalUrl
+        url: finalUrl,
+        owner: userId // Include owner field for RLS
       })
+      
       if (error) {
         console.error('Supabase error adding inline video:', error)
+        
+        // Cleanup uploaded file if DB insert failed
+        if (uploadedFilename) {
+          try {
+            await supabase.storage.from('videos').remove([uploadedFilename])
+            console.log('Cleaned up uploaded file after DB error:', uploadedFilename)
+          } catch (cleanupError) {
+            console.error('Failed to cleanup uploaded file:', cleanupError)
+          }
+        }
+        
         return alert(error.message)
       }
       
@@ -292,6 +377,17 @@ export default function Procedures() {
       load()
     } catch (err) {
       console.error(err)
+      
+      // Cleanup uploaded file if any unexpected error occurred
+      if (uploadedFilename) {
+        try {
+          await supabase.storage.from('videos').remove([uploadedFilename])
+          console.log('Cleaned up uploaded file after error:', uploadedFilename)
+        } catch (cleanupError) {
+          console.error('Failed to cleanup uploaded file:', cleanupError)
+        }
+      }
+      
       alert('Failed to add video: ' + err.message)
     }
   }
