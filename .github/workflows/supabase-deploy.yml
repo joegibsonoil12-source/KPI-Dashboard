@@ -15,6 +15,10 @@ on:
       - 'src/**'
   workflow_dispatch:
 
+concurrency:
+  group: supabase-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Deploy Supabase
@@ -29,7 +33,14 @@ jobs:
           node-version: '18'
 
       - name: Install supabase CLI
-        run: npm install -g supabase@latest
+        # Global npm install fails on GitHub Actions runners, so we install locally
+        # and add ./node_modules/.bin to PATH to make 'supabase' command available
+        run: |
+          npm install supabase@latest
+          echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+
+      - name: Verify supabase CLI installation
+        run: supabase --version
 
       - name: Authenticate supabase CLI
         env:
