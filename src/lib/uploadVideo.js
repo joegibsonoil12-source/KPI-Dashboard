@@ -13,15 +13,15 @@ import { supabase } from './supabaseClient.js';
  * @returns {Promise<{data: Object, error: string|null}>}
  */
 export async function uploadVideo(file, options = {}) {
+  if (!file) {
+    return { data: null, error: 'No file provided' };
+  }
+
   const {
     title = file.name,
     description = '',
     bucket = 'videos'
   } = options;
-
-  if (!file) {
-    return { data: null, error: 'No file provided' };
-  }
 
   // Check authentication
   const { data: { user }, error: authError } = await supabase.auth.getUser();
