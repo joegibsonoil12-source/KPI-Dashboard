@@ -1,4 +1,3 @@
-// src/tabs/Procedures_v3.jsx
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import AdminOnly from '../components/AdminOnly'
@@ -16,12 +15,33 @@ function normalizeUrl(input) {
   return 'https://' + trimmed
 }
 
+// get user id (supabase-js v2 and v1 compatible)
+async function getUserId() {
+  try {
+    if (supabase?.auth?.getUser) {
+      const { data, error } = await supabase.auth.getUser()
+      if (error) {
+        console.warn('supabase.auth.getUser error', error)
+        return null
+      }
+      return data?.user?.id || null
+    }
+    if (supabase?.auth?.user) {
+      const u = supabase.auth.user()
+      return u?.id || null
+    }
+  } catch (err) {
+    console.warn('getUserId unexpected error', err)
+  }
+  return null
+}
+
 function VideoEmbed({ url }) {
   if (!url) return null
-  
+
   // Helper function to check if URL is a direct video file
   const isVideoFileUrl = (u) => /\.(mp4|webm|ogg|m3u8)(\?.*)?$/i.test(u)
-  
+
   // Try parsing the original URL first; if that fails try normalized https:// version
   let parsed
   try {
@@ -53,7 +73,7 @@ function VideoEmbed({ url }) {
         />
       )
     }
-    
+
     // Vimeo
     if (hostname.includes('vimeo.com')) {
       const id = parsed.pathname.split('/').pop()
@@ -67,7 +87,7 @@ function VideoEmbed({ url }) {
         />
       )
     }
-    
+
     // Loom
     if (hostname.includes('loom.com')) {
       // Use normalized href for embedding
@@ -81,32 +101,32 @@ function VideoEmbed({ url }) {
         />
       )
     }
-    
+
     // Direct video files
     if (isVideoFileUrl(parsed.href || url)) {
       return (
-        <video 
-          controls 
-          src={parsed.href || url} 
+        <video
+          controls
+          src={parsed.href || url}
           style={{ width: '100%', maxWidth: 560, height: 315, borderRadius: 8 }}
         />
       )
     }
   }
-  
+
   // Fallback for other URLs - display as link
   return (
-    <div style={{ 
-      background: '#f8f9fa', 
-      border: '1px solid #e9ecef', 
-      borderRadius: 8, 
-      padding: 12, 
-      textAlign: 'center' 
+    <div style={{
+      background: '#f8f9fa',
+      border: '1px solid #e9ecef',
+      borderRadius: 8,
+      padding: 12,
+      textAlign: 'center'
     }}>
       <p style={{ margin: 0, color: '#666', fontSize: 14 }}>Video Link:</p>
-      <a 
-        href={normalizeUrl(url)} 
-        target="_blank" 
+      <a
+        href={normalizeUrl(url)}
+        target="_blank"
         rel="noopener noreferrer"
         style={{ color: '#0066cc', textDecoration: 'none' }}
       >
@@ -141,9 +161,10 @@ export default function Procedures() {
     setLoading(true)
     setLoadError(null)
     try {
+      // include owner on procedure_videos selection so you can inspect ownership if needed
       const { data, error } = await supabase
         .from('procedures')
-        .select('id,title,body,created_at,procedure_videos(id,url,created_at)')
+        .select('id,title,body,created_at,procedure_videos(id,url,created_at,owner)')
         .order('created_at', { ascending: false })
       if (error) {
         setLoadError(`Failed to load procedures: ${error.message}`)
@@ -165,38 +186,49 @@ export default function Procedures() {
   )
 
   // Helper function to upload video file to Supabase storage
+  // Returns { publicUrl, filename }
   async function uploadVideoToSupabase(fileToUpload) {
+    if (!fileToUpload) throw new Error('No file provided to uploadVideoToSupabase')
     const filename = `${Date.now()}_${fileToUpload.name.replace(/\s+/g, '_')}`
-    const { data, error } = await supabase.storage
+    console.log('uploadVideoToSupabase: uploading', filename)
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('videos')
       .upload(filename, fileToUpload, { cacheControl: '3600', upsert: false })
-    if (error) throw error
-    const { data: publicData } = await supabase.storage.from('videos').getPublicUrl(filename)
-    // Ensure we return a normalized URL
-    return normalizeUrl(publicData?.publicUrl || filename)
+    if (uploadError) {
+      console.error('Storage upload error', uploadError)
+      throw uploadError
+    }
+    // get public url (may be CDN-backed)
+    const { data: publicData, error: pubErr } = await supabase.storage.from('videos').getPublicUrl(filename)
+    if (pubErr) {
+      console.warn('Failed to get public URL; returning filename instead', pubErr)
+    }
+    const publicUrl = normalizeUrl(publicData?.publicUrl || filename)
+    console.log('uploadVideoToSupabase: uploaded', { filename, publicUrl })
+    return { publicUrl, filename }
   }
 
   async function addProcedure(e) {
     e.preventDefault()
     setAddError(null) // Clear any previous errors
-    
+
     if (!title.trim()) {
       setAddError('Title is required.')
       return
     }
-    
+
     try {
       const { error } = await supabase.from('procedures').insert({
         title: title.trim(),
         body: body.trim() || null,
       })
-      
+
       if (error) {
         console.error('Supabase error adding procedure:', error)
         setAddError(`Failed to add procedure: ${error.message}`)
         return // Don't clear form on error
       }
-      
+
       // Success - clear form and reload
       setTitle('')
       setBody('')
@@ -211,11 +243,19 @@ export default function Procedures() {
   async function addVideoTop(e) {
     e.preventDefault()
     if (!attachToId) return alert('Choose a procedure to attach the video to.')
-    
+
     setUploadingVideo(true)
+    let uploadedFilename = null
     try {
+      const ownerId = await getUserId()
+      console.log('addVideoTop ownerId:', ownerId)
+      if (!ownerId) {
+        setUploadingVideo(false)
+        return alert('You must be signed in to add a video.')
+      }
+
       let finalUrl = ''
-      
+
       if (videoSourceType === 'url') {
         if (!videoUrl.trim()) {
           setUploadingVideo(false)
@@ -236,26 +276,47 @@ export default function Procedures() {
           setUploadingVideo(false)
           return alert('Select a video file to upload.')
         }
-        finalUrl = await uploadVideoToSupabase(videoFile)
+        const { publicUrl, filename } = await uploadVideoToSupabase(videoFile)
+        finalUrl = publicUrl
+        uploadedFilename = filename
       }
-      
-      const { error } = await supabase.from('procedure_videos').insert({
-        procedure_id: attachToId, 
-        url: finalUrl,
-      })
+
+      const payload = { procedure_id: attachToId, url: finalUrl, owner: ownerId }
+      console.log('addVideoTop inserting payload:', payload)
+      const { data, error } = await supabase.from('procedure_videos').insert(payload).select().limit(1)
       if (error) {
         console.error('Supabase error adding procedure video:', error)
+        // cleanup uploaded file if one exists
+        if (uploadedFilename) {
+          try {
+            const { error: delErr } = await supabase.storage.from('videos').remove([uploadedFilename])
+            if (delErr) console.warn('Cleanup remove error:', delErr)
+            else console.log('Cleaned up uploaded file after DB insert failure:', uploadedFilename)
+          } catch (delErr) {
+            console.warn('Failed to cleanup uploaded file', delErr)
+          }
+        }
         alert(error.message)
         setUploadingVideo(false)
         return
       }
-      
+
       setVideoUrl('')
       setVideoFile(null)
       load()
     } catch (err) {
-      console.error(err)
-      alert('Failed to add video: ' + err.message)
+      console.error('addVideoTop unexpected error', err)
+      // cleanup uploaded file if one exists
+      if (uploadedFilename) {
+        try {
+          const { error: delErr } = await supabase.storage.from('videos').remove([uploadedFilename])
+          if (delErr) console.warn('Cleanup remove error (catch):', delErr)
+          else console.log('Cleaned up uploaded file after unexpected failure:', uploadedFilename)
+        } catch (delErr) {
+          console.warn('Failed to cleanup uploaded file (catch)', delErr)
+        }
+      }
+      alert('Failed to add video: ' + (err.message || String(err)))
     } finally {
       setUploadingVideo(false)
     }
@@ -263,10 +324,16 @@ export default function Procedures() {
 
   async function addVideoInline(pid) {
     const sourceType = inlineVideoSourceType[pid] || 'url'
-    
+    let uploadedFilename = null
     try {
+      const ownerId = await getUserId()
+      console.log('addVideoInline ownerId:', ownerId)
+      if (!ownerId) {
+        return alert('You must be signed in to add a video.')
+      }
+
       let finalUrl = ''
-      
+
       if (sourceType === 'url') {
         const raw = (inlineVideo[pid] || '').trim()
         if (!raw) return
@@ -275,24 +342,43 @@ export default function Procedures() {
       } else {
         const file = inlineVideoFile[pid]
         if (!file) return
-        finalUrl = await uploadVideoToSupabase(file)
+        const { publicUrl, filename } = await uploadVideoToSupabase(file)
+        finalUrl = publicUrl
+        uploadedFilename = filename
       }
-      
-      const { error } = await supabase.from('procedure_videos').insert({
-        procedure_id: pid, 
-        url: finalUrl
-      })
+
+      const payload = { procedure_id: pid, url: finalUrl, owner: ownerId }
+      console.log('addVideoInline inserting payload:', payload)
+      const { data, error } = await supabase.from('procedure_videos').insert(payload).select().limit(1)
       if (error) {
         console.error('Supabase error adding inline video:', error)
+        if (uploadedFilename) {
+          try {
+            const { error: delErr } = await supabase.storage.from('videos').remove([uploadedFilename])
+            if (delErr) console.warn('Cleanup remove error (inline):', delErr)
+            else console.log('Cleaned up uploaded file after inline DB insert failure:', uploadedFilename)
+          } catch (delErr) {
+            console.warn('Cleanup failed (inline)', delErr)
+          }
+        }
         return alert(error.message)
       }
-      
+
       setInlineVideo(v => ({ ...v, [pid]: '' }))
       setInlineVideoFile(v => ({ ...v, [pid]: null }))
       load()
     } catch (err) {
-      console.error(err)
-      alert('Failed to add video: ' + err.message)
+      console.error('addVideoInline unexpected error', err)
+      if (uploadedFilename) {
+        try {
+          const { error: delErr } = await supabase.storage.from('videos').remove([uploadedFilename])
+          if (delErr) console.warn('Cleanup remove error (inline catch):', delErr)
+          else console.log('Cleaned up uploaded file after inline unexpected failure:', uploadedFilename)
+        } catch (delErr) {
+          console.warn('Failed to cleanup uploaded file (inline catch)', delErr)
+        }
+      }
+      alert('Failed to add video: ' + (err.message || String(err)))
     }
   }
 
@@ -339,12 +425,12 @@ export default function Procedures() {
                 <button type="submit">Add</button>
               </form>
               {addError && (
-                <div style={{ 
-                  background: '#fee', 
-                  border: '1px solid #fcc', 
-                  color: '#c33', 
-                  padding: '8px 12px', 
-                  borderRadius: 6, 
+                <div style={{
+                  background: '#fee',
+                  border: '1px solid #fcc',
+                  color: '#c33',
+                  padding: '8px 12px',
+                  borderRadius: 6,
                   marginTop: 10,
                   fontSize: 14
                 }}>
@@ -364,20 +450,20 @@ export default function Procedures() {
                   <option value="file">Upload File</option>
                 </select>
               </div>
-              
+
               <form onSubmit={addVideoTop} style={{ display:'grid', gridTemplateColumns:'1fr 96px', gap:10 }}>
                 {videoSourceType === 'url' ? (
-                  <input 
-                    placeholder="Paste YouTube, Vimeo, or Loom URL…" 
-                    value={videoUrl} 
-                    onChange={e=>setVideoUrl(e.target.value)} 
-                    required 
+                  <input
+                    placeholder="Paste YouTube, Vimeo, or Loom URL…"
+                    value={videoUrl}
+                    onChange={e=>setVideoUrl(e.target.value)}
+                    required
                   />
                 ) : (
-                  <input 
-                    type="file" 
-                    accept="video/*" 
-                    onChange={e=>setVideoFile(e.target.files?.[0] || null)} 
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={e=>setVideoFile(e.target.files?.[0] || null)}
                     required
                     style={{ padding: '8px' }}
                   />
@@ -395,13 +481,13 @@ export default function Procedures() {
 
       {/* Error message */}
       {loadError && (
-        <div style={{ 
-          background: '#fee', 
-          border: '1px solid #fcc', 
-          color: '#c33', 
-          padding: '12px 16px', 
-          borderRadius: 8, 
-          marginBottom: 16 
+        <div style={{
+          background: '#fee',
+          border: '1px solid #fcc',
+          color: '#c33',
+          padding: '12px 16px',
+          borderRadius: 8,
+          marginBottom: 16
         }}>
           {loadError}
         </div>
@@ -410,137 +496,137 @@ export default function Procedures() {
       {loading ? <div>Loading…</div> : (
         <>
           {items.length === 0 ? (
-            <div style={{ 
-              padding: '20px', 
-              textAlign: 'center', 
-              color: '#666', 
-              background: '#f8f9fa', 
-              border: '1px solid #e9ecef', 
-              borderRadius: 8 
+            <div style={{
+              padding: '20px',
+              textAlign: 'center',
+              color: '#666',
+              background: '#f8f9fa',
+              border: '1px solid #e9ecef',
+              borderRadius: 8
             }}>
               No procedures found.
             </div>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 14 }}>
               {items.map(p => (
-            <li key={p.id} style={{ border: '1px solid #e6e6e6', borderRadius: 12, padding: 16, background: '#fff' }}>
-              {/* header */}
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <h3 style={{ margin: 0, marginBottom: 4, fontSize: 18, fontWeight: 700, color: '#1a1a1a' }}>
-                    {p.title}
-                  </h3>
-                  {p.body && (
-                    <div style={{ 
-                      color: '#666', 
-                      lineHeight: 1.5, 
-                      fontSize: 14,
-                      padding: '8px 12px',
-                      background: '#f8f9fa',
-                      borderRadius: 6,
-                      border: '1px solid #e9ecef'
-                    }}>
-                      {p.body}
+                <li key={p.id} style={{ border: '1px solid #e6e6e6', borderRadius: 12, padding: 16, background: '#fff' }}>
+                  {/* header */}
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12, marginBottom: 12 }}>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ margin: 0, marginBottom: 4, fontSize: 18, fontWeight: 700, color: '#1a1a1a' }}>
+                        {p.title}
+                      </h3>
+                      {p.body && (
+                        <div style={{
+                          color: '#666',
+                          lineHeight: 1.5,
+                          fontSize: 14,
+                          padding: '8px 12px',
+                          background: '#f8f9fa',
+                          borderRadius: 6,
+                          border: '1px solid #e9ecef'
+                        }}>
+                          {p.body}
+                        </div>
+                      )}
+                    </div>
+                    <AdminOnly>
+                      <button onClick={()=>deleteProcedure(p.id)}
+                        style={{
+                          background:'#dc3545',
+                          color:'#fff',
+                          border:'none',
+                          padding:'8px 12px',
+                          borderRadius:6,
+                          fontSize: 12,
+                          cursor: 'pointer'
+                        }}>
+                        Remove Procedure
+                      </button>
+                    </AdminOnly>
+                  </div>
+
+                  {/* existing videos */}
+                  {(p.procedure_videos && p.procedure_videos.length > 0) && (
+                    <div style={{ marginBottom: 12 }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#555' }}>
+                        Attached Videos ({p.procedure_videos.length})
+                      </h4>
+                      <div style={{ display: 'grid', gap: 12 }}>
+                        {p.procedure_videos.map(v => (
+                          <div key={v.id} style={{
+                            border: '1px solid #dee2e6',
+                            borderRadius: 8,
+                            padding: 12,
+                            background: '#ffffff'
+                          }}>
+                            <VideoEmbed url={v.url} />
+                            <div style={{ fontSize:12, opacity:0.7, marginTop: 8 }}>
+                              Added: {new Date(v.created_at).toLocaleDateString()}
+                            </div>
+                            <AdminOnly>
+                              <div style={{ marginTop: 8 }}>
+                                <button onClick={()=>deleteVideo(v.id)}
+                                  style={{
+                                    background:'#6c757d',
+                                    color:'#fff',
+                                    border:'none',
+                                    padding:'4px 8px',
+                                    borderRadius:4,
+                                    fontSize: 11,
+                                    cursor: 'pointer'
+                                  }}>
+                                  Remove Video
+                                </button>
+                              </div>
+                            </AdminOnly>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
-                </div>
-                <AdminOnly>
-                  <button onClick={()=>deleteProcedure(p.id)}
-                    style={{ 
-                      background:'#dc3545', 
-                      color:'#fff', 
-                      border:'none', 
-                      padding:'8px 12px', 
-                      borderRadius:6,
-                      fontSize: 12,
-                      cursor: 'pointer'
-                    }}>
-                    Remove Procedure
-                  </button>
-                </AdminOnly>
-              </div>
 
-              {/* existing videos */}
-              {(p.procedure_videos && p.procedure_videos.length > 0) && (
-                <div style={{ marginBottom: 12 }}>
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#555' }}>
-                    Attached Videos ({p.procedure_videos.length})
-                  </h4>
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    {p.procedure_videos.map(v => (
-                      <div key={v.id} style={{ 
-                        border: '1px solid #dee2e6', 
-                        borderRadius: 8, 
-                        padding: 12,
-                        background: '#ffffff'
-                      }}>
-                        <VideoEmbed url={v.url} />
-                        <div style={{ fontSize:12, opacity:0.7, marginTop: 8 }}>
-                          Added: {new Date(v.created_at).toLocaleDateString()}
-                        </div>
-                        <AdminOnly>
-                          <div style={{ marginTop: 8 }}>
-                            <button onClick={()=>deleteVideo(v.id)}
-                              style={{ 
-                                background:'#6c757d', 
-                                color:'#fff', 
-                                border:'none', 
-                                padding:'4px 8px', 
-                                borderRadius:4,
-                                fontSize: 11,
-                                cursor: 'pointer'
-                              }}>
-                              Remove Video
-                            </button>
-                          </div>
-                        </AdminOnly>
+                  {/* inline add video */}
+                  <AdminOnly>
+                    <div style={{ marginTop: 10, border: '1px solid #e9ecef', borderRadius: 8, padding: 10, background: '#f8f9fa' }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#666' }}>
+                        Add Video to this Procedure:
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
-              {/* inline add video */}
-              <AdminOnly>
-                <div style={{ marginTop: 10, border: '1px solid #e9ecef', borderRadius: 8, padding: 10, background: '#f8f9fa' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#666' }}>
-                    Add Video to this Procedure:
-                  </div>
-                  
-                  <div style={{ marginBottom: 8 }}>
-                    <select 
-                      value={inlineVideoSourceType[p.id] || 'url'} 
-                      onChange={e=>setInlineVideoSourceType(x => ({ ...x, [p.id]: e.target.value }))}
-                      style={{ width: '100%', padding: '6px 8px', fontSize: 12 }}
-                    >
-                      <option value="url">URL (YouTube, Vimeo, Loom)</option>
-                      <option value="file">Upload File</option>
-                    </select>
-                  </div>
-                  
-                  <div style={{ display:'flex', gap:8 }}>
-                    {(inlineVideoSourceType[p.id] || 'url') === 'url' ? (
-                      <input
-                        placeholder="Paste video URL…"
-                        value={inlineVideo[p.id] || ''}
-                        onChange={e=>setInlineVideo(x => ({ ...x, [p.id]: e.target.value }))}
-                        style={{ flex:1, padding: '6px 8px' }}
-                      />
-                    ) : (
-                      <input
-                        type="file"
-                        accept="video/*"
-                        onChange={e=>setInlineVideoFile(x => ({ ...x, [p.id]: e.target.files?.[0] || null }))}
-                        style={{ flex:1, padding: '6px 8px' }}
-                      />
-                    )}
-                    <button type="button" onClick={()=>addVideoInline(p.id)}>Add video</button>
-                  </div>
-                </div>
-              </AdminOnly>
-            </li>
-          ))}
-        </ul>
+                      <div style={{ marginBottom: 8 }}>
+                        <select
+                          value={inlineVideoSourceType[p.id] || 'url'}
+                          onChange={e=>setInlineVideoSourceType(x => ({ ...x, [p.id]: e.target.value }))}
+                          style={{ width: '100%', padding: '6px 8px', fontSize: 12 }}
+                        >
+                          <option value="url">URL (YouTube, Vimeo, Loom)</option>
+                          <option value="file">Upload File</option>
+                        </select>
+                      </div>
+
+                      <div style={{ display:'flex', gap:8 }}>
+                        {(inlineVideoSourceType[p.id] || 'url') === 'url' ? (
+                          <input
+                            placeholder="Paste video URL…"
+                            value={inlineVideo[p.id] || ''}
+                            onChange={e=>setInlineVideo(x => ({ ...x, [p.id]: e.target.value }))}
+                            style={{ flex:1, padding: '6px 8px' }}
+                          />
+                        ) : (
+                          <input
+                            type="file"
+                            accept="video/*"
+                            onChange={e=>setInlineVideoFile(x => ({ ...x, [p.id]: e.target.files?.[0] || null }))}
+                            style={{ flex:1, padding: '6px 8px' }}
+                          />
+                        )}
+                        <button type="button" onClick={()=>addVideoInline(p.id)}>Add video</button>
+                      </div>
+                    </div>
+                  </AdminOnly>
+                </li>
+              ))}
+            </ul>
           )}
         </>
       )}
