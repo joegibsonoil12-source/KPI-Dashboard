@@ -6,20 +6,42 @@ import AdminOnly from '../components/AdminOnly'
 const PROC_COMPONENT_VERSION = 'v3.1'
 console.log('[Procedures.jsx]', PROC_COMPONENT_VERSION)
 
+// Helper: normalize a user-provided URL (add https:// if missing)
+function normalizeUrl(input) {
+  if (!input) return ''
+  const trimmed = input.trim()
+  // If it already has a protocol, return as-is
+  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed)) return trimmed
+  // Otherwise assume https
+  return 'https://' + trimmed
+}
+
 function VideoEmbed({ url }) {
   if (!url) return null
   
   // Helper function to check if URL is a direct video file
-  const isVideoFileUrl = (url) => /\.(mp4|webm|ogg|m3u8)(\?.*)?$/i.test(url)
+  const isVideoFileUrl = (u) => /\.(mp4|webm|ogg|m3u8)(\?.*)?$/i.test(u)
   
+  // Try parsing the original URL first; if that fails try normalized https:// version
+  let parsed
   try {
-    const u = new URL(url)
-    
+    parsed = new URL(url)
+  } catch (err) {
+    try {
+      parsed = new URL(normalizeUrl(url))
+    } catch (err2) {
+      parsed = null
+    }
+  }
+
+  if (parsed) {
+    const hostname = parsed.hostname || ''
+
     // YouTube
-    if (u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')) {
-      let id = u.searchParams.get('v')
-      if (!id && u.hostname.includes('youtu.be')) {
-        id = u.pathname.replace('/', '')
+    if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
+      let id = parsed.searchParams.get('v')
+      if (!id && hostname.includes('youtu.be')) {
+        id = parsed.pathname.replace('/', '')
       }
       if (!id) return null
       return (
@@ -33,8 +55,8 @@ function VideoEmbed({ url }) {
     }
     
     // Vimeo
-    if (u.hostname.includes('vimeo.com')) {
-      const id = u.pathname.split('/').pop()
+    if (hostname.includes('vimeo.com')) {
+      const id = parsed.pathname.split('/').pop()
       if (!id) return null
       return (
         <iframe
@@ -47,11 +69,13 @@ function VideoEmbed({ url }) {
     }
     
     // Loom
-    if (u.hostname.includes('loom.com')) {
+    if (hostname.includes('loom.com')) {
+      // Use normalized href for embedding
+      const embedUrl = (parsed.href || url).replace('/share/', '/embed/')
       return (
         <iframe
           width="560" height="315"
-          src={url.replace('/share/', '/embed/')}
+          src={embedUrl}
           title="Loom video" frameBorder="0" allowFullScreen
           style={{ maxWidth: '100%', borderRadius: 8 }}
         />
@@ -59,16 +83,16 @@ function VideoEmbed({ url }) {
     }
     
     // Direct video files
-    if (isVideoFileUrl(url)) {
+    if (isVideoFileUrl(parsed.href || url)) {
       return (
         <video 
           controls 
-          src={url} 
+          src={parsed.href || url} 
           style={{ width: '100%', maxWidth: 560, height: 315, borderRadius: 8 }}
         />
       )
     }
-  } catch {}
+  }
   
   // Fallback for other URLs - display as link
   return (
@@ -81,7 +105,7 @@ function VideoEmbed({ url }) {
     }}>
       <p style={{ margin: 0, color: '#666', fontSize: 14 }}>Video Link:</p>
       <a 
-        href={url} 
+        href={normalizeUrl(url)} 
         target="_blank" 
         rel="noopener noreferrer"
         style={{ color: '#0066cc', textDecoration: 'none' }}
@@ -147,8 +171,9 @@ export default function Procedures() {
       .from('videos')
       .upload(filename, fileToUpload, { cacheControl: '3600', upsert: false })
     if (error) throw error
-    const { data: publicData } = supabase.storage.from('videos').getPublicUrl(filename)
-    return publicData.publicUrl
+    const { data: publicData } = await supabase.storage.from('videos').getPublicUrl(filename)
+    // Ensure we return a normalized URL
+    return normalizeUrl(publicData?.publicUrl || filename)
   }
 
   async function addProcedure(e) {
@@ -192,10 +217,25 @@ export default function Procedures() {
       let finalUrl = ''
       
       if (videoSourceType === 'url') {
-        if (!videoUrl.trim()) return alert('Paste a YouTube, Vimeo, or Loom URL.')
-        finalUrl = videoUrl.trim()
+        if (!videoUrl.trim()) {
+          setUploadingVideo(false)
+          return alert('Paste a YouTube, Vimeo, or Loom URL.')
+        }
+        const normalized = normalizeUrl(videoUrl)
+        // Basic validation - allow youtube, vimeo, loom or direct video file by extension
+        if (!/youtube\.com|youtu\.be|vimeo\.com|loom\.com|\.mp4|\.webm|\.ogg|\.m3u8/i.test(normalized)) {
+          // still allow unknown URLs but warn
+          if (!confirm('This URL does not look like YouTube/Vimeo/Loom or a direct video file. Add anyway?')) {
+            setUploadingVideo(false)
+            return
+          }
+        }
+        finalUrl = normalized
       } else {
-        if (!videoFile) return alert('Select a video file to upload.')
+        if (!videoFile) {
+          setUploadingVideo(false)
+          return alert('Select a video file to upload.')
+        }
         finalUrl = await uploadVideoToSupabase(videoFile)
       }
       
@@ -203,7 +243,12 @@ export default function Procedures() {
         procedure_id: attachToId, 
         url: finalUrl,
       })
-      if (error) return alert(error.message)
+      if (error) {
+        console.error('Supabase error adding procedure video:', error)
+        alert(error.message)
+        setUploadingVideo(false)
+        return
+      }
       
       setVideoUrl('')
       setVideoFile(null)
@@ -223,9 +268,10 @@ export default function Procedures() {
       let finalUrl = ''
       
       if (sourceType === 'url') {
-        const url = (inlineVideo[pid] || '').trim()
-        if (!url) return
-        finalUrl = url
+        const raw = (inlineVideo[pid] || '').trim()
+        if (!raw) return
+        const normalized = normalizeUrl(raw)
+        finalUrl = normalized
       } else {
         const file = inlineVideoFile[pid]
         if (!file) return
@@ -236,7 +282,10 @@ export default function Procedures() {
         procedure_id: pid, 
         url: finalUrl
       })
-      if (error) return alert(error.message)
+      if (error) {
+        console.error('Supabase error adding inline video:', error)
+        return alert(error.message)
+      }
       
       setInlineVideo(v => ({ ...v, [pid]: '' }))
       setInlineVideoFile(v => ({ ...v, [pid]: null }))
