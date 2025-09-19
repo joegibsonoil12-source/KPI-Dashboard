@@ -1,8 +1,8 @@
-// Next.js demo page for video upload and playback
+// Vite/React demo page for video upload and playback
 
 import { useState } from 'react';
-import VideoPlayer from '../components/VideoPlayer';
-import { uploadVideo } from '../src/lib/uploadVideo';
+import VideoPlayer from '../components/VideoPlayer.jsx';
+import { uploadVideo } from '../src/lib/uploadVideo.js';
 
 export default function VideoDemo() {
   const [selectedFile, setSelectedFile] = useState(null);

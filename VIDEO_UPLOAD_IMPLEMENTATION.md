@@ -39,11 +39,12 @@ This implementation adds comprehensive video upload and playback functionality t
   - Supports batch URL generation
   - Configurable expiration times
 
-### 5. API Route (Next.js)
-- **`pages/api/video-url.js`**
-  - Server-side signed URL generation using service role key
+### 5. API Route (Vite/Express)
+- **`server/api/video-url.js`**
+  - Express router for signed URL generation using service role key
   - Basic authentication structure (configurable for production)
   - Error handling and validation
+  - Mounts with: `app.use('/api', require('./server/api/video-url'))`
 
 ### 6. React Components
 - **`components/VideoPlayer.jsx`**
@@ -57,10 +58,11 @@ This implementation adds comprehensive video upload and playback functionality t
   - Can be integrated into existing components
 
 ### 7. Demo Page
-- **`pages/video-demo.js`**
+- **`pages/video-demo.jsx`**
   - Full-featured demo page for testing functionality
   - Upload form with metadata fields
   - Video player integration
+  - Vite-compatible imports and structure
 
 ## Usage Examples
 
@@ -116,15 +118,23 @@ const getUrl = async (filePath) => {
 
 ### Required for Production
 ```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+# Vite environment variables (preferred)
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+
+# Server-side only (NEVER expose to client)
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
-### Vite Alternative
+### Legacy/Compatibility Environment Variables
 ```env
-VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
+# Next.js style (fallback support)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+
+# React App style (fallback support)
+REACT_APP_SUPABASE_URL=https://your-project.supabase.co
+REACT_APP_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 ## Setup Instructions
@@ -144,8 +154,23 @@ Create a 'videos' bucket in Supabase Storage:
 ### 3. Environment Variables
 Set the required environment variables in your deployment platform.
 
-### 4. API Route (Next.js)
-If using Next.js, ensure the API route is accessible at `/api/video-url`.
+### 4. API Route (Vite/Express)
+If using Express server, mount the video API route:
+
+```javascript
+const express = require('express');
+const videoApiRouter = require('./server/api/video-url');
+
+const app = express();
+app.use('/api', videoApiRouter);
+
+// Ensure environment variables are set:
+// SUPABASE_SERVICE_ROLE_KEY (required)
+// VITE_SUPABASE_URL or equivalent
+```
+
+### 5. Integration with Vite App
+The video functionality is now fully adapted for Vite and can be used directly in your Vite React application.
 
 ## Security Considerations
 
