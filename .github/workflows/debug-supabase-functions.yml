@@ -1,0 +1,13 @@
+- name: Debug: show functions tree and entry file
+  run: |
+    echo "PWD: $(pwd)"
+    echo "Listing repo root:"
+    ls -la
+    echo "Listing supabase directory (if present):"
+    ls -la supabase || true
+    echo "Listing supabase/functions directory (if present):"
+    ls -la supabase/functions || true
+    echo "Listing supabase/functions/api directory (if present):"
+    ls -la supabase/functions/api || true
+    echo "Print first 50 lines of entrypoint (if exists):"
+    head -n 50 supabase/functions/api/index.ts || true
