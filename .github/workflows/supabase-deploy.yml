@@ -28,31 +28,35 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Install supabase CLI
-        run: npm install -g supabase@latest
+      # Use npx to run supabase CLI rather than attempting a global npm install,
+      # which fails in some CI environments.
+      - name: Verify supabase CLI via npx
+        run: |
+          set -euo pipefail
+          npx --yes supabase@latest --version
 
-      - name: Authenticate supabase CLI
+      - name: Authenticate supabase CLI (via npx)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          supabase login --token "$SUPABASE_ACCESS_TOKEN"
+          npx --yes supabase@latest login --token "$SUPABASE_ACCESS_TOKEN"
 
-      - name: Link project
+      - name: Link project (via npx)
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
-          supabase link --project-ref "$SUPABASE_PROJECT_REF" || true
+          npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" || true
 
-      - name: Push CLI-managed migrations (only if supabase/ exists)
+      - name: Push CLI-managed migrations (only if supabase/ exists) (via npx)
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
           if [ -d "supabase" ]; then
-            echo "Found supabase/ directory — running supabase db push"
-            supabase db push --project-ref "$SUPABASE_PROJECT_REF"
+            echo "Found supabase/ directory — running supabase db push (via npx)"
+            npx --yes supabase@latest db push --project-ref "$SUPABASE_PROJECT_REF"
           else
             echo "No supabase/ directory found — skipping CLI-managed migrations"
           fi
@@ -64,21 +68,16 @@ jobs:
           set -euo pipefail
           if [ -n "${SUPABASE_DB_URL:-}" ]; then
             echo "SUPABASE_DB_URL provided — checking for SQL migration directories"
-            
-            # Check for SQL files in migrations/, db/, or sql/ directories
             migration_dirs=("migrations" "db" "sql")
             sql_files_found=false
-            
             for dir in "${migration_dirs[@]}"; do
               if [ -d "$dir" ] && [ "$(find "$dir" -name "*.sql" | wc -l)" -gt 0 ]; then
                 echo "Found SQL files in $dir/ — applying migrations"
                 sudo apt-get update -y
                 sudo apt-get install -y postgresql-client
-                
                 for f in "$dir"/*.sql; do
                   if [ -f "$f" ]; then
                     echo "Applying $f"
-                    # Use PGPASSWORD for psql, but avoid echoing it
                     PGPASSWORD="$(echo "$SUPABASE_DB_URL" | sed -n 's#.*://[^:]*:\([^@]*\)@.*#\1#p')" \
                       psql "$SUPABASE_DB_URL" -f "$f"
                   fi
@@ -87,7 +86,6 @@ jobs:
                 break
               fi
             done
-            
             if [ "$sql_files_found" = false ]; then
               echo "No SQL files found in any migration directories (${migration_dirs[*]}) — skipping direct SQL migrations"
             fi
@@ -95,20 +93,15 @@ jobs:
             echo "No SUPABASE_DB_URL provided — skipping direct SQL migrations"
           fi
 
-      - name: Deploy Edge Functions (check multiple locations)
+      - name: Deploy Edge Functions (check multiple locations) (via npx)
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
-          
-          # Candidate directories to check for functions (in order of preference)
           candidates=("./functions" "./server/functions" "./services/functions" "./server" "./services")
           functions_dir=""
-          
-          # Find the first directory that exists and contains subdirectories or function files
           for dir in "${candidates[@]}"; do
             if [ -d "$dir" ]; then
-              # Check if directory contains subdirectories (function folders) or .js/.ts files
               if [ "$(find "$dir" -maxdepth 1 -type d ! -path "$dir" | wc -l)" -gt 0 ] || \
                  [ "$(find "$dir" -maxdepth 1 -name "*.js" -o -name "*.ts" | wc -l)" -gt 0 ]; then
                 functions_dir="$dir"
@@ -117,34 +110,27 @@ jobs:
               fi
             fi
           done
-          
           if [ -n "$functions_dir" ]; then
             echo "Deploying functions from: $functions_dir"
             for d in "$functions_dir"/*; do
               if [ -d "$d" ]; then
                 name=$(basename "$d")
                 echo "Processing function directory: $name"
-                
-                # Check if package.json exists and install dependencies
                 if [ -f "$d/package.json" ]; then
                   echo "Found package.json in $name, installing dependencies"
                   cd "$d"
                   npm ci
-                  
-                  # Check if build script exists and run it
                   if npm run --silent 2>/dev/null | grep -q "build"; then
                     echo "Running build script for $name"
                     npm run build
                   fi
                   cd - > /dev/null
                 fi
-                
-                # Deploy the function
                 echo "Deploying function: $name"
                 if [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
-                  supabase functions deploy "$name" --project-ref "$SUPABASE_PROJECT_REF"
+                  npx --yes supabase@latest functions deploy "$name" --project-ref "$SUPABASE_PROJECT_REF"
                 else
-                  supabase functions deploy "$name"
+                  npx --yes supabase@latest functions deploy "$name"
                 fi
               fi
             done
@@ -152,3 +138,16 @@ jobs:
             echo "No functions directory found in any of the candidate locations: ${candidates[*]}"
             echo "Skipping functions deployment."
           fi
+
+      - name: Post Set up Node.js
+        run: |
+          set -euo pipefail
+          echo "Post setup"
+
+      - name: Post Checkout
+        run: |
+          set -euo pipefail
+          echo "Post checkout"
+
+      - name: Complete job
+        run: echo "Done"
