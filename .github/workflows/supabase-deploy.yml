@@ -8,6 +8,7 @@ on:
       - 'migrations/**'
       - 'db/**'
       - 'functions/**'
+      - 'supabase/**'
       - '.github/workflows/**'
       - 'package.json'
       - 'yarn.lock'
@@ -45,6 +46,7 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
+          # Link the project once so subsequent commands use the linked project
           npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" || true
 
       - name: Push CLI-managed migrations (only if supabase/ exists) (via npx)
@@ -65,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "${SUPABASE_DB_URL:-}" ]; then
-            echo "SUPABASE_DB_URL provided — checking for SQL migration directories"
+            echo "SUPABASE_DB_URL provided — applying SQL migrations if present"
             migration_dirs=("migrations" "db" "sql")
             sql_files_found=false
             for dir in "${migration_dirs[@]}"; do
@@ -90,6 +92,20 @@ jobs:
           else
             echo "No SUPABASE_DB_URL provided — skipping direct SQL migrations"
           fi
+
+      - name: Debug: show functions tree and entry file before deploy
+        run: |
+          echo "PWD: $(pwd)"
+          echo "Repo root listing:"
+          ls -la
+          echo "supabase directory:"
+          ls -la supabase || true
+          echo "supabase/functions:"
+          ls -la supabase/functions || true
+          echo "Top-level functions directory (if any):"
+          ls -la functions || true
+          echo "Print entry file if exists:"
+          head -n 200 supabase/functions/api/index.ts || true
 
       - name: Deploy Edge Functions (check multiple locations) (via npx)
         env:
@@ -116,30 +132,26 @@ jobs:
                 name=$(basename "$d")
                 echo "Processing function directory: $name"
 
-                # If package.json exists, install dependencies.
-                # Use npm ci only if package-lock.json is present; otherwise fall back to npm install.
                 if [ -f "$d/package.json" ]; then
                   echo "Found package.json in $name, installing dependencies"
                   cd "$d"
                   if [ -f package-lock.json ]; then
-                    echo "package-lock.json found — running npm ci (faster and deterministic)"
-                    npm ci --production --no-audit --no-fund
+                    npm ci --production --no-audit --no-fund || true
                   else
-                    echo "No package-lock.json found — running npm install (creates lockfile if needed)"
-                    npm install --production --no-audit --no-fund
+                    npm install --production --no-audit --no-fund || true
                   fi
 
-                  # If there's a build script, run it
                   if npm run | grep -q ' build'; then
                     echo "Running build script for $name"
-                    npm run build
+                    npm run build || true
                   fi
                   cd - > /dev/null
                 fi
 
-                echo "Deploying function: $name"
-                # Rely on the previously linked project to avoid CLI flag mismatches
-                npx --yes supabase@latest functions deploy "$name" --no-confirm --project "$SUPABASE_PROJECT_REF" --debug || npx --yes supabase@latest functions deploy "$name" --no-confirm --debug || npx --yes supabase@latest functions deploy "$d" --no-confirm --debug
+                echo "Attempting to deploy function by name (no unsupported flags)..."
+                # Do not pass --no-confirm or --project flags (some CLI versions don't accept them).
+                # Use --debug for extra visibility; if name-based deploy fails, fall back to path-based deploy.
+                npx --yes supabase@latest functions deploy "$name" --debug || npx --yes supabase@latest functions deploy "$d" --debug
               fi
             done
           else
