@@ -46,7 +46,6 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
-          # Link the project once so subsequent commands use the linked project
           npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" || true
 
       - name: Push CLI-managed migrations (only if supabase/ exists) (via npx)
@@ -149,8 +148,6 @@ jobs:
                 fi
 
                 echo "Attempting to deploy function by name (no unsupported flags)..."
-                # Do not pass --no-confirm or --project flags (some CLI versions don't accept them).
-                # Use --debug for extra visibility; if name-based deploy fails, fall back to path-based deploy.
                 npx --yes supabase@latest functions deploy "$name" --debug || npx --yes supabase@latest functions deploy "$d" --debug
               fi
             done
