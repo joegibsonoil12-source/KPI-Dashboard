@@ -47,6 +47,7 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
+          # Link the project locally so subsequent commands use the linked project
           npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" || true
 
       - name: Push CLI-managed migrations (only if supabase/ exists) (via npx)
@@ -56,7 +57,9 @@ jobs:
           set -euo pipefail
           if [ -d "supabase" ]; then
             echo "Found supabase/ directory — running supabase db push (via npx)"
-            npx --yes supabase@latest db push --project-ref "$SUPABASE_PROJECT_REF"
+            # Run db push without specifying --project-ref so it uses the linked project
+            # Use --yes to auto-confirm prompts if available.
+            npx --yes supabase@latest db push --yes || npx --yes supabase@latest db push
           else
             echo "No supabase/ directory found — skipping CLI-managed migrations"
           fi
@@ -127,11 +130,8 @@ jobs:
                   cd - > /dev/null
                 fi
                 echo "Deploying function: $name"
-                if [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
-                  npx --yes supabase@latest functions deploy "$name" --project-ref "$SUPABASE_PROJECT_REF"
-                else
-                  npx --yes supabase@latest functions deploy "$name"
-                fi
+                # Rely on the previously linked project; do not pass --project-ref to avoid CLI flag mismatch.
+                npx --yes supabase@latest functions deploy "$name" --no-confirm || npx --yes supabase@latest functions deploy "$name"
               fi
             done
           else
