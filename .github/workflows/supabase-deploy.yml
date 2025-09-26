@@ -92,7 +92,7 @@ jobs:
             echo "No SUPABASE_DB_URL provided -- skipping direct SQL migrations"
           fi
 
-      - name: "Debug: show functions tree and entry file before deploy"
+      - name: Debug show functions tree and entry file before deploy
         run: |
           echo "PWD: $(pwd)"
           echo "Repo root listing:"
