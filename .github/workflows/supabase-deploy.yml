@@ -131,20 +131,6 @@ jobs:
                 name=$(basename "$d")
                 echo "Processing function directory: $name"
 
-                # Skip folder if name doesn't match ^[A-Za-z][A-Za-z0-9_-]*$
-                if ! echo "$name" | grep -q '^[A-Za-z][A-Za-z0-9_-]*$'; then
-                  echo "Skipping '$name': invalid function name (must match ^[A-Za-z][A-Za-z0-9_-]*$)"
-                  continue
-                fi
-
-                # Skip folder if it contains no index.ts, index.js, or deno.json
-                if [ ! -f "$d/index.ts" ] && [ ! -f "$d/index.js" ] && [ ! -f "$d/deno.json" ]; then
-                  echo "Skipping '$name': no entrypoint found (missing index.ts, index.js, or deno.json)"
-                  continue
-                fi
-
-                echo "Validated function '$name' - proceeding with deployment"
-
                 if [ -f "$d/package.json" ]; then
                   echo "Found package.json in $name, installing dependencies"
                   cd "$d"
