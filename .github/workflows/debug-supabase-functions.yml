@@ -1,13 +1,32 @@
-- name: Debug: show functions tree and entry file
-  run: |
-    echo "PWD: $(pwd)"
-    echo "Listing repo root:"
-    ls -la
-    echo "Listing supabase directory (if present):"
-    ls -la supabase || true
-    echo "Listing supabase/functions directory (if present):"
-    ls -la supabase/functions || true
-    echo "Listing supabase/functions/api directory (if present):"
-    ls -la supabase/functions/api || true
-    echo "Print first 50 lines of entrypoint (if exists):"
-    head -n 50 supabase/functions/api/index.ts || true
+name: Debug Supabase Functions (list files)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    name: Show functions tree and entry file
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: List repository and functions files
+        run: |
+          echo "PWD: $(pwd)"
+          echo "== Repo root =="
+          ls -la
+
+          echo "== supabase directory =="
+          ls -la supabase || true
+
+          echo "== supabase/functions =="
+          ls -la supabase/functions || true
+
+          echo "== Top-level functions directory (if any) =="
+          ls -la functions || true
+
+          echo "== Print entry file (first 200 lines) =="
+          head -n 200 supabase/functions/api/index.ts || true
+
+          echo "== End of debug listing =="
