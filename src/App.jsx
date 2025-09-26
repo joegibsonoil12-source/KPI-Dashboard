@@ -274,7 +274,7 @@ export default function App() {
       <KPIProvider>
         <Header />
         <RoleBadge />
-        <div>Main Dashboard Content</div>
+        <Procedures />
       </KPIProvider>
     </ErrorBoundary>
   );
