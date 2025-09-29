@@ -44,11 +44,34 @@ else
   echo "Bucket creation response did not contain id. Inspect response above. Continuing..."
 fi
 
+# Create procedure-attachments bucket
+ATTACHMENT_BUCKET_ID="procedure-attachments"
+ATTACHMENT_BUCKET_NAME="Procedure Attachments"
+
 echo
-echo "If your bucket is public you can now compose URLs like:"
+echo "Creating bucket '$ATTACHMENT_BUCKET_ID' (public=$PUBLIC) on $SUPABASE_URL ..."
+
+resp2=$(curl -sS -X POST "${SUPABASE_URL}/storage/v1/bucket" \
+  -H "Authorization: Bearer ${SERVICE_ROLE_KEY}" \
+  -H "Content-Type: application/json" \
+  -d "{\"id\":\"${ATTACHMENT_BUCKET_ID}\",\"name\":\"${ATTACHMENT_BUCKET_NAME}\",\"public\":${PUBLIC}}")
+
+echo "Response:"
+echo "$resp2" | jq || echo "$resp2"
+
+if echo "$resp2" | jq -e 'has("id")' >/dev/null 2>&1; then
+  echo "Attachment bucket created (or already exists)."
+else
+  echo "Attachment bucket creation response did not contain id. Inspect response above. Continuing..."
+fi
+
+echo
+echo "If your buckets are public you can now compose URLs like:"
 echo "  https://<your-project-ref>.supabase.co/storage/v1/object/public/${BUCKET_ID}/<object_path>"
+echo "  https://<your-project-ref>.supabase.co/storage/v1/object/public/${ATTACHMENT_BUCKET_ID}/<object_path>"
 echo
 echo "Next steps:"
 echo "  1) Update storage_settings.project_url in the DB (run the SQL migration), e.g.:"
 echo "       SELECT public.set_storage_settings('https://<your-project-ref>.supabase.co', 'videos', 3600);"
 echo "  2) Upload test video (mp4 recommended), then verify the view public.procedures_with_video_urls shows playable URL."
+echo "  3) Upload test attachments (images/files) to verify procedure_attachments functionality."
