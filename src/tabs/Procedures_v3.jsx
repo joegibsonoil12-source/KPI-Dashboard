@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import AdminOnly from '../components/AdminOnly'
 
-const PROC_COMPONENT_VERSION = 'v3.1'
+const PROC_COMPONENT_VERSION = 'v3.2'
 console.log('[Procedures.jsx]', PROC_COMPONENT_VERSION)
 
 // Helper: normalize a user-provided URL (add https:// if missing)
@@ -136,13 +136,81 @@ function VideoEmbed({ url }) {
   )
 }
 
+function AttachmentPreview({ attachment }) {
+  if (!attachment?.url) return null
+
+  const { url, filename, mime_type } = attachment
+  const isImage = mime_type && mime_type.startsWith('image/')
+
+  if (isImage) {
+    return (
+      <div style={{
+        border: '1px solid #dee2e6',
+        borderRadius: 8,
+        padding: 8,
+        background: '#ffffff',
+        textAlign: 'center'
+      }}>
+        <img 
+          src={url} 
+          alt={filename || 'Attachment'}
+          style={{
+            maxWidth: '100%',
+            maxHeight: 200,
+            borderRadius: 6,
+            objectFit: 'contain'
+          }}
+        />
+        {filename && (
+          <div style={{ fontSize: 12, marginTop: 4, color: '#666' }}>
+            {filename}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Non-image files - show as link
+  return (
+    <div style={{
+      border: '1px solid #dee2e6',
+      borderRadius: 8,
+      padding: 12,
+      background: '#f8f9fa',
+      textAlign: 'center'
+    }}>
+      <div style={{ marginBottom: 8 }}>
+        <span style={{ fontSize: 24 }}>📁</span>
+      </div>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ 
+          color: '#0066cc', 
+          textDecoration: 'none',
+          fontWeight: 500,
+          fontSize: 14
+        }}
+      >
+        {filename || 'Download File'}
+      </a>
+      {mime_type && (
+        <div style={{ fontSize: 11, marginTop: 4, color: '#888' }}>
+          {mime_type}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Procedures() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
   // Composer state
-  const [mode, setMode] = useState('procedure') // 'procedure' | 'video'
+  const [mode, setMode] = useState('procedure') // 'procedure' | 'video' | 'attachment'
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
@@ -152,19 +220,30 @@ export default function Procedures() {
   const [uploadingVideo, setUploadingVideo] = useState(false)
   const [addError, setAddError] = useState(null)
 
+  // Attachment state
+  const [attachmentFile, setAttachmentFile] = useState(null)
+  const [attachmentUrl, setAttachmentUrl] = useState('')
+  const [attachmentSourceType, setAttachmentSourceType] = useState('file') // 'file' | 'url'
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
+
   // Inline per-procedure add state
   const [inlineVideo, setInlineVideo] = useState({})
   const [inlineVideoFile, setInlineVideoFile] = useState({})
   const [inlineVideoSourceType, setInlineVideoSourceType] = useState({})
 
+  // Inline attachment state
+  const [inlineAttachment, setInlineAttachment] = useState({})
+  const [inlineAttachmentFile, setInlineAttachmentFile] = useState({})
+  const [inlineAttachmentSourceType, setInlineAttachmentSourceType] = useState({})
+
   async function load() {
     setLoading(true)
     setLoadError(null)
     try {
-      // include owner on procedure_videos selection so you can inspect ownership if needed
+      // include owner on procedure_videos and procedure_attachments selection so you can inspect ownership if needed
       const { data, error } = await supabase
         .from('procedures')
-        .select('id,title,body,created_at,procedure_videos(id,url,created_at,owner)')
+        .select('id,title,body,created_at,procedure_videos(id,url,created_at,owner),procedure_attachments(id,url,filename,mime_type,created_at,owner)')
         .order('created_at', { ascending: false })
       if (error) {
         setLoadError(`Failed to load procedures: ${error.message}`)
@@ -185,7 +264,28 @@ export default function Procedures() {
     [items]
   )
 
-  // Helper function to upload video file to Supabase storage
+  // Helper function to upload attachment file to Supabase storage
+  // Returns { publicUrl, filename, mimeType }
+  async function uploadAttachmentToSupabase(fileToUpload) {
+    if (!fileToUpload) throw new Error('No file provided to uploadAttachmentToSupabase')
+    const filename = `${Date.now()}_${fileToUpload.name.replace(/\s+/g, '_')}`
+    console.log('uploadAttachmentToSupabase: uploading', filename)
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('procedure-attachments')
+      .upload(filename, fileToUpload, { cacheControl: '3600', upsert: false })
+    if (uploadError) {
+      console.error('Storage upload error', uploadError)
+      throw uploadError
+    }
+    // get public url (may be CDN-backed)
+    const { data: publicData, error: pubErr } = await supabase.storage.from('procedure-attachments').getPublicUrl(filename)
+    if (pubErr) {
+      console.warn('Failed to get public URL; returning filename instead', pubErr)
+    }
+    const publicUrl = normalizeUrl(publicData?.publicUrl || filename)
+    console.log('uploadAttachmentToSupabase: uploaded', { filename, publicUrl, mimeType: fileToUpload.type })
+    return { publicUrl, filename, mimeType: fileToUpload.type }
+  }
   // Returns { publicUrl, filename }
   async function uploadVideoToSupabase(fileToUpload) {
     if (!fileToUpload) throw new Error('No file provided to uploadVideoToSupabase')
@@ -322,8 +422,161 @@ export default function Procedures() {
     }
   }
 
+  async function addAttachmentTop(e) {
+    e.preventDefault()
+    if (!attachToId) return alert('Choose a procedure to attach the file to.')
+
+    setUploadingAttachment(true)
+    let uploadedFilename = null
+    try {
+      const ownerId = await getUserId()
+      console.log('addAttachmentTop ownerId:', ownerId)
+      if (!ownerId) {
+        setUploadingAttachment(false)
+        return alert('You must be signed in to add an attachment.')
+      }
+
+      let finalUrl = ''
+      let mimeType = ''
+      let filename = ''
+
+      if (attachmentSourceType === 'url') {
+        if (!attachmentUrl.trim()) {
+          setUploadingAttachment(false)
+          return alert('Enter a URL for the attachment.')
+        }
+        finalUrl = normalizeUrl(attachmentUrl)
+        filename = attachmentUrl.split('/').pop() || 'linked-file'
+      } else {
+        if (!attachmentFile) {
+          setUploadingAttachment(false)
+          return alert('Select a file to upload.')
+        }
+        const { publicUrl, filename: uploadedName, mimeType: uploadedMime } = await uploadAttachmentToSupabase(attachmentFile)
+        finalUrl = publicUrl
+        uploadedFilename = uploadedName
+        filename = attachmentFile.name
+        mimeType = uploadedMime
+      }
+
+      const payload = { 
+        procedure_id: attachToId, 
+        url: finalUrl, 
+        filename: filename,
+        mime_type: mimeType || null,
+        owner: ownerId 
+      }
+      console.log('addAttachmentTop inserting payload:', payload)
+      const { data, error } = await supabase.from('procedure_attachments').insert(payload).select().limit(1)
+      if (error) {
+        console.error('Supabase error adding procedure attachment:', error)
+        // cleanup uploaded file if one exists
+        if (uploadedFilename) {
+          try {
+            const { error: delErr } = await supabase.storage.from('procedure-attachments').remove([uploadedFilename])
+            if (delErr) console.warn('Cleanup remove error:', delErr)
+            else console.log('Cleaned up uploaded file after DB insert failure:', uploadedFilename)
+          } catch (delErr) {
+            console.warn('Failed to cleanup uploaded file', delErr)
+          }
+        }
+        alert(error.message)
+        setUploadingAttachment(false)
+        return
+      }
+
+      setAttachmentUrl('')
+      setAttachmentFile(null)
+      load()
+    } catch (err) {
+      console.error('addAttachmentTop unexpected error', err)
+      // cleanup uploaded file if one exists
+      if (uploadedFilename) {
+        try {
+          const { error: delErr } = await supabase.storage.from('procedure-attachments').remove([uploadedFilename])
+          if (delErr) console.warn('Cleanup remove error (catch):', delErr)
+          else console.log('Cleaned up uploaded file after unexpected failure:', uploadedFilename)
+        } catch (delErr) {
+          console.warn('Failed to cleanup uploaded file (catch)', delErr)
+        }
+      }
+      alert('Failed to add attachment: ' + (err.message || String(err)))
+    } finally {
+      setUploadingAttachment(false)
+    }
+  }
+
+  async function addAttachmentInline(pid) {
+    const sourceType = inlineAttachmentSourceType[pid] || 'file'
+    let uploadedFilename = null
+    try {
+      const ownerId = await getUserId()
+      console.log('addAttachmentInline ownerId:', ownerId)
+      if (!ownerId) {
+        return alert('You must be signed in to add an attachment.')
+      }
+
+      let finalUrl = ''
+      let mimeType = ''
+      let filename = ''
+
+      if (sourceType === 'url') {
+        const raw = (inlineAttachment[pid] || '').trim()
+        if (!raw) return
+        finalUrl = normalizeUrl(raw)
+        filename = raw.split('/').pop() || 'linked-file'
+      } else {
+        const file = inlineAttachmentFile[pid]
+        if (!file) return
+        const { publicUrl, filename: uploadedName, mimeType: uploadedMime } = await uploadAttachmentToSupabase(file)
+        finalUrl = publicUrl
+        uploadedFilename = uploadedName
+        filename = file.name
+        mimeType = uploadedMime
+      }
+
+      const payload = { 
+        procedure_id: pid, 
+        url: finalUrl,
+        filename: filename,
+        mime_type: mimeType || null,
+        owner: ownerId 
+      }
+      console.log('addAttachmentInline inserting payload:', payload)
+      const { data, error } = await supabase.from('procedure_attachments').insert(payload).select().limit(1)
+      if (error) {
+        console.error('Supabase error adding inline attachment:', error)
+        if (uploadedFilename) {
+          try {
+            const { error: delErr } = await supabase.storage.from('procedure-attachments').remove([uploadedFilename])
+            if (delErr) console.warn('Cleanup remove error (inline):', delErr)
+            else console.log('Cleaned up uploaded file after inline DB insert failure:', uploadedFilename)
+          } catch (delErr) {
+            console.warn('Cleanup failed (inline)', delErr)
+          }
+        }
+        return alert(error.message)
+      }
+
+      setInlineAttachment(v => ({ ...v, [pid]: '' }))
+      setInlineAttachmentFile(v => ({ ...v, [pid]: null }))
+      load()
+    } catch (err) {
+      console.error('addAttachmentInline unexpected error', err)
+      if (uploadedFilename) {
+        try {
+          const { error: delErr } = await supabase.storage.from('procedure-attachments').remove([uploadedFilename])
+          if (delErr) console.warn('Cleanup remove error (inline catch):', delErr)
+          else console.log('Cleaned up uploaded file after inline unexpected failure:', uploadedFilename)
+        } catch (delErr) {
+          console.warn('Failed to cleanup uploaded file (inline catch)', delErr)
+        }
+      }
+      alert('Failed to add attachment: ' + (err.message || String(err)))
+    }
+  }
+
   async function addVideoInline(pid) {
-    const sourceType = inlineVideoSourceType[pid] || 'url'
     let uploadedFilename = null
     try {
       const ownerId = await getUserId()
@@ -388,6 +641,12 @@ export default function Procedures() {
     load()
   }
 
+  async function deleteAttachment(aid) {
+    const { error } = await supabase.from('procedure_attachments').delete().eq('id', aid)
+    if (error) return alert(error.message)
+    load()
+  }
+
   async function deleteVideo(vid) {
     const { error } = await supabase.from('procedure_videos').delete().eq('id', vid)
     if (error) return alert(error.message)
@@ -410,9 +669,10 @@ export default function Procedures() {
             <select value={mode} onChange={e=>setMode(e.target.value)} style={{ minWidth: 220 }}>
               <option value="procedure">Procedure (Text)</option>
               <option value="video">Video for… (attach to procedure)</option>
+              <option value="attachment">Attachment for… (attach to procedure)</option>
             </select>
             <div style={{ opacity:0.7, fontSize:12 }}>
-              Tip: You can also add videos inline on each procedure card below. Supports YouTube, Vimeo, Loom, and file uploads.
+              Tip: You can also add videos and attachments inline on each procedure card below. Supports YouTube, Vimeo, Loom, file uploads, and file attachments.
             </div>
           </div>
 
@@ -438,7 +698,7 @@ export default function Procedures() {
                 </div>
               )}
             </div>
-          ) : (
+          ) : mode === 'video' ? (
             <div style={{ display: 'grid', gap: 10 }}>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                 <select value={attachToId} onChange={e=>setAttachToId(e.target.value)} required>
@@ -470,6 +730,40 @@ export default function Procedures() {
                 )}
                 <button type="submit" disabled={uploadingVideo}>
                   {uploadingVideo ? 'Adding...' : 'Add'}
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                <select value={attachToId} onChange={e=>setAttachToId(e.target.value)} required>
+                  <option value="">Choose procedure…</option>
+                  {procedureOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                <select value={attachmentSourceType} onChange={e=>setAttachmentSourceType(e.target.value)}>
+                  <option value="file">Upload File</option>
+                  <option value="url">Link to URL</option>
+                </select>
+              </div>
+
+              <form onSubmit={addAttachmentTop} style={{ display:'grid', gridTemplateColumns:'1fr 96px', gap:10 }}>
+                {attachmentSourceType === 'url' ? (
+                  <input
+                    placeholder="Paste URL for file/image…"
+                    value={attachmentUrl}
+                    onChange={e=>setAttachmentUrl(e.target.value)}
+                    required
+                  />
+                ) : (
+                  <input
+                    type="file"
+                    onChange={e=>setAttachmentFile(e.target.files?.[0] || null)}
+                    required
+                    style={{ padding: '8px' }}
+                  />
+                )}
+                <button type="submit" disabled={uploadingAttachment}>
+                  {uploadingAttachment ? 'Adding...' : 'Add'}
                 </button>
               </form>
             </div>
@@ -586,6 +880,46 @@ export default function Procedures() {
                     </div>
                   )}
 
+                  {/* existing attachments */}
+                  {(p.procedure_attachments && p.procedure_attachments.length > 0) && (
+                    <div style={{ marginBottom: 12 }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#555' }}>
+                        Attached Files ({p.procedure_attachments.length})
+                      </h4>
+                      <div style={{ display: 'grid', gap: 12 }}>
+                        {p.procedure_attachments.map(a => (
+                          <div key={a.id} style={{
+                            border: '1px solid #dee2e6',
+                            borderRadius: 8,
+                            padding: 12,
+                            background: '#ffffff'
+                          }}>
+                            <AttachmentPreview attachment={a} />
+                            <div style={{ fontSize:12, opacity:0.7, marginTop: 8 }}>
+                              Added: {new Date(a.created_at).toLocaleDateString()}
+                            </div>
+                            <AdminOnly>
+                              <div style={{ marginTop: 8 }}>
+                                <button onClick={()=>deleteAttachment(a.id)}
+                                  style={{
+                                    background:'#6c757d',
+                                    color:'#fff',
+                                    border:'none',
+                                    padding:'4px 8px',
+                                    borderRadius:4,
+                                    fontSize: 11,
+                                    cursor: 'pointer'
+                                  }}>
+                                  Remove Attachment
+                                </button>
+                              </div>
+                            </AdminOnly>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* inline add video */}
                   <AdminOnly>
                     <div style={{ marginTop: 10, border: '1px solid #e9ecef', borderRadius: 8, padding: 10, background: '#f8f9fa' }}>
@@ -621,6 +955,42 @@ export default function Procedures() {
                           />
                         )}
                         <button type="button" onClick={()=>addVideoInline(p.id)}>Add video</button>
+                      </div>
+                    </div>
+
+                    {/* inline add attachment */}
+                    <div style={{ marginTop: 10, border: '1px solid #e9ecef', borderRadius: 8, padding: 10, background: '#f8f9fa' }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#666' }}>
+                        Add Attachment to this Procedure:
+                      </div>
+
+                      <div style={{ marginBottom: 8 }}>
+                        <select
+                          value={inlineAttachmentSourceType[p.id] || 'file'}
+                          onChange={e=>setInlineAttachmentSourceType(x => ({ ...x, [p.id]: e.target.value }))}
+                          style={{ width: '100%', padding: '6px 8px', fontSize: 12 }}
+                        >
+                          <option value="file">Upload File</option>
+                          <option value="url">Link to URL</option>
+                        </select>
+                      </div>
+
+                      <div style={{ display:'flex', gap:8 }}>
+                        {(inlineAttachmentSourceType[p.id] || 'file') === 'url' ? (
+                          <input
+                            placeholder="Paste file/image URL…"
+                            value={inlineAttachment[p.id] || ''}
+                            onChange={e=>setInlineAttachment(x => ({ ...x, [p.id]: e.target.value }))}
+                            style={{ flex:1, padding: '6px 8px' }}
+                          />
+                        ) : (
+                          <input
+                            type="file"
+                            onChange={e=>setInlineAttachmentFile(x => ({ ...x, [p.id]: e.target.files?.[0] || null }))}
+                            style={{ flex:1, padding: '6px 8px' }}
+                          />
+                        )}
+                        <button type="button" onClick={()=>addAttachmentInline(p.id)}>Add attachment</button>
                       </div>
                     </div>
                   </AdminOnly>
