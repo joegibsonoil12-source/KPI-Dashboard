@@ -117,6 +117,47 @@ WITH CHECK (true);
 4. Check RLS policies in Supabase dashboard under Authentication > Policies
 5. Ensure environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) are correctly set
 
+## Delivery Tickets Tracking
+
+The Delivery Tickets feature has been enhanced with comprehensive tracking capabilities:
+
+### New Features
+
+- **Ticket ID tracking**: Reference external ticket numbers
+- **Gallons Delivered**: Track exact gallons delivered per ticket
+- **Time Windows**: Record scheduled delivery windows, arrival, and departure times
+- **Odometer Tracking**: Log starting and ending odometer readings
+- **Computed Metrics**:
+  - **Miles Driven**: Automatically calculated from odometer readings
+  - **On-Time Flag**: Auto-computed based on arrival vs. scheduled time (5-minute grace period)
+- **Summary Dashboard**: Real-time metrics showing:
+  - Total Gallons Delivered
+  - Average Miles per Ticket
+  - On-Time Delivery Percentage
+
+### Database Migration
+
+Apply the tracking enhancement migration:
+```
+sql/2025-10-16_extend_delivery_tickets_tracking.sql
+```
+
+This migration:
+- Adds 9 new columns to delivery_tickets table
+- Creates performance indexes
+- Is idempotent and safe to re-run
+- Performs no destructive operations
+- See `sql/README.md` for detailed documentation
+
+### On-Time Calculation
+
+A delivery is marked "on time" (✅) if:
+```
+arrival_time <= scheduled_window_start + 5 minutes
+```
+
+Otherwise, it's marked as late (⏱️).
+
 ## Local dev
 ```bash
 npm install

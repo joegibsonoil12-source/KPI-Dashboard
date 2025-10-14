@@ -172,6 +172,63 @@ After running the migration and creating the storage bucket, verify everything i
 - Ensure storage key matches the uploaded file path
 - Check signed URL hasn't expired (default: 10 minutes)
 
+## Migration: 2025-10-16_extend_delivery_tickets_tracking.sql
+
+**Purpose:** Extends the `delivery_tickets` table with additional tracking fields for enhanced delivery management, including ticket IDs, time windows, odometer readings, and computed metrics.
+
+**Date:** 2025-10-16
+
+**What it does:**
+- Adds new columns to `delivery_tickets` table for enhanced tracking
+- Creates indexes for performance optimization
+- Computes `on_time_flag` for existing rows with available data
+
+### New Columns Added
+
+1. **ticket_id** (text) - External ticket reference/ID
+2. **gallons_delivered** (numeric) - Gallons delivered (can be used separately from qty)
+3. **scheduled_window_start** (timestamptz) - Scheduled delivery window start time
+4. **arrival_time** (timestamptz) - Actual arrival timestamp
+5. **departure_time** (timestamptz) - Departure timestamp
+6. **odometer_start** (numeric) - Starting odometer reading
+7. **odometer_end** (numeric) - Ending odometer reading
+8. **miles_driven** (numeric) - Miles driven (computed from odometer readings)
+9. **on_time_flag** (smallint) - On-time delivery indicator (1 = on time, 0 = late, null = not computed)
+
+### Key Features
+
+- **Idempotent:** Safe to run multiple times without errors
+- **Non-destructive:** Only adds columns, never removes existing data
+- **Backward compatible:** Existing rows will have null values for new columns
+- **Computed metrics:** Automatically computes `on_time_flag` for existing rows with available data
+
+### On-Time Calculation
+
+A delivery is considered "on time" if:
+- `arrival_time <= scheduled_window_start + 5 minutes`
+
+### Indexes Created
+
+- `idx_delivery_tickets_ticket_id`
+- `idx_delivery_tickets_scheduled_window_start`
+- `idx_delivery_tickets_arrival_time`
+- `idx_delivery_tickets_on_time_flag`
+
+### Running the Migration
+
+1. Open Supabase SQL Editor
+2. Copy and paste the contents of `2025-10-16_extend_delivery_tickets_tracking.sql`
+3. Click "Run"
+4. Verify columns were added successfully using the verification queries at the end of the file
+
+### Frontend Integration
+
+The `DeliveryTickets.jsx` component has been updated to:
+- Display all new fields in the table
+- Auto-compute `miles_driven` when odometer values are entered
+- Auto-compute `on_time_flag` when arrival and scheduled times are entered
+- Show summary metrics (Total Gallons, Avg Miles per Ticket, On-Time %)
+
 ## Additional Migrations
 
 Other migrations in this directory:
