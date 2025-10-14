@@ -27,10 +27,26 @@ export default function DeliveryTickets() {
   const [uploadingFor, setUploadingFor] = useState(null);
   const [attachmentsMap, setAttachmentsMap] = useState({}); // ticketId -> [attachments]
 
-  const control = useMemo(() => ({
-    qty: tickets.reduce((s, t) => s + (Number(t.qty) || 0), 0),
-    amount: tickets.reduce((s, t) => s + (Number(t.amount) || 0), 0),
-  }), [tickets]);
+  const control = useMemo(() => {
+    const totalGallons = tickets.reduce((s, t) => s + (Number(t.gallons_delivered || t.qty) || 0), 0);
+    const totalMiles = tickets.reduce((s, t) => s + (Number(t.miles_driven) || 0), 0);
+    const ticketsWithMiles = tickets.filter(t => t.miles_driven != null && t.miles_driven > 0).length;
+    const avgMiles = ticketsWithMiles > 0 ? totalMiles / ticketsWithMiles : 0;
+    
+    const ticketsWithOnTimeFlag = tickets.filter(t => t.on_time_flag === 0 || t.on_time_flag === 1);
+    const onTimeTickets = ticketsWithOnTimeFlag.filter(t => t.on_time_flag === 1).length;
+    const onTimePct = ticketsWithOnTimeFlag.length > 0 
+      ? (onTimeTickets / ticketsWithOnTimeFlag.length) * 100 
+      : 0;
+    
+    return {
+      qty: tickets.reduce((s, t) => s + (Number(t.qty) || 0), 0),
+      amount: tickets.reduce((s, t) => s + (Number(t.amount) || 0), 0),
+      totalGallons,
+      avgMiles,
+      onTimePct,
+    };
+  }, [tickets]);
 
   async function currentUserId() {
     const { data } = await supabase.auth.getUser();
@@ -67,6 +83,15 @@ export default function DeliveryTickets() {
       date: new Date().toISOString().slice(0, 10),
       driver: "", truck: "", customerName: "", account: "",
       qty: 0, price: 0, tax: 0, amount: 0, status: "draft", notes: "",
+      ticket_id: "",
+      gallons_delivered: 0,
+      scheduled_window_start: null,
+      arrival_time: null,
+      departure_time: null,
+      odometer_start: null,
+      odometer_end: null,
+      miles_driven: null,
+      on_time_flag: null,
       created_by: userId,
     };
     try {
@@ -79,11 +104,64 @@ export default function DeliveryTickets() {
   }
 
   async function update(id, key, val) {
-    const numericKeys = ["qty", "price", "tax", "amount"];
+    const numericKeys = ["qty", "price", "tax", "amount", "gallons_delivered", "odometer_start", "odometer_end"];
     const nextVal = numericKeys.includes(key) ? Number(val || 0) : val;
-    setTickets(ts => ts.map(t => t.id === id ? { ...t, [key]: nextVal } : t));
+    
+    // Update local state with computed fields
+    setTickets(ts => ts.map(t => {
+      if (t.id !== id) return t;
+      const updated = { ...t, [key]: nextVal };
+      
+      // Compute miles_driven if odometer values change
+      if (key === "odometer_start" || key === "odometer_end") {
+        const start = key === "odometer_start" ? nextVal : t.odometer_start;
+        const end = key === "odometer_end" ? nextVal : t.odometer_end;
+        if (start != null && end != null && start !== "" && end !== "") {
+          updated.miles_driven = Number(end) - Number(start);
+        }
+      }
+      
+      // Compute on_time_flag if scheduled or arrival changes
+      if (key === "scheduled_window_start" || key === "arrival_time") {
+        const scheduled = key === "scheduled_window_start" ? nextVal : t.scheduled_window_start;
+        const arrival = key === "arrival_time" ? nextVal : t.arrival_time;
+        if (scheduled && arrival) {
+          const scheduledDate = new Date(scheduled);
+          const arrivalDate = new Date(arrival);
+          const graceMs = 5 * 60 * 1000; // 5 minutes in milliseconds
+          updated.on_time_flag = arrivalDate <= new Date(scheduledDate.getTime() + graceMs) ? 1 : 0;
+        }
+      }
+      
+      return updated;
+    }));
+    
     try {
-      await updateTicket(id, { [key]: nextVal });
+      // Prepare update payload with computed fields
+      const payload = { [key]: nextVal };
+      
+      // Include computed fields in update if they were computed
+      const ticket = tickets.find(t => t.id === id);
+      if (ticket && (key === "odometer_start" || key === "odometer_end")) {
+        const start = key === "odometer_start" ? nextVal : ticket.odometer_start;
+        const end = key === "odometer_end" ? nextVal : ticket.odometer_end;
+        if (start != null && end != null && start !== "" && end !== "") {
+          payload.miles_driven = Number(end) - Number(start);
+        }
+      }
+      
+      if (ticket && (key === "scheduled_window_start" || key === "arrival_time")) {
+        const scheduled = key === "scheduled_window_start" ? nextVal : ticket.scheduled_window_start;
+        const arrival = key === "arrival_time" ? nextVal : ticket.arrival_time;
+        if (scheduled && arrival) {
+          const scheduledDate = new Date(scheduled);
+          const arrivalDate = new Date(arrival);
+          const graceMs = 5 * 60 * 1000;
+          payload.on_time_flag = arrivalDate <= new Date(scheduledDate.getTime() + graceMs) ? 1 : 0;
+        }
+      }
+      
+      await updateTicket(id, payload);
     } catch (e) {
       console.error("Update failed:", e);
       alert("Update failed, reloading list.");
@@ -260,50 +338,69 @@ export default function DeliveryTickets() {
         <div>Control Amount: {control.amount}</div>
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div>Total Gallons Delivered: {control.totalGallons.toFixed(1)}</div>
+        <div>Avg Miles per Ticket: {control.avgMiles.toFixed(1)}</div>
+        <div>On-Time %: {control.onTimePct.toFixed(1)}%</div>
+      </div>
+
       <div className="overflow-auto rounded-xl border">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left">
             <tr>
-              {["Date","Driver","Truck","Customer","Account","Qty","Price","Tax","Amount","Status","Files",""].map(h => (<th key={h} className="px-3 py-2">{h}</th>))}
+              {["Date","Truck","Driver","TicketID","Customer","Gallons","Scheduled","Arrival","Departure","Odo Start","Odo End","Miles","On-Time","Account","Qty","Price","Tax","Amount","Status","Files",""].map(h => (<th key={h} className="px-3 py-2 text-xs">{h}</th>))}
             </tr>
           </thead>
           <tbody>
             {tickets.map((t) => (
               <tr key={t.id} className="border-t">
-                <td className="px-3 py-2"><input type="date" value={t.date || ""} onChange={e => update(t.id, "date", e.target.value)} className="input" /></td>
-                <td className="px-3 py-2"><input value={t.driver || ""} onChange={e => update(t.id, "driver", e.target.value)} className="input" /></td>
-                <td className="px-3 py-2"><input value={t.truck || ""} onChange={e => update(t.id, "truck", e.target.value)} className="input" /></td>
-                <td className="px-3 py-2"><input value={t.customerName || ""} onChange={e => update(t.id, "customerName", e.target.value)} className="input" /></td>
-                <td className="px-3 py-2"><input value={t.account || ""} onChange={e => update(t.id, "account", e.target.value)} className="input" /></td>
-                <td className="px-3 py-2"><input value={t.qty || 0} type="number" onChange={e => update(t.id, "qty", e.target.value)} className="input" /></td>
-                <td className="px-3 py-2"><input value={t.price || 0} type="number" onChange={e => update(t.id, "price", e.target.value)} className="input" /></td>
-                <td className="px-3 py-2"><input value={t.tax || 0} type="number" onChange={e => update(t.id, "tax", e.target.value)} className="input" /></td>
-                <td className="px-3 py-2"><input value={t.amount || 0} type="number" onChange={e => update(t.id, "amount", e.target.value)} className="input" /></td>
+                <td className="px-3 py-2"><input type="date" value={t.date || ""} onChange={e => update(t.id, "date", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.truck || ""} onChange={e => update(t.id, "truck", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.driver || ""} onChange={e => update(t.id, "driver", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.ticket_id || ""} onChange={e => update(t.id, "ticket_id", e.target.value)} className="input text-xs" placeholder="Ticket ID" /></td>
+                <td className="px-3 py-2"><input value={t.customerName || ""} onChange={e => update(t.id, "customerName", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.gallons_delivered || 0} type="number" step="0.1" onChange={e => update(t.id, "gallons_delivered", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input type="datetime-local" value={t.scheduled_window_start ? new Date(t.scheduled_window_start).toISOString().slice(0, 16) : ""} onChange={e => update(t.id, "scheduled_window_start", e.target.value ? new Date(e.target.value).toISOString() : null)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input type="datetime-local" value={t.arrival_time ? new Date(t.arrival_time).toISOString().slice(0, 16) : ""} onChange={e => update(t.id, "arrival_time", e.target.value ? new Date(e.target.value).toISOString() : null)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input type="datetime-local" value={t.departure_time ? new Date(t.departure_time).toISOString().slice(0, 16) : ""} onChange={e => update(t.id, "departure_time", e.target.value ? new Date(e.target.value).toISOString() : null)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.odometer_start || ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_start", e.target.value)} className="input text-xs" placeholder="Start" /></td>
+                <td className="px-3 py-2"><input value={t.odometer_end || ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_end", e.target.value)} className="input text-xs" placeholder="End" /></td>
+                <td className="px-3 py-2"><span className="text-xs font-mono">{t.miles_driven != null ? Number(t.miles_driven).toFixed(1) : "-"}</span></td>
+                <td className="px-3 py-2 text-center">
+                  {t.on_time_flag === 1 && <span title="On Time">✅</span>}
+                  {t.on_time_flag === 0 && <span title="Late">⏱️</span>}
+                  {t.on_time_flag == null && <span className="text-slate-400">-</span>}
+                </td>
+                <td className="px-3 py-2"><input value={t.account || ""} onChange={e => update(t.id, "account", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.qty || 0} type="number" onChange={e => update(t.id, "qty", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.price || 0} type="number" step="0.01" onChange={e => update(t.id, "price", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.tax || 0} type="number" step="0.01" onChange={e => update(t.id, "tax", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.amount || 0} type="number" step="0.01" onChange={e => update(t.id, "amount", e.target.value)} className="input text-xs" /></td>
                 <td className="px-3 py-2">
-                  <select value={t.status || "draft"} onChange={e => update(t.id, "status", e.target.value)}>
+                  <select value={t.status || "draft"} onChange={e => update(t.id, "status", e.target.value)} className="text-xs">
                     <option value="draft">draft</option>
                     <option value="posted">posted</option>
                   </select>
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <button className="rounded-lg border px-2 py-1" onClick={() => startAttach(t.id)}>Upload</button>
+                    <button className="rounded-lg border px-2 py-1 text-xs" onClick={() => startAttach(t.id)}>Upload</button>
                     <div>
                       {(attachmentsMap[t.id] || []).slice(0,3).map(a => (
                         <div key={a.id} style={{ display: "inline-block", marginRight: 6 }}>
-                          <button onClick={() => openAttachment(a.storage_key)} className="text-sky-600">{a.filename}</button>
+                          <button onClick={() => openAttachment(a.storage_key)} className="text-sky-600 text-xs">{a.filename}</button>
                         </div>
                       ))}
                     </div>
                   </div>
                 </td>
                 <td className="px-3 py-2">
-                  <button className="text-red-600" onClick={() => remove(t.id)}>Remove</button>
+                  <button className="text-red-600 text-xs" onClick={() => remove(t.id)}>Remove</button>
                 </td>
               </tr>
             ))}
             {!tickets.length && (
-              <tr><td colSpan={11} className="px-3 py-6 text-center text-slate-500">No tickets yet.</td></tr>
+              <tr><td colSpan={21} className="px-3 py-6 text-center text-slate-500">No tickets yet.</td></tr>
             )}
           </tbody>
         </table>
