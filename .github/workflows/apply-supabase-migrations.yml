@@ -1,0 +1,75 @@
+name: Apply Supabase Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration_file:
+        description: "Optional single migration file (e.g. sql/2025-10-16_safe_roles_permissions_extension.sql)"
+        required: false
+        default: ""
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate selection
+        id: select
+        run: |
+          set -euo pipefail
+          MF="${{ github.event.inputs.migration_file }}"
+          if [ -n "$MF" ]; then
+            if [ ! -f "$MF" ]; then
+              echo "::error::Specified migration file not found: $MF"
+              exit 1
+            fi
+            echo "files=$MF" >> $GITHUB_OUTPUT
+            echo "Selected migration: $MF"
+          else
+            if [ ! -d "sql" ] || [ -z "$(ls -A sql/*.sql 2>/dev/null)" ]; then
+              echo "::error::No SQL migration files found in sql/ directory"
+              exit 1
+            fi
+            ls -1 sql/*.sql > /tmp/migs.txt
+            echo "Selected migrations:"
+            cat /tmp/migs.txt
+            echo "files=$(paste -sd ' ' /tmp/migs.txt)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Safety scan (no destructive DDL)
+        run: |
+          set -euo pipefail
+          FILES="${{ steps.select.outputs.files }}"
+          echo "Scanning: $FILES"
+          BAD=$(grep -Ei "DROP TABLE|ALTER TABLE .* DROP" $FILES || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::Potential destructive statements detected:"
+            echo "$BAD"
+            exit 1
+          fi
+          echo "✓ Safety scan passed - no destructive DDL detected"
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply migrations
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set. Please add it in repository settings."
+            exit 1
+          fi
+          FILES="${{ steps.select.outputs.files }}"
+          echo "Applying migrations with ON_ERROR_STOP=1..."
+          for f in $FILES; do
+            echo "==== Applying $f ===="
+            start=$(date +%s)
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+            end=$(date +%s)
+            echo "==== Done $f in $((end-start))s ===="
+          done
+          echo "✓ All migrations applied successfully"

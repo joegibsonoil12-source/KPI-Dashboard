@@ -166,3 +166,7 @@ This migration performs **no destructive operations**:
 - No ALTER TABLE DROP COLUMN
 - No data deletion
 - All changes are additive and backward compatible
+
+## Applying Migrations via GitHub Actions
+
+Add secret `SUPABASE_DB_URL` (Postgres connection string) in repository settings. Then run the "Apply Supabase Migrations" workflow (Actions > Apply Supabase Migrations > Run workflow). Provide a specific `migration_file` for a single file or leave blank to apply all. The workflow blocks if it detects potentially destructive `DROP TABLE` or `ALTER TABLE ... DROP` statements.
