@@ -123,3 +123,46 @@ npm install
 npm run dev
 ```
 Commit to main
+
+## Fuel Budgets & Roles Migration
+
+A new additive migration file is provided at:
+```
+sql/2025-10-16_safe_roles_permissions_extension.sql
+```
+
+Apply it in the Supabase SQL Editor (copy/paste entire file). It is idempotent and safe to re-run.
+
+### Verification
+
+After applying the migration, verify the setup:
+```sql
+SELECT system_health_summary();
+```
+
+### Objects Created (only if missing)
+
+The migration creates the following objects conditionally:
+
+- **app_roles table** - User role assignments (admin, manager, editor, viewer)
+- **audit_log table** - Audit trail for delivery_tickets changes
+- **Audit triggers** - Automatic logging of INSERT/UPDATE/DELETE on delivery_tickets
+- **dim_product table** - Product dimension with baseline seeds (PROPANE, OFF_DIESEL, HWY_DIESEL, FUEL_OIL_2, UNLEADED)
+- **mapping_ticket_product table** - Maps raw product names to normalized products
+- **fuel_budgets table** - Monthly fuel budgets by store and product with RLS enabled
+- **Views**:
+  - `ticket_products_normalized` - Delivery tickets with normalized product names
+  - `view_ticket_metrics_monthly` - Monthly aggregated ticket metrics
+  - `fuel_budget_vs_actual` - Budget vs actual comparison with variance calculations
+- **RLS Policies**:
+  - fuel_budgets: SELECT (all), INSERT (admin/manager), UPDATE (admin/manager/owner), DELETE (admin only)
+  - delivery_tickets: SELECT (all), INSERT (role-based), UPDATE (role/owner), DELETE (admin/manager)
+- **Function**: `system_health_summary()` - Returns JSON snapshot of system status
+
+### No Destructive Operations
+
+This migration performs **no destructive operations**:
+- No DROP TABLE or TRUNCATE
+- No ALTER TABLE DROP COLUMN
+- No data deletion
+- All changes are additive and backward compatible
