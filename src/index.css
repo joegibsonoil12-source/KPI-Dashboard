@@ -6,9 +6,49 @@
 /* App-level tweaks (optional) */
 html, body, #root {
   height: 100%;
+  overflow-x: hidden; /* Prevent horizontal scrollbar at root level */
 }
 
 body {
   /* provides a neutral background if Tailwind classes don't override */
   background-color: #f8fafc; /* slate-50 */
+}
+
+/* Delivery Tickets utilities - prevent horizontal overflow */
+:root {
+  --dt-font-size: clamp(12px, 0.9vw, 14px);
+  --dt-cell-padding: 0.5rem;
+}
+
+.dt-page {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+.dt-table-wrap {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+.dt-table {
+  table-layout: fixed;
+  width: 100%;
+  font-size: var(--dt-font-size);
+}
+
+.dt-th,
+.dt-td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: var(--dt-cell-padding);
+}
+
+.dt-analytics {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
