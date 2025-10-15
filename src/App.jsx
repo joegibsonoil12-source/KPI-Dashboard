@@ -8,6 +8,7 @@
 import React, { useEffect, useMemo, useState, useContext, useCallback } from "react";
 import { supabase } from "./lib/supabaseClient";
 import Procedures from "./tabs/Procedures_v3";
+import DeliveryTicketsEditor from "./components/DeliveryTickets";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -860,7 +861,7 @@ const TABS = [
   { key: "procedures",   label: "Procedures",       adminOnly: false, Component: Procedures },
   // Admin-only group:
   { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,  Component: StoreInvoicing },
-  { key: "tickets",      label: "Delivery Tickets", adminOnly: true,  Component: DeliveryTickets },
+  { key: "tickets",      label: "Delivery Tickets", adminOnly: true,  Component: DeliveryTicketsEditor },
 ];
 
 /* ========================================================================== */
