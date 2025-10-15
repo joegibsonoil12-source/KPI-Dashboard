@@ -229,6 +229,57 @@ The `DeliveryTickets.jsx` component has been updated to:
 - Auto-compute `on_time_flag` when arrival and scheduled times are entered
 - Show summary metrics (Total Gallons, Avg Miles per Ticket, On-Time %)
 
+## Migration: 2025-10-16_add_hazmat_fee.sql
+
+**Purpose:** Adds `hazmat_fee` column to the `delivery_tickets` table for tracking hazardous material fees separately from tax.
+
+**Date:** 2025-10-16
+
+**What it does:**
+- Adds `hazmat_fee` column (numeric, nullable) to `delivery_tickets` table
+- Optional: Creates index on `hazmat_fee` for performance (commented out by default)
+- Includes verification queries to confirm successful migration
+
+### New Column Added
+
+1. **hazmat_fee** (numeric) - Hazardous material fee (separate from tax)
+
+### Key Features
+
+- **Idempotent:** Safe to run multiple times without errors
+- **Non-destructive:** Only adds column, never removes existing data
+- **Backward compatible:** Existing rows will have null values for hazmat_fee
+- **Amount calculation:** Frontend automatically includes hazmat_fee in amount: qty * price + tax + hazmat_fee
+
+### Running the Migration
+
+1. Open Supabase SQL Editor
+2. Copy and paste the contents of `2025-10-16_add_hazmat_fee.sql`
+3. Click "Run"
+4. Verify column was added successfully using the verification queries at the end of the file
+
+### Frontend Integration
+
+The `DeliveryTickets.jsx` component has been updated to:
+- Display hazmat_fee field in the table (after Tax column)
+- Auto-compute `amount` when hazmat_fee is entered
+- Include hazmat_fee in CSV and Excel exports
+- Persist hazmat_fee via autosave and manual save
+
+### Verification
+
+After running the migration:
+```sql
+-- Verify hazmat_fee column exists:
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns 
+WHERE table_schema = 'public' 
+  AND table_name = 'delivery_tickets'
+  AND column_name = 'hazmat_fee';
+
+-- Should return: hazmat_fee | numeric | YES
+```
+
 ## Additional Migrations
 
 Other migrations in this directory:

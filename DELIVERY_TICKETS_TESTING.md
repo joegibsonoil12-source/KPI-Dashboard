@@ -29,7 +29,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 ---
 
 ### 2. Edit Numeric Fields - Amount Auto-Calculation
-**Expected:** Amount recalculates automatically when Qty, Price, or Tax changes
+**Expected:** Amount recalculates automatically when Qty, Price, Tax, or Hazmat Fee changes
 
 **Steps:**
 1. Select any ticket row
@@ -46,7 +46,36 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 3. Datetime Fields - No Timezone Shift
+### 3. Hazmat Fee Field - Integrated with Amount Calculation
+**Expected:** Hazmat Fee edits update local state, autosave, and amount calculation
+
+**Steps:**
+1. Select any ticket row with existing Qty and Price (e.g., Qty=100, Price=2.50)
+2. Enter Hazmat Fee = 10.00
+3. Verify:
+   - Hazmat Fee appears immediately in UI
+   - Amount recalculates to include hazmat fee: $260.00 (100 * 2.50 + 0 + 10.00)
+   - SaveBar appears showing "Unsaved changes"
+4. Wait 2-3 seconds for autosave
+5. Verify SaveBar shows "✓ Saved at HH:MM:SS"
+6. Refresh the page
+7. Verify Hazmat Fee persists: 10.00
+8. Change Hazmat Fee to 15.00
+9. Verify Amount updates to: $265.00 (100 * 2.50 + 0 + 15.00)
+10. Clear Hazmat Fee field (leave blank)
+11. Verify Amount updates to: $250.00 (100 * 2.50 + 0 + 0)
+12. Click "Save" button on SaveBar
+13. Verify changes save immediately
+14. Export CSV
+15. Open CSV and verify "hazmat_fee" column exists after "tax" column
+16. Export Excel
+17. Open Excel and verify "Hazmat Fee" column exists after "Tax" column
+
+**Pass Criteria:** ✅ Hazmat Fee integrates with autosave, manual save, amount calculation, refresh resilience, and exports
+
+---
+
+### 4. Datetime Fields - No Timezone Shift
 **Expected:** Local time entered is what displays (UTC conversion handled internally)
 
 **Steps:**
@@ -62,7 +91,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 4. Odometer and Miles Calculation
+### 5. Odometer and Miles Calculation
 **Expected:** Miles driven calculates from odometer readings
 
 **Steps:**
@@ -79,7 +108,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 5. On-Time Flag Calculation
+### 6. On-Time Flag Calculation
 **Expected:** On-time status based on 5-minute grace period
 
 **Steps:**
@@ -96,7 +125,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 6. Date Filters
+### 7. Date Filters
 **Expected:** Table filters by selected date range
 
 **Steps:**
@@ -119,7 +148,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 7. Truck Selector
+### 8. Truck Selector
 **Expected:** Metrics and table filter by selected truck
 
 **Steps:**
@@ -138,7 +167,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 8. Per-Truck Breakdown Table
+### 9. Per-Truck Breakdown Table
 **Expected:** Shows summary metrics for each truck
 
 **Steps:**
@@ -157,7 +186,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 9. CSV Export
+### 10. CSV Export
 **Expected:** Downloads CSV file with filtered tickets
 
 **Steps:**
@@ -168,14 +197,14 @@ This guide provides step-by-step instructions for manual smoke testing of the De
    - CSV file downloads (check Downloads folder)
    - Filename includes filter info: `delivery-tickets-{filter}-{truck}-{date}.csv`
    - Open CSV in text editor or Excel
-   - Headers: date, truck, driver, ticket_id, customerName, gallons_delivered, account, qty, price, tax, amount, status
+   - Headers: date, truck, driver, ticket_id, customerName, gallons_delivered, account, qty, price, tax, hazmat_fee, amount, status
    - Data rows match visible filtered tickets
 
 **Pass Criteria:** ✅ CSV exports with correct headers and filtered data
 
 ---
 
-### 10. Excel Export
+### 11. Excel Export
 **Expected:** Downloads XLSX file with filtered tickets
 
 **Steps:**
@@ -187,14 +216,14 @@ This guide provides step-by-step instructions for manual smoke testing of the De
    - Filename includes filter info: `delivery-tickets-{filter}-{truck}-{date}.xlsx`
    - Open in Excel or compatible app
    - Sheet named "Tickets"
-   - Headers: Date, Truck, Driver, Ticket ID, Customer, Gallons Delivered, Account, Qty, Price, Tax, Amount, Status
+   - Headers: Date, Truck, Driver, Ticket ID, Customer, Gallons Delivered, Account, Qty, Price, Tax, Hazmat Fee, Amount, Status
    - Data rows match visible filtered tickets
 
 **Pass Criteria:** ✅ Excel exports with Tickets sheet and filtered data
 
 ---
 
-### 11. Charts - Gallons and Revenue
+### 12. Charts - Gallons and Revenue
 **Expected:** Line charts show daily trends for filtered period
 
 **Steps:**
@@ -219,7 +248,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 12. Responsive Layout
+### 13. Responsive Layout
 **Expected:** Table adapts to screen size without horizontal scrollbar on typical screens
 
 **Steps:**
@@ -227,7 +256,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 2. Toggle device emulation / responsive mode
 3. Test at different widths:
    - Mobile (375px): Should show Date, Truck, Customer, Gallons, Qty, Price, Amount, Remove
-   - Tablet (768px): Should add Driver, Account, Tax
+   - Tablet (768px): Should add Driver, Account, Tax, Hazmat
    - Desktop (1024px): Should add TicketID, Status
    - Large Desktop (1280px): Should add On-Time, Files
    - Extra Large (1536px): Should show all columns including datetime and odometer fields
@@ -238,7 +267,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 13. Attachment Upload and View
+### 14. Attachment Upload and View
 **Expected:** Can upload files and download via signed URL
 
 **Steps:**
@@ -254,7 +283,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 14. Delete Ticket
+### 15. Delete Ticket
 **Expected:** Ticket removed after confirmation
 
 **Steps:**
@@ -274,7 +303,7 @@ This guide provides step-by-step instructions for manual smoke testing of the De
 
 ---
 
-### 15. Error Handling
+### 16. Error Handling
 **Expected:** Detailed error messages when operations fail
 
 **Steps:**
@@ -305,7 +334,7 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 
 ---
 
-### 16. Autosave & Manual Save
+### 17. Autosave & Manual Save
 **Expected:** Changes save automatically after 2 seconds, manual save/discard works, refresh protection enabled
 
 **Steps:**
@@ -337,7 +366,7 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 
 ---
 
-### 17. Refresh Protection
+### 18. Refresh Protection
 **Expected:** Unsaved changes persist across page refresh
 
 **Steps:**
@@ -355,7 +384,7 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 
 ---
 
-### 18. Offline Resilience
+### 19. Offline Resilience
 **Expected:** Edits persist locally when offline, save when online
 
 **Steps:**
@@ -380,7 +409,7 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 
 ---
 
-### 19. Batch Updates
+### 20. Batch Updates
 **Expected:** Multiple edits across many rows are batched and saved together
 
 **Steps:**
@@ -398,7 +427,7 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 
 ---
 
-### 20. Error Handling During Save
+### 21. Error Handling During Save
 **Expected:** Save errors are displayed, draft persists for retry
 
 **Steps:**
@@ -418,7 +447,7 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 
 ---
 
-### 21. Computed Fields in Autosave
+### 22. Computed Fields in Autosave
 **Expected:** Computed fields (amount, miles, on_time_flag) are included in autosaved updates
 
 **Steps:**
@@ -438,7 +467,7 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 
 ---
 
-### 22. Add Blank Ticket (No Duplicate Key Error)
+### 23. Add Blank Ticket (No Duplicate Key Error)
 **Expected:** Adding blank ticket does not fail with unique constraint error
 
 **Steps:**
@@ -460,7 +489,8 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 ## Summary Checklist
 
 - [ ] Add blank ticket (no error, null values)
-- [ ] Amount auto-calculates from qty*price+tax
+- [ ] Amount auto-calculates from qty*price+tax+hazmat_fee
+- [ ] Hazmat Fee integrates with autosave, amount calculation, and exports
 - [ ] Datetime fields show local time (no shift)
 - [ ] Miles calculates from odometer values
 - [ ] On-time flag calculates with 5-min grace
