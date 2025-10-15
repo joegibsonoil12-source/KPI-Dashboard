@@ -4,6 +4,7 @@ import {
   fetchTickets,
   insertTicket,
   updateTicket,
+  updateTicketBatchSequential,
   deleteTicket,
   uploadAttachmentFile,
   insertAttachmentMetadata,
@@ -14,6 +15,8 @@ import { toLocalDateTimeInputValue, fromLocalDateTimeInputValue } from "../lib/d
 import { computeMetrics, computePerTruck, getUniqueTrucks } from "../lib/metrics";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
+import { useAutosave } from "../lib/useAutosave";
+import SaveBar from "./SaveBar";
 
 /*
 DeliveryTickets (Supabase-backed)
@@ -31,11 +34,34 @@ export default function DeliveryTickets() {
   const [uploadingFor, setUploadingFor] = useState(null);
   const [attachmentsMap, setAttachmentsMap] = useState({}); // ticketId -> [attachments]
   
+  // Autosave: pending changes map { ticketId: { field: value, ... } }
+  const [pendingChanges, setPendingChanges] = useState({});
+  
   // Filtering state
   const [dateFilter, setDateFilter] = useState("all"); // all | today | week | month | year | custom
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [selectedTruck, setSelectedTruck] = useState("ALL"); // ALL | specific truck
+
+  // Autosave hook
+  const autosave = useAutosave({
+    storageKey: "delivery-tickets-draft",
+    delayMs: 2000,
+    serializeDraft: (data) => JSON.stringify(data),
+    deserializeDraft: (str) => JSON.parse(str),
+    onFlush: async (changesById) => {
+      // Flush all pending changes to Supabase
+      const results = await updateTicketBatchSequential(changesById);
+      
+      // Check for any errors
+      const errors = Object.entries(results).filter(([_, result]) => !result.success);
+      if (errors.length > 0) {
+        console.error("Some ticket updates failed:", errors);
+        // Throw to trigger error state in autosave
+        throw new Error(`Failed to save ${errors.length} ticket(s). See console for details.`);
+      }
+    },
+  });
 
   // Filtering logic
   const filteredByDate = useMemo(() => {
@@ -122,7 +148,30 @@ export default function DeliveryTickets() {
       try {
         const rows = await fetchTickets();
         if (!mounted) return;
-        setTickets(rows);
+        
+        // Load any persisted draft and merge into state
+        const draft = autosave.loadDraft();
+        if (draft) {
+          // Apply draft changes to loaded rows
+          const mergedRows = rows.map(row => {
+            if (draft[row.id]) {
+              return { ...row, ...draft[row.id] };
+            }
+            return row;
+          });
+          setTickets(mergedRows);
+          setPendingChanges(draft);
+          
+          // Schedule autosave flush for rehydrated changes
+          setTimeout(() => {
+            if (mounted) {
+              autosave.queueChanges(draft);
+            }
+          }, 100);
+        } else {
+          setTickets(rows);
+        }
+        
         // load attachments for visible rows (small optimization)
         // Make attachment fetching non-fatal - wrap each call in try/catch
         const map = {};
@@ -153,7 +202,7 @@ export default function DeliveryTickets() {
       date: new Date().toISOString().slice(0, 10),
       driver: "", 
       truck: "", 
-      truck_id: "", // legacy
+      truck_id: null, // legacy - use null to avoid unique constraint on empty string
       customerName: "", 
       customer_name: "", // legacy
       account: "",
@@ -163,8 +212,8 @@ export default function DeliveryTickets() {
       amount: null, 
       status: "draft", 
       notes: "",
-      ticket_id: "",
-      ticket_no: "", // legacy
+      ticket_id: null, // use null to avoid unique constraint on empty string
+      ticket_no: null, // legacy - use null to avoid unique constraint on empty string
       gallons: null, // legacy
       gallons_delivered: null,
       price_per_gallon: null, // legacy
@@ -197,95 +246,66 @@ export default function DeliveryTickets() {
       ? (val === "" || val == null ? null : Number(val))
       : val;
     
-    // Update local state with computed fields
+    // Prepare update payload with computed fields
+    const payload = { [key]: nextVal };
+    
+    // Get current ticket state to compute derived fields
+    const ticket = tickets.find(t => t.id === id);
+    if (!ticket) return;
+    
+    // Include auto-calculated amount in update
+    if (key === "qty" || key === "price" || key === "tax") {
+      const qty = key === "qty" ? (nextVal || 0) : (ticket.qty || 0);
+      const price = key === "price" ? (nextVal || 0) : (ticket.price || 0);
+      const tax = key === "tax" ? (nextVal || 0) : (ticket.tax || 0);
+      payload.amount = qty * price + tax;
+    }
+    
+    // Include computed fields in update if they were computed
+    if (key === "odometer_start" || key === "odometer_end") {
+      const start = key === "odometer_start" ? nextVal : ticket.odometer_start;
+      const end = key === "odometer_end" ? nextVal : ticket.odometer_end;
+      if (start != null && end != null && start !== "" && end !== "") {
+        payload.miles_driven = Number(end) - Number(start);
+      } else {
+        payload.miles_driven = null;
+      }
+    }
+    
+    if (key === "scheduled_window_start" || key === "arrival_time") {
+      const scheduled = key === "scheduled_window_start" ? nextVal : ticket.scheduled_window_start;
+      const arrival = key === "arrival_time" ? nextVal : ticket.arrival_time;
+      if (scheduled && arrival) {
+        const scheduledDate = new Date(scheduled);
+        const arrivalDate = new Date(arrival);
+        const graceMs = 5 * 60 * 1000;
+        payload.on_time_flag = arrivalDate <= new Date(scheduledDate.getTime() + graceMs) ? 1 : 0;
+      } else {
+        payload.on_time_flag = null;
+      }
+    }
+    
+    // Update local state immediately for responsiveness
     setTickets(ts => ts.map(t => {
       if (t.id !== id) return t;
-      const updated = { ...t, [key]: nextVal };
-      
-      // Auto-calculate amount when qty, price, or tax changes
-      if (key === "qty" || key === "price" || key === "tax") {
-        const qty = key === "qty" ? (nextVal || 0) : (t.qty || 0);
-        const price = key === "price" ? (nextVal || 0) : (t.price || 0);
-        const tax = key === "tax" ? (nextVal || 0) : (t.tax || 0);
-        updated.amount = qty * price + tax;
-      }
-      
-      // Compute miles_driven if odometer values change
-      if (key === "odometer_start" || key === "odometer_end") {
-        const start = key === "odometer_start" ? nextVal : t.odometer_start;
-        const end = key === "odometer_end" ? nextVal : t.odometer_end;
-        if (start != null && end != null && start !== "" && end !== "") {
-          updated.miles_driven = Number(end) - Number(start);
-        } else {
-          updated.miles_driven = null;
-        }
-      }
-      
-      // Compute on_time_flag if scheduled or arrival changes
-      if (key === "scheduled_window_start" || key === "arrival_time") {
-        const scheduled = key === "scheduled_window_start" ? nextVal : t.scheduled_window_start;
-        const arrival = key === "arrival_time" ? nextVal : t.arrival_time;
-        if (scheduled && arrival) {
-          const scheduledDate = new Date(scheduled);
-          const arrivalDate = new Date(arrival);
-          const graceMs = 5 * 60 * 1000; // 5 minutes in milliseconds
-          updated.on_time_flag = arrivalDate <= new Date(scheduledDate.getTime() + graceMs) ? 1 : 0;
-        } else {
-          updated.on_time_flag = null;
-        }
-      }
-      
-      return updated;
+      return { ...t, ...payload };
     }));
     
-    try {
-      // Prepare update payload with computed fields
-      const payload = { [key]: nextVal };
+    // Queue changes for autosave
+    setPendingChanges(prev => {
+      const updated = {
+        ...prev,
+        [id]: {
+          ...(prev[id] || {}),
+          ...payload,
+        },
+      };
       
-      // Get current ticket state to compute derived fields
-      const ticket = tickets.find(t => t.id === id);
-      if (!ticket) return;
+      // Queue autosave
+      autosave.queueChanges(updated);
       
-      // Include auto-calculated amount in update
-      if (key === "qty" || key === "price" || key === "tax") {
-        const qty = key === "qty" ? (nextVal || 0) : (ticket.qty || 0);
-        const price = key === "price" ? (nextVal || 0) : (ticket.price || 0);
-        const tax = key === "tax" ? (nextVal || 0) : (ticket.tax || 0);
-        payload.amount = qty * price + tax;
-      }
-      
-      // Include computed fields in update if they were computed
-      if (key === "odometer_start" || key === "odometer_end") {
-        const start = key === "odometer_start" ? nextVal : ticket.odometer_start;
-        const end = key === "odometer_end" ? nextVal : ticket.odometer_end;
-        if (start != null && end != null && start !== "" && end !== "") {
-          payload.miles_driven = Number(end) - Number(start);
-        } else {
-          payload.miles_driven = null;
-        }
-      }
-      
-      if (key === "scheduled_window_start" || key === "arrival_time") {
-        const scheduled = key === "scheduled_window_start" ? nextVal : ticket.scheduled_window_start;
-        const arrival = key === "arrival_time" ? nextVal : ticket.arrival_time;
-        if (scheduled && arrival) {
-          const scheduledDate = new Date(scheduled);
-          const arrivalDate = new Date(arrival);
-          const graceMs = 5 * 60 * 1000;
-          payload.on_time_flag = arrivalDate <= new Date(scheduledDate.getTime() + graceMs) ? 1 : 0;
-        } else {
-          payload.on_time_flag = null;
-        }
-      }
-      
-      await updateTicket(id, payload);
-    } catch (e) {
-      console.error("Update failed:", e);
-      const errorMsg = e.message || e.error_description || JSON.stringify(e);
-      alert(`Update failed: ${errorMsg}. Reloading list.`);
-      const fresh = await fetchTickets();
-      setTickets(fresh);
-    }
+      return updated;
+    });
   }
 
   async function remove(id) {
@@ -294,9 +314,44 @@ export default function DeliveryTickets() {
       await deleteTicket(id);
       setTickets(ts => ts.filter(t => t.id !== id));
       setAttachmentsMap(m => { const copy = { ...m }; delete copy[id]; return copy; });
+      
+      // Clear pending changes for deleted ticket
+      setPendingChanges(prev => {
+        const updated = { ...prev };
+        delete updated[id];
+        if (Object.keys(updated).length > 0) {
+          autosave.queueChanges(updated);
+        } else {
+          autosave.discard();
+        }
+        return updated;
+      });
     } catch (e) {
       console.error(e);
       alert("Delete failed.");
+    }
+  }
+
+  // SaveBar handlers
+  async function handleSaveNow() {
+    await autosave.saveNow();
+    setPendingChanges({});
+  }
+
+  async function handleDiscard() {
+    if (!confirm("Discard all unsaved changes? This will reload data from the server.")) return;
+    
+    // Clear pending changes
+    setPendingChanges({});
+    autosave.discard();
+    
+    // Reload fresh data from server
+    try {
+      const fresh = await fetchTickets();
+      setTickets(fresh);
+    } catch (e) {
+      console.error("Failed to reload tickets:", e);
+      alert("Failed to reload tickets. Please refresh the page.");
     }
   }
 
@@ -504,6 +559,16 @@ export default function DeliveryTickets() {
 
   return (
     <div className="dt-page space-y-6">
+      {/* SaveBar for manual save/discard */}
+      <SaveBar
+        visible={autosave.hasUnsavedChanges}
+        isSaving={autosave.isSaving}
+        lastSavedAt={autosave.lastSavedAt}
+        error={autosave.error}
+        onSave={handleSaveNow}
+        onDiscard={handleDiscard}
+      />
+      
       <header className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Delivery Tickets</h2>
         <div className="flex items-center gap-2">

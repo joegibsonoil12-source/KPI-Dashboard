@@ -305,6 +305,158 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 
 ---
 
+### 16. Autosave & Manual Save
+**Expected:** Changes save automatically after 2 seconds, manual save/discard works, refresh protection enabled
+
+**Steps:**
+1. Navigate to Delivery Tickets tab
+2. Edit a ticket field (e.g., change Qty to 100)
+3. Observe:
+   - Change appears immediately in the UI
+   - SaveBar appears at bottom of screen showing "Unsaved changes"
+4. Wait 2-3 seconds without editing
+5. Verify:
+   - SaveBar shows spinner "Saving..."
+   - After save completes, shows "✓ Saved at HH:MM:SS"
+   - SaveBar remains visible (doesn't disappear)
+6. Edit another field in a different ticket
+7. Verify SaveBar shows "Unsaved changes" again
+8. Click "Save" button on SaveBar
+9. Verify:
+   - Changes save immediately (no 2-second wait)
+   - SaveBar shows "✓ Saved at HH:MM:SS"
+10. Edit a field again
+11. Click "Discard" button on SaveBar
+12. Confirm in the dialog
+13. Verify:
+    - Field reverts to original value
+    - SaveBar disappears
+    - Data reloaded from server
+
+**Pass Criteria:** ✅ Autosave works, manual save/discard work, status updates correctly
+
+---
+
+### 17. Refresh Protection
+**Expected:** Unsaved changes persist across page refresh
+
+**Steps:**
+1. Navigate to Delivery Tickets tab
+2. Edit multiple fields across several tickets
+3. Before autosave triggers (within 2 seconds), refresh the page
+4. On beforeunload dialog, click "Leave" or allow refresh
+5. After page reloads:
+   - Verify edited values are still present in the UI
+   - Verify SaveBar appears showing changes will be saved
+6. Wait 2-3 seconds
+7. Verify changes are saved to server automatically
+
+**Pass Criteria:** ✅ Unsaved changes rehydrate from localStorage after refresh
+
+---
+
+### 18. Offline Resilience
+**Expected:** Edits persist locally when offline, save when online
+
+**Steps:**
+1. Navigate to Delivery Tickets tab
+2. Open browser DevTools (F12) > Network tab
+3. Toggle "Offline" mode in DevTools
+4. Edit several ticket fields
+5. Verify:
+   - Changes appear in UI immediately
+   - SaveBar shows "Unsaved changes"
+6. Wait for autosave to attempt (2 seconds)
+7. Verify:
+   - SaveBar shows "⚠️ Save failed" error
+   - Changes remain in UI (not lost)
+8. Toggle "Online" mode in DevTools
+9. Click "Save" button on SaveBar
+10. Verify:
+    - Changes save successfully
+    - SaveBar shows "✓ Saved at HH:MM:SS"
+
+**Pass Criteria:** ✅ Changes persist during offline, save when online
+
+---
+
+### 19. Batch Updates
+**Expected:** Multiple edits across many rows are batched and saved together
+
+**Steps:**
+1. Navigate to Delivery Tickets tab
+2. Quickly edit 5 different tickets (different fields)
+3. Wait for autosave to trigger (2 seconds after last edit)
+4. Open browser DevTools > Network tab
+5. Filter by "delivery_tickets" requests
+6. Verify:
+   - Multiple update requests are made (one per ticket ID)
+   - All happen within autosave flush operation
+   - No per-keystroke requests during rapid editing
+
+**Pass Criteria:** ✅ Changes batch correctly, no per-keystroke saves
+
+---
+
+### 20. Error Handling During Save
+**Expected:** Save errors are displayed, draft persists for retry
+
+**Steps:**
+1. Navigate to Delivery Tickets tab
+2. Edit a ticket field
+3. Simulate save failure (if possible, or use offline mode)
+4. Wait for autosave attempt
+5. Verify:
+   - SaveBar shows "⚠️ Save failed" with error message
+   - Changes remain in UI (not reverted)
+   - Draft remains in localStorage
+6. Fix the issue (e.g., go back online)
+7. Click "Save" button
+8. Verify changes save successfully
+
+**Pass Criteria:** ✅ Errors displayed, draft persists for retry
+
+---
+
+### 21. Computed Fields in Autosave
+**Expected:** Computed fields (amount, miles, on_time_flag) are included in autosaved updates
+
+**Steps:**
+1. Navigate to Delivery Tickets tab
+2. Edit Qty = 50, Price = 3.00, Tax = 2.00
+3. Verify Amount shows $152.00 immediately
+4. Wait for autosave
+5. Refresh the page
+6. Verify Amount still shows $152.00 (saved correctly)
+7. Edit Odometer Start = 1000, Odometer End = 1050
+8. Verify Miles shows 50.0 immediately
+9. Wait for autosave
+10. Refresh the page
+11. Verify Miles still shows 50.0 (saved correctly)
+
+**Pass Criteria:** ✅ Computed fields save correctly with autosave
+
+---
+
+### 22. Add Blank Ticket (No Duplicate Key Error)
+**Expected:** Adding blank ticket does not fail with unique constraint error
+
+**Steps:**
+1. Navigate to Delivery Tickets tab
+2. Click "Add ticket" button
+3. Verify:
+   - No error alert appears
+   - New ticket row is created
+   - ticket_no and ticket_id fields are null (not empty string)
+4. Add another blank ticket
+5. Verify:
+   - No duplicate key error
+   - Second ticket is created successfully
+
+**Pass Criteria:** ✅ Multiple blank tickets can be added without constraint errors
+
+---
+
 ## Summary Checklist
 
 - [ ] Add blank ticket (no error, null values)
@@ -322,6 +474,15 @@ GitHub Actions workflows (.github/workflows/ci.yml and pages.yml) should pass:
 - [ ] Attachment upload works (optional: viewing)
 - [ ] Delete ticket works with confirmation
 - [ ] Error messages are descriptive
+- [ ] **Autosave works after 2s of inactivity**
+- [ ] **Manual Save button flushes immediately**
+- [ ] **Discard reverts changes and reloads**
+- [ ] **Refresh rehydrates unsaved changes**
+- [ ] **Offline edits persist, save when online**
+- [ ] **Multiple edits batch correctly**
+- [ ] **Save errors display, draft persists**
+- [ ] **Computed fields save with autosave**
+- [ ] **No duplicate key errors on blank tickets**
 - [ ] Build passes locally and in CI
 - [ ] GitHub Pages deployment succeeds
 
