@@ -151,10 +151,26 @@ export default function DeliveryTickets() {
     const userId = await currentUserId();
     const newRow = {
       date: new Date().toISOString().slice(0, 10),
-      driver: "", truck: "", customerName: "", account: "",
-      qty: 0, price: 0, tax: 0, amount: 0, status: "draft", notes: "",
+      driver: "", 
+      truck: "", 
+      truck_id: "", // legacy
+      customerName: "", 
+      customer_name: "", // legacy
+      account: "",
+      qty: null, 
+      price: null, 
+      tax: null, 
+      amount: null, 
+      status: "draft", 
+      notes: "",
       ticket_id: "",
-      gallons_delivered: 0,
+      ticket_no: "", // legacy
+      gallons: null, // legacy
+      gallons_delivered: null,
+      price_per_gallon: null, // legacy
+      total_amount: null, // legacy
+      delivery_date: new Date().toISOString().slice(0, 10), // legacy
+      ticket_date: new Date().toISOString().slice(0, 10), // legacy
       scheduled_window_start: null,
       arrival_time: null,
       departure_time: null,
@@ -168,8 +184,9 @@ export default function DeliveryTickets() {
       const created = await insertTicket(newRow);
       setTickets(t => [created, ...t]);
     } catch (e) {
-      console.error(e);
-      alert("Failed to add ticket.");
+      console.error("Failed to add ticket:", e);
+      const errorMsg = e.message || e.error_description || JSON.stringify(e);
+      alert(`Failed to add ticket: ${errorMsg}. See console for details.`);
     }
   }
 
@@ -636,66 +653,88 @@ export default function DeliveryTickets() {
         </div>
       )}
 
-      <div className="overflow-auto rounded-xl border">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left">
-            <tr>
-              {["Date","Truck","Driver","TicketID","Customer","Gallons","Scheduled","Arrival","Departure","Odo Start","Odo End","Miles","On-Time","Account","Qty","Price","Tax","Amount","Status","Files",""].map(h => (<th key={h} className="px-3 py-2 text-xs">{h}</th>))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredTickets.map((t) => (
-              <tr key={t.id} className="border-t">
-                <td className="px-3 py-2"><input type="date" value={t.date || ""} onChange={e => update(t.id, "date", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.truck || ""} onChange={e => update(t.id, "truck", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.driver || ""} onChange={e => update(t.id, "driver", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.ticket_id || ""} onChange={e => update(t.id, "ticket_id", e.target.value)} className="input text-xs" placeholder="Ticket ID" /></td>
-                <td className="px-3 py-2"><input value={t.customerName || ""} onChange={e => update(t.id, "customerName", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.gallons_delivered ?? ""} type="number" step="0.1" onChange={e => update(t.id, "gallons_delivered", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input type="datetime-local" value={toLocalDateTimeInputValue(t.scheduled_window_start)} onChange={e => update(t.id, "scheduled_window_start", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input type="datetime-local" value={toLocalDateTimeInputValue(t.arrival_time)} onChange={e => update(t.id, "arrival_time", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input type="datetime-local" value={toLocalDateTimeInputValue(t.departure_time)} onChange={e => update(t.id, "departure_time", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.odometer_start ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_start", e.target.value)} className="input text-xs" placeholder="Start" /></td>
-                <td className="px-3 py-2"><input value={t.odometer_end ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_end", e.target.value)} className="input text-xs" placeholder="End" /></td>
-                <td className="px-3 py-2"><span className="text-xs font-mono">{t.miles_driven != null ? Number(t.miles_driven).toFixed(1) : "-"}</span></td>
-                <td className="px-3 py-2 text-center">
-                  {t.on_time_flag === 1 && <span title="On Time">✅</span>}
-                  {t.on_time_flag === 0 && <span title="Late">⏱️</span>}
-                  {t.on_time_flag == null && <span className="text-slate-400">-</span>}
-                </td>
-                <td className="px-3 py-2"><input value={t.account || ""} onChange={e => update(t.id, "account", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.qty ?? ""} type="number" step="1" onChange={e => update(t.id, "qty", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.price ?? ""} type="number" step="0.01" onChange={e => update(t.id, "price", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.tax ?? ""} type="number" step="0.01" onChange={e => update(t.id, "tax", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><span className="text-xs font-mono">${(t.amount || 0).toFixed(2)}</span></td>
-                <td className="px-3 py-2">
-                  <select value={t.status || "draft"} onChange={e => update(t.id, "status", e.target.value)} className="text-xs">
-                    <option value="draft">draft</option>
-                    <option value="posted">posted</option>
-                  </select>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <button className="rounded-lg border px-2 py-1 text-xs" onClick={() => startAttach(t.id)}>Upload</button>
-                    <div>
-                      {(attachmentsMap[t.id] || []).slice(0,3).map(a => (
-                        <div key={a.id} style={{ display: "inline-block", marginRight: 6 }}>
-                          <button onClick={() => openAttachment(a.storage_key)} className="text-sky-600 text-xs">{a.filename}</button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-3 py-2">
-                  <button className="text-red-600 text-xs" onClick={() => remove(t.id)}>Remove</button>
-                </td>
+      <div className="overflow-x-hidden rounded-xl border">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm table-fixed" style={{ minWidth: "1400px" }}>
+            <thead className="bg-slate-50 text-left">
+              <tr>
+                <th className="px-3 py-2 text-xs" style={{width: "100px"}}>Date</th>
+                <th className="px-3 py-2 text-xs" style={{width: "80px"}}>Truck</th>
+                <th className="px-3 py-2 text-xs" style={{width: "90px"}}>Driver</th>
+                <th className="px-3 py-2 text-xs hidden lg:table-cell" style={{width: "100px"}}>TicketID</th>
+                <th className="px-3 py-2 text-xs" style={{width: "120px"}}>Customer</th>
+                <th className="px-3 py-2 text-xs" style={{width: "80px"}}>Gallons</th>
+                <th className="px-3 py-2 text-xs hidden xl:table-cell" style={{width: "150px"}}>Scheduled</th>
+                <th className="px-3 py-2 text-xs hidden xl:table-cell" style={{width: "150px"}}>Arrival</th>
+                <th className="px-3 py-2 text-xs hidden xl:table-cell" style={{width: "150px"}}>Departure</th>
+                <th className="px-3 py-2 text-xs hidden xl:table-cell" style={{width: "80px"}}>Odo Start</th>
+                <th className="px-3 py-2 text-xs hidden xl:table-cell" style={{width: "80px"}}>Odo End</th>
+                <th className="px-3 py-2 text-xs hidden xl:table-cell" style={{width: "70px"}}>Miles</th>
+                <th className="px-3 py-2 text-xs hidden lg:table-cell" style={{width: "70px"}}>On-Time</th>
+                <th className="px-3 py-2 text-xs" style={{width: "100px"}}>Account</th>
+                <th className="px-3 py-2 text-xs" style={{width: "70px"}}>Qty</th>
+                <th className="px-3 py-2 text-xs" style={{width: "80px"}}>Price</th>
+                <th className="px-3 py-2 text-xs" style={{width: "70px"}}>Tax</th>
+                <th className="px-3 py-2 text-xs" style={{width: "90px"}}>Amount</th>
+                <th className="px-3 py-2 text-xs" style={{width: "80px"}}>Status</th>
+                <th className="px-3 py-2 text-xs hidden lg:table-cell" style={{width: "120px"}}>Files</th>
+                <th className="px-3 py-2 text-xs" style={{width: "70px"}}></th>
               </tr>
-            ))}
-            {!filteredTickets.length && (
-              <tr><td colSpan={21} className="px-3 py-6 text-center text-slate-500">No tickets match the current filters.</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredTickets.map((t) => (
+                <tr key={t.id} className="border-t">
+                  <td className="px-3 py-2"><input type="date" value={t.date || ""} onChange={e => update(t.id, "date", e.target.value)} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2"><input value={t.truck || ""} onChange={e => update(t.id, "truck", e.target.value)} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2"><input value={t.driver || ""} onChange={e => update(t.id, "driver", e.target.value)} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2 hidden lg:table-cell"><input value={t.ticket_id || ""} onChange={e => update(t.id, "ticket_id", e.target.value)} className="w-full input text-xs" placeholder="ID" /></td>
+                  <td className="px-3 py-2"><input value={t.customerName || ""} onChange={e => update(t.id, "customerName", e.target.value)} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2"><input value={t.gallons_delivered ?? ""} type="number" step="0.1" onChange={e => update(t.id, "gallons_delivered", e.target.value)} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2 hidden xl:table-cell"><input type="datetime-local" value={toLocalDateTimeInputValue(t.scheduled_window_start)} onChange={e => update(t.id, "scheduled_window_start", fromLocalDateTimeInputValue(e.target.value))} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2 hidden xl:table-cell"><input type="datetime-local" value={toLocalDateTimeInputValue(t.arrival_time)} onChange={e => update(t.id, "arrival_time", fromLocalDateTimeInputValue(e.target.value))} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2 hidden xl:table-cell"><input type="datetime-local" value={toLocalDateTimeInputValue(t.departure_time)} onChange={e => update(t.id, "departure_time", fromLocalDateTimeInputValue(e.target.value))} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2 hidden xl:table-cell"><input value={t.odometer_start ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_start", e.target.value)} className="w-full input text-xs" placeholder="Start" /></td>
+                  <td className="px-3 py-2 hidden xl:table-cell"><input value={t.odometer_end ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_end", e.target.value)} className="w-full input text-xs" placeholder="End" /></td>
+                  <td className="px-3 py-2 hidden xl:table-cell"><span className="text-xs font-mono">{t.miles_driven != null ? Number(t.miles_driven).toFixed(1) : "-"}</span></td>
+                  <td className="px-3 py-2 text-center hidden lg:table-cell">
+                    {t.on_time_flag === 1 && <span title="On Time">✅</span>}
+                    {t.on_time_flag === 0 && <span title="Late">⏱️</span>}
+                    {t.on_time_flag == null && <span className="text-slate-400">-</span>}
+                  </td>
+                  <td className="px-3 py-2"><input value={t.account || ""} onChange={e => update(t.id, "account", e.target.value)} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2"><input value={t.qty ?? ""} type="number" step="1" onChange={e => update(t.id, "qty", e.target.value)} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2"><input value={t.price ?? ""} type="number" step="0.01" onChange={e => update(t.id, "price", e.target.value)} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2"><input value={t.tax ?? ""} type="number" step="0.01" onChange={e => update(t.id, "tax", e.target.value)} className="w-full input text-xs" /></td>
+                  <td className="px-3 py-2"><span className="text-xs font-mono">${(t.amount || 0).toFixed(2)}</span></td>
+                  <td className="px-3 py-2">
+                    <select value={t.status || "draft"} onChange={e => update(t.id, "status", e.target.value)} className="w-full text-xs">
+                      <option value="draft">draft</option>
+                      <option value="posted">posted</option>
+                    </select>
+                  </td>
+                  <td className="px-3 py-2 hidden lg:table-cell">
+                    <div className="flex items-center gap-2">
+                      <button className="rounded-lg border px-2 py-1 text-xs whitespace-nowrap" onClick={() => startAttach(t.id)}>Upload</button>
+                      <div>
+                        {(attachmentsMap[t.id] || []).slice(0,2).map(a => (
+                          <div key={a.id} style={{ display: "inline-block", marginRight: 6 }}>
+                            <button onClick={() => openAttachment(a.storage_key)} className="text-sky-600 text-xs truncate" title={a.filename}>📎</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <button className="text-red-600 text-xs whitespace-nowrap" onClick={() => remove(t.id)}>✕</button>
+                  </td>
+                </tr>
+              ))}
+              {!filteredTickets.length && (
+                <tr><td colSpan={21} className="px-3 py-6 text-center text-slate-500">No tickets match the current filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Analytics Charts */}
