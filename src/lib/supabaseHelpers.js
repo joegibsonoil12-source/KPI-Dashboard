@@ -49,6 +49,29 @@ export async function deleteTicket(id) {
 }
 
 /**
+ * Update multiple tickets sequentially (one at a time)
+ * Used for batching autosave changes across multiple rows
+ * 
+ * @param {Object} changesById - Map of ticket id to changes object { [id]: { field: value, ... } }
+ * @returns {Promise<Object>} - Map of id to updated row or error
+ */
+export async function updateTicketBatchSequential(changesById) {
+  const results = {};
+  const ids = Object.keys(changesById);
+  
+  for (const id of ids) {
+    try {
+      const updated = await updateTicket(id, changesById[id]);
+      results[id] = { success: true, data: updated };
+    } catch (error) {
+      results[id] = { success: false, error };
+    }
+  }
+  
+  return results;
+}
+
+/**
  * Storage helpers for private bucket
  * - uploadAttachmentFile: uploads a File/Blob to BUCKET at a path and returns upload data
  * - createSignedUrl: returns a signed URL for temporary download
@@ -102,6 +125,7 @@ export default {
   fetchTickets,
   insertTicket,
   updateTicket,
+  updateTicketBatchSequential,
   deleteTicket,
   uploadAttachmentFile,
   createSignedUrl,
