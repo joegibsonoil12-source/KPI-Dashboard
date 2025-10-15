@@ -10,6 +10,10 @@ import {
   createSignedUrl,
   listAttachmentsForTicket,
 } from "../lib/supabaseHelpers";
+import { toLocalDateTimeInputValue, fromLocalDateTimeInputValue } from "../lib/datetime";
+import { computeMetrics, computePerTruck, getUniqueTrucks } from "../lib/metrics";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import * as XLSX from "xlsx";
 
 /*
 DeliveryTickets (Supabase-backed)
@@ -26,27 +30,86 @@ export default function DeliveryTickets() {
   const attachRef = useRef(null);
   const [uploadingFor, setUploadingFor] = useState(null);
   const [attachmentsMap, setAttachmentsMap] = useState({}); // ticketId -> [attachments]
+  
+  // Filtering state
+  const [dateFilter, setDateFilter] = useState("all"); // all | today | week | month | year | custom
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+  const [selectedTruck, setSelectedTruck] = useState("ALL"); // ALL | specific truck
 
+  // Filtering logic
+  const filteredByDate = useMemo(() => {
+    if (dateFilter === "all") return tickets;
+    
+    const now = new Date();
+    let startDate, endDate;
+    
+    if (dateFilter === "today") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    } else if (dateFilter === "week") {
+      const dayOfWeek = now.getDay();
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (7 - dayOfWeek));
+    } else if (dateFilter === "month") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    } else if (dateFilter === "year") {
+      startDate = new Date(now.getFullYear(), 0, 1);
+      endDate = new Date(now.getFullYear() + 1, 0, 1);
+    } else if (dateFilter === "custom") {
+      if (!customStartDate && !customEndDate) return tickets;
+      startDate = customStartDate ? new Date(customStartDate) : new Date(0);
+      endDate = customEndDate ? new Date(new Date(customEndDate).getTime() + 86400000) : new Date(8640000000000000);
+    }
+    
+    return tickets.filter(t => {
+      if (!t.date) return false;
+      const ticketDate = new Date(t.date);
+      return ticketDate >= startDate && ticketDate < endDate;
+    });
+  }, [tickets, dateFilter, customStartDate, customEndDate]);
+  
+  // Get available trucks from filtered data
+  const availableTrucks = useMemo(() => getUniqueTrucks(filteredByDate), [filteredByDate]);
+  
+  // Filter by truck selection
+  const filteredTickets = useMemo(() => {
+    if (selectedTruck === "ALL") return filteredByDate;
+    return filteredByDate.filter(t => {
+      const truckKey = t.truck || t.truck_id || "Unassigned";
+      return truckKey === selectedTruck;
+    });
+  }, [filteredByDate, selectedTruck]);
+  
+  // Overall metrics (for all trucks in date range)
+  const overallMetrics = useMemo(() => computeMetrics(filteredByDate), [filteredByDate]);
+  
+  // Selected truck metrics
+  const truckMetrics = useMemo(() => {
+    if (selectedTruck === "ALL") return overallMetrics;
+    return computeMetrics(filteredTickets);
+  }, [filteredTickets, selectedTruck, overallMetrics]);
+  
+  // Per-truck breakdown
+  const perTruckData = useMemo(() => {
+    const metrics = computePerTruck(filteredByDate);
+    return Object.keys(metrics).map(truck => ({
+      truck,
+      ...metrics[truck],
+    })).sort((a, b) => b.amount - a.amount);
+  }, [filteredByDate]);
+  
+  // Legacy control object for compatibility
   const control = useMemo(() => {
-    const totalGallons = tickets.reduce((s, t) => s + (Number(t.gallons_delivered || t.qty) || 0), 0);
-    const totalMiles = tickets.reduce((s, t) => s + (Number(t.miles_driven) || 0), 0);
-    const ticketsWithMiles = tickets.filter(t => t.miles_driven != null && t.miles_driven > 0).length;
-    const avgMiles = ticketsWithMiles > 0 ? totalMiles / ticketsWithMiles : 0;
-    
-    const ticketsWithOnTimeFlag = tickets.filter(t => t.on_time_flag === 0 || t.on_time_flag === 1);
-    const onTimeTickets = ticketsWithOnTimeFlag.filter(t => t.on_time_flag === 1).length;
-    const onTimePct = ticketsWithOnTimeFlag.length > 0 
-      ? (onTimeTickets / ticketsWithOnTimeFlag.length) * 100 
-      : 0;
-    
     return {
-      qty: tickets.reduce((s, t) => s + (Number(t.qty) || 0), 0),
-      amount: tickets.reduce((s, t) => s + (Number(t.amount) || 0), 0),
-      totalGallons,
-      avgMiles,
-      onTimePct,
+      qty: overallMetrics.tickets,
+      amount: overallMetrics.amount,
+      totalGallons: overallMetrics.totalGallons,
+      avgMiles: overallMetrics.avgMiles,
+      onTimePct: overallMetrics.onTimePct,
     };
-  }, [tickets]);
+  }, [overallMetrics]);
 
   async function currentUserId() {
     const { data } = await supabase.auth.getUser();
@@ -61,16 +124,23 @@ export default function DeliveryTickets() {
         if (!mounted) return;
         setTickets(rows);
         // load attachments for visible rows (small optimization)
+        // Make attachment fetching non-fatal - wrap each call in try/catch
         const map = {};
         await Promise.all(rows.slice(0, 30).map(async (r) => {
-          const a = await listAttachmentsForTicket(r.id);
-          map[r.id] = a;
+          try {
+            const a = await listAttachmentsForTicket(r.id);
+            map[r.id] = a;
+          } catch (e) {
+            console.error(`Failed to load attachments for ticket ${r.id}:`, e.message || e);
+            map[r.id] = []; // Set empty array so UI still works
+          }
         }));
         if (!mounted) return;
         setAttachmentsMap(map);
       } catch (e) {
         console.error("Failed to load tickets:", e);
-        alert("Failed to load tickets. See console.");
+        const errorMsg = e.message || e.error_description || JSON.stringify(e);
+        alert(`Failed to load tickets: ${errorMsg}. See console for details.`);
       }
     }
     load();
@@ -105,12 +175,23 @@ export default function DeliveryTickets() {
 
   async function update(id, key, val) {
     const numericKeys = ["qty", "price", "tax", "amount", "gallons_delivered", "odometer_start", "odometer_end"];
-    const nextVal = numericKeys.includes(key) ? Number(val || 0) : val;
+    // Allow blank/empty for numeric fields - only convert to number if non-empty
+    const nextVal = numericKeys.includes(key) 
+      ? (val === "" || val == null ? null : Number(val))
+      : val;
     
     // Update local state with computed fields
     setTickets(ts => ts.map(t => {
       if (t.id !== id) return t;
       const updated = { ...t, [key]: nextVal };
+      
+      // Auto-calculate amount when qty, price, or tax changes
+      if (key === "qty" || key === "price" || key === "tax") {
+        const qty = key === "qty" ? (nextVal || 0) : (t.qty || 0);
+        const price = key === "price" ? (nextVal || 0) : (t.price || 0);
+        const tax = key === "tax" ? (nextVal || 0) : (t.tax || 0);
+        updated.amount = qty * price + tax;
+      }
       
       // Compute miles_driven if odometer values change
       if (key === "odometer_start" || key === "odometer_end") {
@@ -118,6 +199,8 @@ export default function DeliveryTickets() {
         const end = key === "odometer_end" ? nextVal : t.odometer_end;
         if (start != null && end != null && start !== "" && end !== "") {
           updated.miles_driven = Number(end) - Number(start);
+        } else {
+          updated.miles_driven = null;
         }
       }
       
@@ -140,17 +223,30 @@ export default function DeliveryTickets() {
       // Prepare update payload with computed fields
       const payload = { [key]: nextVal };
       
-      // Include computed fields in update if they were computed
+      // Get current ticket state to compute derived fields
       const ticket = tickets.find(t => t.id === id);
-      if (ticket && (key === "odometer_start" || key === "odometer_end")) {
+      if (!ticket) return;
+      
+      // Include auto-calculated amount in update
+      if (key === "qty" || key === "price" || key === "tax") {
+        const qty = key === "qty" ? (nextVal || 0) : (ticket.qty || 0);
+        const price = key === "price" ? (nextVal || 0) : (ticket.price || 0);
+        const tax = key === "tax" ? (nextVal || 0) : (ticket.tax || 0);
+        payload.amount = qty * price + tax;
+      }
+      
+      // Include computed fields in update if they were computed
+      if (key === "odometer_start" || key === "odometer_end") {
         const start = key === "odometer_start" ? nextVal : ticket.odometer_start;
         const end = key === "odometer_end" ? nextVal : ticket.odometer_end;
         if (start != null && end != null && start !== "" && end !== "") {
           payload.miles_driven = Number(end) - Number(start);
+        } else {
+          payload.miles_driven = null;
         }
       }
       
-      if (ticket && (key === "scheduled_window_start" || key === "arrival_time")) {
+      if (key === "scheduled_window_start" || key === "arrival_time") {
         const scheduled = key === "scheduled_window_start" ? nextVal : ticket.scheduled_window_start;
         const arrival = key === "arrival_time" ? nextVal : ticket.arrival_time;
         if (scheduled && arrival) {
@@ -164,7 +260,8 @@ export default function DeliveryTickets() {
       await updateTicket(id, payload);
     } catch (e) {
       console.error("Update failed:", e);
-      alert("Update failed, reloading list.");
+      const errorMsg = e.message || e.error_description || JSON.stringify(e);
+      alert(`Update failed: ${errorMsg}. Reloading list.`);
       const fresh = await fetchTickets();
       setTickets(fresh);
     }
@@ -320,6 +417,69 @@ export default function DeliveryTickets() {
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "pps-truck-export.csv"; a.click(); URL.revokeObjectURL(a.href);
   }
+  
+  // Export filtered tickets to CSV
+  function exportCSV() {
+    const headers = ["date", "truck", "driver", "ticket_id", "customerName", "gallons_delivered", 
+                     "account", "qty", "price", "tax", "amount", "status"];
+    const csvContent = [
+      headers.join(","),
+      ...filteredTickets.map(t => 
+        headers.map(h => {
+          const val = t[h] ?? "";
+          // Escape values that contain commas or quotes
+          return String(val).includes(",") || String(val).includes('"') 
+            ? `"${String(val).replace(/"/g, '""')}"` 
+            : val;
+        }).join(",")
+      )
+    ].join("\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `delivery-tickets-${dateFilter}-${selectedTruck}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  
+  // Export filtered tickets to Excel
+  function exportExcel() {
+    const headers = ["Date", "Truck", "Driver", "Ticket ID", "Customer", "Gallons Delivered", 
+                     "Account", "Qty", "Price", "Tax", "Amount", "Status"];
+    const dataKeys = ["date", "truck", "driver", "ticket_id", "customerName", "gallons_delivered", 
+                      "account", "qty", "price", "tax", "amount", "status"];
+    
+    const worksheetData = [
+      headers,
+      ...filteredTickets.map(t => dataKeys.map(k => t[k] ?? ""))
+    ];
+    
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Tickets");
+    
+    const filename = `delivery-tickets-${dateFilter}-${selectedTruck}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(workbook, filename);
+  }
+  
+  // Prepare chart data - group by date
+  const chartData = useMemo(() => {
+    const dataToUse = selectedTruck === "ALL" ? filteredByDate : filteredTickets;
+    const grouped = {};
+    
+    dataToUse.forEach(t => {
+      const date = t.date || "Unknown";
+      if (!grouped[date]) {
+        grouped[date] = { date, gallons: 0, revenue: 0 };
+      }
+      grouped[date].gallons += Number(t.gallons_delivered || t.qty) || 0;
+      grouped[date].revenue += Number(t.amount) || 0;
+    });
+    
+    return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
+  }, [filteredByDate, filteredTickets, selectedTruck]);
 
   return (
     <div className="space-y-6">
@@ -332,17 +492,149 @@ export default function DeliveryTickets() {
         </div>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div>Tickets in batch: {tickets.length}</div>
-        <div>Control Qty: {control.qty}</div>
-        <div>Control Amount: {control.amount}</div>
+      {/* Date Filter Bar */}
+      <div className="rounded-lg border p-4 bg-slate-50">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="font-semibold">Filters:</label>
+          <button 
+            className={`px-3 py-1 rounded ${dateFilter === "all" ? "bg-blue-600 text-white" : "bg-white border"}`}
+            onClick={() => setDateFilter("all")}
+          >
+            All
+          </button>
+          <button 
+            className={`px-3 py-1 rounded ${dateFilter === "today" ? "bg-blue-600 text-white" : "bg-white border"}`}
+            onClick={() => setDateFilter("today")}
+          >
+            Today
+          </button>
+          <button 
+            className={`px-3 py-1 rounded ${dateFilter === "week" ? "bg-blue-600 text-white" : "bg-white border"}`}
+            onClick={() => setDateFilter("week")}
+          >
+            This Week
+          </button>
+          <button 
+            className={`px-3 py-1 rounded ${dateFilter === "month" ? "bg-blue-600 text-white" : "bg-white border"}`}
+            onClick={() => setDateFilter("month")}
+          >
+            This Month
+          </button>
+          <button 
+            className={`px-3 py-1 rounded ${dateFilter === "year" ? "bg-blue-600 text-white" : "bg-white border"}`}
+            onClick={() => setDateFilter("year")}
+          >
+            This Year
+          </button>
+          <button 
+            className={`px-3 py-1 rounded ${dateFilter === "custom" ? "bg-blue-600 text-white" : "bg-white border"}`}
+            onClick={() => setDateFilter("custom")}
+          >
+            Custom Range
+          </button>
+          {dateFilter === "custom" && (
+            <>
+              <input 
+                type="date" 
+                value={customStartDate} 
+                onChange={e => setCustomStartDate(e.target.value)}
+                className="px-2 py-1 border rounded text-sm"
+                placeholder="Start"
+              />
+              <span>to</span>
+              <input 
+                type="date" 
+                value={customEndDate} 
+                onChange={e => setCustomEndDate(e.target.value)}
+                className="px-2 py-1 border rounded text-sm"
+                placeholder="End"
+              />
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div>Total Gallons Delivered: {control.totalGallons.toFixed(1)}</div>
-        <div>Avg Miles per Ticket: {control.avgMiles.toFixed(1)}</div>
-        <div>On-Time %: {control.onTimePct.toFixed(1)}%</div>
+      {/* Truck Selector */}
+      <div className="flex items-center gap-3">
+        <label className="font-semibold">Truck:</label>
+        <select 
+          value={selectedTruck} 
+          onChange={e => setSelectedTruck(e.target.value)}
+          className="px-3 py-1.5 border rounded"
+        >
+          <option value="ALL">All Trucks</option>
+          {availableTrucks.map(truck => (
+            <option key={truck} value={truck}>{truck}</option>
+          ))}
+        </select>
+        <span className="text-sm text-slate-600">
+          Showing {filteredTickets.length} of {tickets.length} tickets
+        </span>
       </div>
+
+      {/* Overall Metrics */}
+      <div className="rounded-lg border p-4">
+        <h3 className="font-semibold mb-3">Overall Metrics {selectedTruck !== "ALL" && `(${selectedTruck})`}</h3>
+        <div className="grid gap-3 sm:grid-cols-4 lg:grid-cols-6">
+          <div>
+            <div className="text-xs text-slate-600">Tickets</div>
+            <div className="text-lg font-semibold">{truckMetrics.tickets}</div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-600">Total Gallons</div>
+            <div className="text-lg font-semibold">{truckMetrics.totalGallons.toFixed(1)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-600">Revenue</div>
+            <div className="text-lg font-semibold">${truckMetrics.amount.toFixed(2)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-600">Avg $/Gallon</div>
+            <div className="text-lg font-semibold">${truckMetrics.avgPricePerGallon.toFixed(2)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-600">Avg Miles/Ticket</div>
+            <div className="text-lg font-semibold">{truckMetrics.avgMiles.toFixed(1)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-600">On-Time %</div>
+            <div className="text-lg font-semibold">{truckMetrics.onTimePct.toFixed(1)}%</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Per-Truck Breakdown (only show when viewing all trucks) */}
+      {selectedTruck === "ALL" && perTruckData.length > 0 && (
+        <div className="rounded-lg border p-4">
+          <h3 className="font-semibold mb-3">Per-Truck Breakdown</h3>
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left">
+                <tr>
+                  <th className="px-3 py-2 text-xs">Truck</th>
+                  <th className="px-3 py-2 text-xs">Tickets</th>
+                  <th className="px-3 py-2 text-xs">Gallons</th>
+                  <th className="px-3 py-2 text-xs">Revenue</th>
+                  <th className="px-3 py-2 text-xs">Avg $/Gal</th>
+                  <th className="px-3 py-2 text-xs">On-Time %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perTruckData.map(row => (
+                  <tr key={row.truck} className="border-t">
+                    <td className="px-3 py-2 font-medium">{row.truck}</td>
+                    <td className="px-3 py-2">{row.tickets}</td>
+                    <td className="px-3 py-2">{row.totalGallons.toFixed(1)}</td>
+                    <td className="px-3 py-2">${row.amount.toFixed(2)}</td>
+                    <td className="px-3 py-2">${row.avgPricePerGallon.toFixed(2)}</td>
+                    <td className="px-3 py-2">{row.onTimePct.toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="overflow-auto rounded-xl border">
         <table className="w-full text-sm">
@@ -352,19 +644,19 @@ export default function DeliveryTickets() {
             </tr>
           </thead>
           <tbody>
-            {tickets.map((t) => (
+            {filteredTickets.map((t) => (
               <tr key={t.id} className="border-t">
                 <td className="px-3 py-2"><input type="date" value={t.date || ""} onChange={e => update(t.id, "date", e.target.value)} className="input text-xs" /></td>
                 <td className="px-3 py-2"><input value={t.truck || ""} onChange={e => update(t.id, "truck", e.target.value)} className="input text-xs" /></td>
                 <td className="px-3 py-2"><input value={t.driver || ""} onChange={e => update(t.id, "driver", e.target.value)} className="input text-xs" /></td>
                 <td className="px-3 py-2"><input value={t.ticket_id || ""} onChange={e => update(t.id, "ticket_id", e.target.value)} className="input text-xs" placeholder="Ticket ID" /></td>
                 <td className="px-3 py-2"><input value={t.customerName || ""} onChange={e => update(t.id, "customerName", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.gallons_delivered || 0} type="number" step="0.1" onChange={e => update(t.id, "gallons_delivered", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input type="datetime-local" value={t.scheduled_window_start ? new Date(t.scheduled_window_start).toISOString().slice(0, 16) : ""} onChange={e => update(t.id, "scheduled_window_start", e.target.value ? new Date(e.target.value).toISOString() : null)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input type="datetime-local" value={t.arrival_time ? new Date(t.arrival_time).toISOString().slice(0, 16) : ""} onChange={e => update(t.id, "arrival_time", e.target.value ? new Date(e.target.value).toISOString() : null)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input type="datetime-local" value={t.departure_time ? new Date(t.departure_time).toISOString().slice(0, 16) : ""} onChange={e => update(t.id, "departure_time", e.target.value ? new Date(e.target.value).toISOString() : null)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.odometer_start || ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_start", e.target.value)} className="input text-xs" placeholder="Start" /></td>
-                <td className="px-3 py-2"><input value={t.odometer_end || ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_end", e.target.value)} className="input text-xs" placeholder="End" /></td>
+                <td className="px-3 py-2"><input value={t.gallons_delivered ?? ""} type="number" step="0.1" onChange={e => update(t.id, "gallons_delivered", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input type="datetime-local" value={toLocalDateTimeInputValue(t.scheduled_window_start)} onChange={e => update(t.id, "scheduled_window_start", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input type="datetime-local" value={toLocalDateTimeInputValue(t.arrival_time)} onChange={e => update(t.id, "arrival_time", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input type="datetime-local" value={toLocalDateTimeInputValue(t.departure_time)} onChange={e => update(t.id, "departure_time", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.odometer_start ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_start", e.target.value)} className="input text-xs" placeholder="Start" /></td>
+                <td className="px-3 py-2"><input value={t.odometer_end ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_end", e.target.value)} className="input text-xs" placeholder="End" /></td>
                 <td className="px-3 py-2"><span className="text-xs font-mono">{t.miles_driven != null ? Number(t.miles_driven).toFixed(1) : "-"}</span></td>
                 <td className="px-3 py-2 text-center">
                   {t.on_time_flag === 1 && <span title="On Time">✅</span>}
@@ -372,10 +664,10 @@ export default function DeliveryTickets() {
                   {t.on_time_flag == null && <span className="text-slate-400">-</span>}
                 </td>
                 <td className="px-3 py-2"><input value={t.account || ""} onChange={e => update(t.id, "account", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.qty || 0} type="number" onChange={e => update(t.id, "qty", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.price || 0} type="number" step="0.01" onChange={e => update(t.id, "price", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.tax || 0} type="number" step="0.01" onChange={e => update(t.id, "tax", e.target.value)} className="input text-xs" /></td>
-                <td className="px-3 py-2"><input value={t.amount || 0} type="number" step="0.01" onChange={e => update(t.id, "amount", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.qty ?? ""} type="number" step="1" onChange={e => update(t.id, "qty", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.price ?? ""} type="number" step="0.01" onChange={e => update(t.id, "price", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><input value={t.tax ?? ""} type="number" step="0.01" onChange={e => update(t.id, "tax", e.target.value)} className="input text-xs" /></td>
+                <td className="px-3 py-2"><span className="text-xs font-mono">${(t.amount || 0).toFixed(2)}</span></td>
                 <td className="px-3 py-2">
                   <select value={t.status || "draft"} onChange={e => update(t.id, "status", e.target.value)} className="text-xs">
                     <option value="draft">draft</option>
@@ -399,17 +691,58 @@ export default function DeliveryTickets() {
                 </td>
               </tr>
             ))}
-            {!tickets.length && (
-              <tr><td colSpan={21} className="px-3 py-6 text-center text-slate-500">No tickets yet.</td></tr>
+            {!filteredTickets.length && (
+              <tr><td colSpan={21} className="px-3 py-6 text-center text-slate-500">No tickets match the current filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
+      {/* Analytics Charts */}
+      {chartData.length > 0 && (
+        <div className="rounded-lg border p-4">
+          <h3 className="font-semibold mb-4">Analytics {selectedTruck !== "ALL" && `(${selectedTruck})`}</h3>
+          
+          <div className="space-y-8">
+            {/* Gallons by Day */}
+            <div>
+              <h4 className="text-sm font-medium mb-2 text-slate-700">Gallons Delivered by Day</h4>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="gallons" stroke="#3b82f6" strokeWidth={2} name="Gallons" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            
+            {/* Revenue by Day */}
+            <div>
+              <h4 className="text-sm font-medium mb-2 text-slate-700">Revenue by Day</h4>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} name="Revenue ($)" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <button className="rounded-lg border px-3 py-1.5" onClick={validate}>Run Edit Listing (Preview)</button>
         <button className="rounded-lg border px-3 py-1.5" onClick={postBatch} disabled={batchStatus === "posted"}>Transfer / Post</button>
         <button className="rounded-lg border px-3 py-1.5" onClick={exportPPS} disabled={batchStatus !== "posted"}>Export to Trucks (PPS)</button>
+        <button className="rounded-lg border px-3 py-1.5 bg-blue-50" onClick={exportCSV}>Export CSV</button>
+        <button className="rounded-lg border px-3 py-1.5 bg-green-50" onClick={exportExcel}>Export Excel</button>
       </div>
 
       <input ref={attachRef} type="file" accept="*" className="hidden" onChange={onAttachInput} />
