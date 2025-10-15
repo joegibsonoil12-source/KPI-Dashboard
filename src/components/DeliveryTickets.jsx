@@ -209,6 +209,7 @@ export default function DeliveryTickets() {
       qty: null, 
       price: null, 
       tax: null, 
+      hazmat_fee: null,
       amount: null, 
       status: "draft", 
       notes: "",
@@ -240,7 +241,7 @@ export default function DeliveryTickets() {
   }
 
   async function update(id, key, val) {
-    const numericKeys = ["qty", "price", "tax", "amount", "gallons_delivered", "odometer_start", "odometer_end"];
+    const numericKeys = ["qty", "price", "tax", "hazmat_fee", "amount", "gallons_delivered", "odometer_start", "odometer_end"];
     // Allow blank/empty for numeric fields - only convert to number if non-empty
     const nextVal = numericKeys.includes(key) 
       ? (val === "" || val == null ? null : Number(val))
@@ -254,11 +255,12 @@ export default function DeliveryTickets() {
     if (!ticket) return;
     
     // Include auto-calculated amount in update
-    if (key === "qty" || key === "price" || key === "tax") {
+    if (key === "qty" || key === "price" || key === "tax" || key === "hazmat_fee") {
       const qty = key === "qty" ? (nextVal || 0) : (ticket.qty || 0);
       const price = key === "price" ? (nextVal || 0) : (ticket.price || 0);
       const tax = key === "tax" ? (nextVal || 0) : (ticket.tax || 0);
-      payload.amount = qty * price + tax;
+      const hazmat_fee = key === "hazmat_fee" ? (nextVal || 0) : (ticket.hazmat_fee || 0);
+      payload.amount = qty * price + tax + hazmat_fee;
     }
     
     // Include computed fields in update if they were computed
@@ -497,7 +499,7 @@ export default function DeliveryTickets() {
   // Export filtered tickets to CSV
   function exportCSV() {
     const headers = ["date", "truck", "driver", "ticket_id", "customerName", "gallons_delivered", 
-                     "account", "qty", "price", "tax", "amount", "status"];
+                     "account", "qty", "price", "tax", "hazmat_fee", "amount", "status"];
     const csvContent = [
       headers.join(","),
       ...filteredTickets.map(t => 
@@ -523,9 +525,9 @@ export default function DeliveryTickets() {
   // Export filtered tickets to Excel
   function exportExcel() {
     const headers = ["Date", "Truck", "Driver", "Ticket ID", "Customer", "Gallons Delivered", 
-                     "Account", "Qty", "Price", "Tax", "Amount", "Status"];
+                     "Account", "Qty", "Price", "Tax", "Hazmat Fee", "Amount", "Status"];
     const dataKeys = ["date", "truck", "driver", "ticket_id", "customerName", "gallons_delivered", 
-                      "account", "qty", "price", "tax", "amount", "status"];
+                      "account", "qty", "price", "tax", "hazmat_fee", "amount", "status"];
     
     const worksheetData = [
       headers,
@@ -743,6 +745,7 @@ export default function DeliveryTickets() {
               <th className="dt-th px-2 py-2 text-xs">Qty</th>
               <th className="dt-th px-2 py-2 text-xs">Price</th>
               <th className="dt-th px-2 py-2 text-xs hidden md:table-cell">Tax</th>
+              <th className="dt-th px-2 py-2 text-xs hidden md:table-cell">Hazmat</th>
               <th className="dt-th px-2 py-2 text-xs">Amount</th>
               <th className="dt-th px-2 py-2 text-xs hidden lg:table-cell">Status</th>
               <th className="dt-th px-2 py-2 text-xs hidden xl:table-cell">Files</th>
@@ -773,6 +776,7 @@ export default function DeliveryTickets() {
                 <td className="dt-td px-2 py-2"><input value={t.qty ?? ""} type="number" step="1" onChange={e => update(t.id, "qty", e.target.value)} className="input text-xs w-14 tabular-nums" /></td>
                 <td className="dt-td px-2 py-2"><input value={t.price ?? ""} type="number" step="0.01" onChange={e => update(t.id, "price", e.target.value)} className="input text-xs w-16 tabular-nums" /></td>
                 <td className="dt-td px-2 py-2 hidden md:table-cell"><input value={t.tax ?? ""} type="number" step="0.01" onChange={e => update(t.id, "tax", e.target.value)} className="input text-xs w-14 tabular-nums" /></td>
+                <td className="dt-td px-2 py-2 hidden md:table-cell"><input value={t.hazmat_fee ?? ""} type="number" step="0.01" onChange={e => update(t.id, "hazmat_fee", e.target.value)} className="input text-xs w-14 tabular-nums" /></td>
                 <td className="dt-td px-2 py-2 whitespace-nowrap"><span className="text-xs font-mono tabular-nums">${(t.amount || 0).toFixed(2)}</span></td>
                 <td className="dt-td px-2 py-2 hidden lg:table-cell">
                   <select value={t.status || "draft"} onChange={e => update(t.id, "status", e.target.value)} className="text-xs w-20">
@@ -794,7 +798,7 @@ export default function DeliveryTickets() {
               </tr>
             ))}
             {!filteredTickets.length && (
-              <tr><td colSpan={21} className="dt-td px-3 py-6 text-center text-slate-500">No tickets match the current filters.</td></tr>
+              <tr><td colSpan={22} className="dt-td px-3 py-6 text-center text-slate-500">No tickets match the current filters.</td></tr>
             )}
           </tbody>
         </table>

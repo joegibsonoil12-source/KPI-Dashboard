@@ -25,7 +25,8 @@ The main table storing delivery ticket information with the following columns:
 - `qty` - Quantity ordered (numeric)
 - `price` - Unit price (numeric)
 - `tax` - Tax amount (numeric)
-- `amount` - Total amount (qty * price + tax) (numeric)
+- `hazmat_fee` - Hazardous material fee (numeric)
+- `amount` - Total amount (qty * price + tax + hazmat_fee) (numeric)
 - `gallons` - Legacy gallons field (numeric)
 - `gallons_delivered` - Actual gallons delivered (numeric)
 
@@ -189,7 +190,7 @@ After making code changes:
 ## Feature Usage
 
 ### Auto-calculations
-- **Amount:** Automatically computed as \`qty * price + tax\` when any of these fields change
+- **Amount:** Automatically computed as \`qty * price + tax + hazmat_fee\` when any of these fields change
 - **Miles Driven:** Computed as \`odometer_end - odometer_start\` when either odometer value changes
 - **On-Time Flag:** Set to 1 if arrival_time ≤ scheduled_window_start + 5 minutes, else 0
 
