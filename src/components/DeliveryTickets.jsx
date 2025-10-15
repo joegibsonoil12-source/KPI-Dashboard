@@ -230,6 +230,8 @@ export default function DeliveryTickets() {
           const arrivalDate = new Date(arrival);
           const graceMs = 5 * 60 * 1000; // 5 minutes in milliseconds
           updated.on_time_flag = arrivalDate <= new Date(scheduledDate.getTime() + graceMs) ? 1 : 0;
+        } else {
+          updated.on_time_flag = null;
         }
       }
       
@@ -271,6 +273,8 @@ export default function DeliveryTickets() {
           const arrivalDate = new Date(arrival);
           const graceMs = 5 * 60 * 1000;
           payload.on_time_flag = arrivalDate <= new Date(scheduledDate.getTime() + graceMs) ? 1 : 0;
+        } else {
+          payload.on_time_flag = null;
         }
       }
       
