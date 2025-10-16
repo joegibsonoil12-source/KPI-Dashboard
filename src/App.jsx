@@ -9,6 +9,7 @@ import React, { useEffect, useMemo, useState, useContext, useCallback } from "re
 import { supabase } from "./lib/supabaseClient";
 import Procedures from "./tabs/Procedures_v3";
 import DeliveryTicketsEditor from "./components/DeliveryTickets";
+import ServiceTracking from "./components/ServiceTracking";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -862,6 +863,7 @@ const TABS = [
   // Admin-only group:
   { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,  Component: StoreInvoicing },
   { key: "tickets",      label: "Delivery Tickets", adminOnly: true,  Component: DeliveryTicketsEditor },
+  { key: "service",      label: "Service Tracking", adminOnly: true,  Component: ServiceTracking },
 ];
 
 /* ========================================================================== */
@@ -1058,10 +1060,23 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
                     style={{
                       display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
                       borderRadius: 8, border: "1px solid #E5E7EB", background: Current.key === "tickets" ? "#EEF2FF" : "white",
-                      cursor: "pointer", fontWeight: 500
+                      cursor: "pointer", fontWeight: 500, marginBottom: 6
                     }}
                   >
                     Delivery Tickets 🔒
+                  </button>
+                </AdminOnly>
+
+                <AdminOnly fallback={null}>
+                  <button
+                    onClick={() => setActive("service")}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
+                      borderRadius: 8, border: "1px solid #E5E7EB", background: Current.key === "service" ? "#EEF2FF" : "white",
+                      cursor: "pointer", fontWeight: 500
+                    }}
+                  >
+                    Service Tracking 🔒
                   </button>
                 </AdminOnly>
 
