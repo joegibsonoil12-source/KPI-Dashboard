@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import supabase from "../lib/supabaseClient";
 import {
   fetchTickets,
+  fetchTicketsPage,
   insertTicket,
   updateTicket,
   updateTicketBatchSequential,
@@ -33,6 +34,11 @@ export default function DeliveryTickets() {
   const attachRef = useRef(null);
   const [uploadingFor, setUploadingFor] = useState(null);
   const [attachmentsMap, setAttachmentsMap] = useState({}); // ticketId -> [attachments]
+  
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [totalCount, setTotalCount] = useState(0);
   
   // Autosave: pending changes map { ticketId: { field: value, ... } }
   const [pendingChanges, setPendingChanges] = useState({});
@@ -146,8 +152,10 @@ export default function DeliveryTickets() {
     let mounted = true;
     async function load() {
       try {
-        const rows = await fetchTickets();
+        const { rows, count } = await fetchTicketsPage(page, pageSize);
         if (!mounted) return;
+        
+        setTotalCount(count);
         
         // Load any persisted draft and merge into state
         const draft = autosave.loadDraft();
@@ -194,12 +202,14 @@ export default function DeliveryTickets() {
     }
     load();
     return () => { mounted = false; };
-  }, []);
+  }, [page, pageSize]);
 
   async function addBlank() {
     const userId = await currentUserId();
+    // Calculate yesterday's date
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     const newRow = {
-      date: new Date().toISOString().slice(0, 10),
+      date: yesterday,
       driver: "", 
       truck: "", 
       truck_id: null, // legacy - use null to avoid unique constraint on empty string
@@ -219,8 +229,8 @@ export default function DeliveryTickets() {
       gallons_delivered: null,
       price_per_gallon: null, // legacy
       total_amount: null, // legacy
-      delivery_date: new Date().toISOString().slice(0, 10), // legacy
-      ticket_date: new Date().toISOString().slice(0, 10), // legacy
+      delivery_date: yesterday, // legacy
+      ticket_date: yesterday, // legacy
       scheduled_window_start: null,
       arrival_time: null,
       departure_time: null,
@@ -349,11 +359,19 @@ export default function DeliveryTickets() {
     
     // Reload fresh data from server
     try {
-      const fresh = await fetchTickets();
-      setTickets(fresh);
+      const { rows, count } = await fetchTicketsPage(page, pageSize);
+      setTickets(rows);
+      setTotalCount(count);
     } catch (e) {
       console.error("Failed to reload tickets:", e);
       alert("Failed to reload tickets. Please refresh the page.");
+    }
+  }
+
+  // Reset input scroll position on blur to prevent inputs staying scrolled to the right
+  function handleInputBlur(e) {
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) {
+      e.target.scrollLeft = 0;
     }
   }
 
@@ -724,7 +742,7 @@ export default function DeliveryTickets() {
         </div>
       )}
 
-      <div className="dt-table-wrap rounded-xl border">
+      <div className="dt-table-wrap rounded-xl border" onBlurCapture={handleInputBlur}>
         <table className="dt-table w-full text-sm">
           <thead className="bg-slate-50 text-left">
             <tr>
@@ -734,9 +752,7 @@ export default function DeliveryTickets() {
               <th className="dt-th px-2 py-2 text-xs hidden lg:table-cell">TicketID</th>
               <th className="dt-th px-2 py-2 text-xs">Customer</th>
               <th className="dt-th px-2 py-2 text-xs">Gallons</th>
-              <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Scheduled</th>
               <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Arrival</th>
-              <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Departure</th>
               <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Odo Start</th>
               <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Odo End</th>
               <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Miles</th>
@@ -761,9 +777,7 @@ export default function DeliveryTickets() {
                 <td className="dt-td px-2 py-2 hidden lg:table-cell"><input value={t.ticket_id || ""} onChange={e => update(t.id, "ticket_id", e.target.value)} className="input text-xs w-20" placeholder="ID" /></td>
                 <td className="dt-td px-2 py-2"><input value={t.customerName || ""} onChange={e => update(t.id, "customerName", e.target.value)} className="input text-xs w-24" /></td>
                 <td className="dt-td px-2 py-2"><input value={t.gallons_delivered ?? ""} type="number" step="0.1" onChange={e => update(t.id, "gallons_delivered", e.target.value)} className="input text-xs w-16 tabular-nums" /></td>
-                <td className="dt-td px-2 py-2 hidden 2xl:table-cell whitespace-nowrap"><input type="datetime-local" value={toLocalDateTimeInputValue(t.scheduled_window_start)} onChange={e => update(t.id, "scheduled_window_start", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs w-36" /></td>
                 <td className="dt-td px-2 py-2 hidden 2xl:table-cell whitespace-nowrap"><input type="datetime-local" value={toLocalDateTimeInputValue(t.arrival_time)} onChange={e => update(t.id, "arrival_time", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs w-36" /></td>
-                <td className="dt-td px-2 py-2 hidden 2xl:table-cell whitespace-nowrap"><input type="datetime-local" value={toLocalDateTimeInputValue(t.departure_time)} onChange={e => update(t.id, "departure_time", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs w-36" /></td>
                 <td className="dt-td px-2 py-2 hidden 2xl:table-cell"><input value={t.odometer_start ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_start", e.target.value)} className="input text-xs w-20 tabular-nums" placeholder="Start" /></td>
                 <td className="dt-td px-2 py-2 hidden 2xl:table-cell"><input value={t.odometer_end ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_end", e.target.value)} className="input text-xs w-20 tabular-nums" placeholder="End" /></td>
                 <td className="dt-td px-2 py-2 hidden 2xl:table-cell"><span className="text-xs font-mono tabular-nums">{t.miles_driven != null ? Number(t.miles_driven).toFixed(1) : "-"}</span></td>
@@ -798,10 +812,36 @@ export default function DeliveryTickets() {
               </tr>
             ))}
             {!filteredTickets.length && (
-              <tr><td colSpan={22} className="dt-td px-3 py-6 text-center text-slate-500">No tickets match the current filters.</td></tr>
+              <tr><td colSpan={20} className="dt-td px-3 py-6 text-center text-slate-500">No tickets match the current filters.</td></tr>
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="flex items-center justify-between rounded-lg border p-4 bg-slate-50">
+        <div className="text-sm text-slate-600">
+          Showing {tickets.length > 0 ? (page - 1) * pageSize + 1 : 0} - {Math.min(page * pageSize, totalCount)} of {totalCount} tickets
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="px-3 py-1.5 rounded border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            ← Previous
+          </button>
+          <span className="text-sm font-medium">
+            Page {page} of {Math.max(1, Math.ceil(totalCount / pageSize))}
+          </span>
+          <button
+            onClick={() => setPage(p => p + 1)}
+            disabled={page * pageSize >= totalCount}
+            className="px-3 py-1.5 rounded border disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next →
+          </button>
+        </div>
       </div>
 
       {/* Analytics Charts */}

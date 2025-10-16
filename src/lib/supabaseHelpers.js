@@ -15,9 +15,29 @@ export async function fetchTickets() {
   const { data, error } = await supabase
     .from("delivery_tickets")
     .select("*")
+    .order("created_at", { ascending: false })
     .order("date", { ascending: false });
   if (error) throw error;
   return data || [];
+}
+
+export async function fetchTicketsPage(page = 1, pageSize = 50) {
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  
+  const { data, error, count } = await supabase
+    .from("delivery_tickets")
+    .select("*", { count: "exact" })
+    .order("created_at", { ascending: false })
+    .order("date", { ascending: false })
+    .range(from, to);
+  
+  if (error) throw error;
+  
+  return {
+    rows: data || [],
+    count: count || 0,
+  };
 }
 
 export async function insertTicket(ticket) {
@@ -123,6 +143,7 @@ export async function listAttachmentsForTicket(ticketId) {
 
 export default {
   fetchTickets,
+  fetchTicketsPage,
   insertTicket,
   updateTicket,
   updateTicketBatchSequential,
