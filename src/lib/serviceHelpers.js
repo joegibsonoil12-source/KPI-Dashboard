@@ -12,22 +12,52 @@ import { supabase } from "./supabaseClient";
 const MAX_JOBS_LIMIT = 500;
 
 /**
- * Upsert service jobs to database
- * Uses onConflict to update existing records when (created_by, job_number) matches
+ * Deduplicate rows by job_number within a file
+ * When the same Job # appears multiple times, keep the last occurrence
+ * 
+ * @param {Array} rows - Array of service job rows
+ * @returns {Array} - Deduplicated rows (last occurrence wins)
+ */
+export function dedupeByJobNumber(rows) {
+  if (!rows || rows.length === 0) return [];
+  
+  // Use a Map to keep track of jobs by job_number (last wins)
+  const jobMap = new Map();
+  
+  rows.forEach(row => {
+    const jobNum = String(row.job_number || "").trim();
+    if (jobNum) {
+      jobMap.set(jobNum, row);
+    }
+  });
+  
+  // Return deduplicated rows as array
+  return Array.from(jobMap.values());
+}
+
+/**
+ * Upsert service jobs to database using server-side RPC
+ * Uses service_jobs_bulk_upsert RPC for atomic merge with COALESCE semantics
  * This allows re-uploads to update jobs that have moved dates or changed status
  * 
- * @param {Array} rows - Parsed service job rows
- * @param {string} userId - Current user's ID
- * @returns {Promise<Object>} - Result with inserted/updated data
+ * @param {Array} rows - Parsed service job rows (should be deduplicated first)
+ * @param {string} userId - Current user's ID (used for validation)
+ * @returns {Promise<Object>} - Result with inserted/updated counts
  */
 export async function upsertServiceJobs(rows, userId) {
   if (!rows || rows.length === 0) {
     throw new Error("No rows to import");
   }
   
-  // Prepare rows for upsert - add created_by and ensure job_number exists
-  const jobsToUpsert = rows.map(row => ({
-    created_by: userId,
+  // Deduplicate rows by job_number (last occurrence wins)
+  const deduplicatedRows = dedupeByJobNumber(rows);
+  
+  if (deduplicatedRows.length === 0) {
+    throw new Error("No valid jobs found after deduplication");
+  }
+  
+  // Prepare rows for RPC call - convert to plain objects with all fields
+  const jobsToUpsert = deduplicatedRows.map(row => ({
     job_number: String(row.job_number || "").trim(),
     job_description: row.job_description || null,
     status: row.status || "unscheduled",
@@ -44,33 +74,22 @@ export async function upsertServiceJobs(rows, userId) {
     raw: row.raw || null,
   }));
   
-  // Filter out rows without job_number
-  const validJobs = jobsToUpsert.filter(job => job.job_number);
-  
-  if (validJobs.length === 0) {
-    throw new Error("No valid jobs found (missing job numbers)");
-  }
-  
-  // Upsert with onConflict on the unique constraint
-  const { data, error } = await supabase
-    .from("service_jobs")
-    .upsert(validJobs, {
-      onConflict: "created_by,job_number",
-      ignoreDuplicates: false, // Update on conflict
-    })
-    .select();
+  // Call RPC function for server-side bulk upsert
+  const { data, error } = await supabase.rpc('service_jobs_bulk_upsert', {
+    rows: jobsToUpsert
+  });
   
   if (error) {
-    console.error("Upsert error:", error);
+    console.error("Bulk upsert error:", error);
     
     // Provide clearer error messages for common issues
-    if (error.code === "42P01") {
+    if (error.code === "42883") {
+      throw new Error("RPC function 'service_jobs_bulk_upsert' does not exist. Please run the setup migration.");
+    } else if (error.code === "42P01") {
       throw new Error("Table 'service_jobs' does not exist. Please run the setup migration.");
     } else if (error.code === "42501" || error.message?.includes("permission denied")) {
       throw new Error("Permission denied. Please ensure you are authenticated and have the required permissions.");
-    } else if (error.code === "23505") {
-      throw new Error("Duplicate key violation. This should not happen with upsert.");
-    } else if (error.message?.includes("JWT")) {
+    } else if (error.message?.includes("JWT") || error.message?.includes("Not authenticated")) {
       throw new Error("Authentication required. Please sign in and try again.");
     }
     
@@ -80,8 +99,9 @@ export async function upsertServiceJobs(rows, userId) {
   
   return {
     success: true,
-    inserted: data?.length || 0,
-    data: data || [],
+    inserted: data?.inserted || 0,
+    updated: data?.updated || 0,
+    total: data?.total || 0,
   };
 }
 
@@ -257,6 +277,7 @@ export async function checkServiceJobsTableExists() {
 }
 
 export default {
+  dedupeByJobNumber,
   upsertServiceJobs,
   fetchServiceJobs,
   calculateServiceSummary,

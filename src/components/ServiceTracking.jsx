@@ -166,14 +166,24 @@ export default function ServiceTracking() {
         throw new Error("Not authenticated");
       }
       
+      // Upsert jobs (deduplication happens inside helper)
       const result = await upsertServiceJobs(previewData.rows, userId);
       
-      setSuccessMessage(
-        `Successfully imported ${result.inserted} job(s). Re-uploads update existing records.`
-      );
-      setPreviewData(null);
+      // Show detailed success message
+      const messages = [];
+      if (result.inserted > 0) {
+        messages.push(`${result.inserted} new job(s)`);
+      }
+      if (result.updated > 0) {
+        messages.push(`${result.updated} updated`);
+      }
       
-      // Reload jobs and summary immediately
+      setSuccessMessage(
+        `Successfully imported: ${messages.join(', ')}. Total: ${result.total} job(s).`
+      );
+      
+      // Clear preview and reload
+      setPreviewData(null);
       await handleReload();
     } catch (e) {
       console.error("Import error:", e);
