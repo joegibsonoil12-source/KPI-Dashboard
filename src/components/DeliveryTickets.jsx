@@ -742,6 +742,37 @@ export default function DeliveryTickets() {
         </div>
       )}
 
+      {/* Sticky Toolbar above table */}
+      <div style={{
+        position: "sticky",
+        top: "60px",
+        zIndex: 10,
+        backgroundColor: "#f8fafc",
+        borderBottom: "1px solid #e2e8f0",
+        padding: "12px 16px",
+        marginLeft: "-24px",
+        marginRight: "-24px",
+        marginBottom: "16px"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <button 
+              className="rounded-lg border px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700" 
+              onClick={addBlank}
+              style={{ fontWeight: 500 }}
+            >
+              + Add Ticket
+            </button>
+            <span className="text-sm text-slate-600">
+              {filteredTickets.length} tickets on this page
+            </span>
+          </div>
+          <div className="text-sm text-slate-600">
+            Page {page} of {Math.max(1, Math.ceil(totalCount / pageSize))} • Total: {totalCount}
+          </div>
+        </div>
+      </div>
+
       <div className="dt-table-wrap rounded-xl border" onBlurCapture={handleInputBlur}>
         <table className="dt-table w-full text-sm">
           <thead className="bg-slate-50 text-left">
@@ -840,6 +871,13 @@ export default function DeliveryTickets() {
             className="px-3 py-1.5 rounded border disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Next →
+          </button>
+          <button 
+            className="rounded-lg border px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 ml-2" 
+            onClick={addBlank}
+            style={{ fontWeight: 500 }}
+          >
+            + Add Ticket
           </button>
         </div>
       </div>
