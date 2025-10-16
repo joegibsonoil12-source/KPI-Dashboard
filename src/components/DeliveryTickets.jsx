@@ -37,7 +37,7 @@ export default function DeliveryTickets() {
   
   // Pagination state
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageSize] = useState(15);
   const [totalCount, setTotalCount] = useState(0);
   
   // Autosave: pending changes map { ticketId: { field: value, ... } }
