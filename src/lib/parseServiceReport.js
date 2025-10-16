@@ -15,17 +15,74 @@ import * as XLSX from "xlsx";
  */
 function stripExcelQuotes(value) {
   if (typeof value !== "string") return value;
+  // Match Excel formula quotes: ="something"
   const match = value.match(/^="([^"]*)"$/);
-  return match ? match[1] : value;
+  if (match) return match[1];
+  
+  // Also handle standalone = prefix
+  if (value.startsWith("=")) {
+    return value.substring(1);
+  }
+  
+  return value;
+}
+
+/**
+ * Normalize header strings for robust matching
+ * - Strip BOM (byte order mark)
+ * - Remove quotes
+ * - Replace NBSP with regular space
+ * - Lowercase and trim
+ * - Collapse multiple spaces
+ */
+function normalizeHeader(header) {
+  if (!header) return "";
+  
+  let str = String(header);
+  
+  // Strip BOM if present (U+FEFF)
+  str = str.replace(/^\uFEFF/, "");
+  
+  // Remove various quote characters
+  str = str.replace(/["""'']/g, "");
+  
+  // Replace NBSP (U+00A0) with regular space
+  str = str.replace(/\u00A0/g, " ");
+  
+  // Lowercase and trim
+  str = str.toLowerCase().trim();
+  
+  // Collapse multiple spaces
+  str = str.replace(/\s+/g, " ");
+  
+  return str;
 }
 
 /**
  * Parse currency string to number
  * Handles: $1,234.56 -> 1234.56
+ * Also handles multiple periods by keeping only the last one as decimal
  */
 function parseCurrency(value) {
   if (value == null || value === "") return null;
-  const str = String(value).replace(/[$,]/g, "");
+  
+  let str = String(value).trim();
+  
+  // Remove currency symbols and whitespace
+  str = str.replace(/[$€£¥]/g, "");
+  str = str.replace(/\s/g, "");
+  
+  // Remove commas (thousand separators)
+  str = str.replace(/,/g, "");
+  
+  // Handle multiple periods by keeping only the last one as decimal point
+  // e.g., "1.234.56" -> "1234.56"
+  const parts = str.split(".");
+  if (parts.length > 2) {
+    // Multiple periods: join all but last without separator, keep last as decimal
+    str = parts.slice(0, -1).join("") + "." + parts[parts.length - 1];
+  }
+  
   const num = parseFloat(str);
   return isNaN(num) ? null : num;
 }
@@ -161,7 +218,7 @@ const COLUMN_MAPPINGS = {
  * Map a header to our field name
  */
 function mapHeader(header) {
-  const normalized = String(header).toLowerCase().trim();
+  const normalized = normalizeHeader(header);
   return COLUMN_MAPPINGS[normalized] || null;
 }
 
@@ -202,6 +259,37 @@ function parseRow(rowData, headers) {
 }
 
 /**
+ * Parse a CSV line respecting quoted fields
+ * Handles commas within quotes: "Smith, Bob" stays as one field
+ */
+function parseCSVLine(line) {
+  const cells = [];
+  let current = "";
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      // Toggle quote state
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      // Field separator - push current field
+      cells.push(current.trim());
+      current = "";
+    } else {
+      // Regular character
+      current += char;
+    }
+  }
+  
+  // Push last field
+  cells.push(current.trim());
+  
+  return cells;
+}
+
+/**
  * Parse CSV text to rows
  */
 export function parseCSV(csvText) {
@@ -210,9 +298,9 @@ export function parseCSV(csvText) {
     throw new Error("CSV file is empty");
   }
   
-  // Parse header row
+  // Parse header row with proper quote handling
   const headerLine = lines[0];
-  const csvHeaders = headerLine.split(",").map(h => h.trim());
+  const csvHeaders = parseCSVLine(headerLine);
   
   // Map to our field names
   const mappedHeaders = csvHeaders.map(h => mapHeader(h));
@@ -229,8 +317,8 @@ export function parseCSV(csvText) {
     const line = lines[i];
     if (!line.trim()) continue;
     
-    // Simple CSV split (doesn't handle quoted commas - use XLSX for complex CSVs)
-    const cells = line.split(",").map(c => c.trim());
+    // Parse CSV line with quote handling
+    const cells = parseCSVLine(line);
     const row = parseRow(cells, mappedHeaders);
     
     // Validate required fields
@@ -262,15 +350,15 @@ export function parseXLSX(file) {
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
-        // Convert to array of arrays
-        const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        // Convert to array of arrays with header:1 to get raw values
+        const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: "" });
         
         if (rawData.length === 0) {
           throw new Error("Excel file is empty");
         }
         
-        // Parse header row
-        const excelHeaders = rawData[0].map(h => String(h || "").trim());
+        // Parse header row with normalization
+        const excelHeaders = rawData[0].map(h => String(h || ""));
         const mappedHeaders = excelHeaders.map(h => mapHeader(h));
         
         // Check if we have any mapped fields
