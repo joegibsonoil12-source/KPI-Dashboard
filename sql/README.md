@@ -281,8 +281,102 @@ WHERE table_schema = 'public'
 -- Should return: hazmat_fee | numeric | YES
 ```
 
+## Migration: 2025-10-16_delivery_tickets_admin_delete_policy.sql
+
+**Purpose:** Allows users with `admin` or `manager` roles to delete any delivery ticket and its attachments, even if they didn't create them. This enables proper administrative control while maintaining security for regular users.
+
+**Date:** 2025-10-16
+
+**What it does:**
+- Adds `delivery_tickets_delete_admin` policy for admin/manager to delete any ticket
+- Adds `ticket_attachments_delete_admin` policy for admin/manager to delete any attachment
+- Ensures CASCADE delete works properly when admin/manager deletes a ticket
+
+### The Problem This Solves
+
+**Before this migration:**
+- Admins with `admin` role could VIEW all tickets (broad SELECT policy)
+- But admins could NOT delete tickets created by others (DELETE policy restricted to owner only)
+- UI showed delete (✖) icon but deletions failed silently due to RLS blocking the operation
+- CASCADE delete on `ticket_attachments` would also fail even if admin deleted parent ticket
+
+**After this migration:**
+- Admins and managers can delete ANY ticket, regardless of who created it
+- Admins and managers can delete ANY attachment, regardless of who uploaded it
+- CASCADE delete now works properly when admin/manager deletes a ticket
+- Regular users retain owner-only delete restrictions
+
+### Prerequisites
+
+This migration requires:
+1. The `app_roles` table must exist (created by `2025-10-16_safe_roles_permissions_extension.sql`)
+2. Users must have roles assigned in `app_roles` table with role values: `admin`, `manager`, `editor`, or `viewer`
+3. Only users with `admin` or `manager` role will gain the additional delete permissions
+
+### RLS Policies Created
+
+**delivery_tickets_delete_admin:**
+- Allows authenticated users with admin or manager role to delete any delivery ticket
+- Checks: `EXISTS (SELECT 1 FROM public.app_roles WHERE user_id = auth.uid() AND role IN ('admin', 'manager'))`
+
+**ticket_attachments_delete_admin:**
+- Allows authenticated users with admin or manager role to delete any attachment
+- Critical for CASCADE delete compatibility when admin/manager deletes parent ticket
+- Checks: `EXISTS (SELECT 1 FROM public.app_roles WHERE user_id = auth.uid() AND role IN ('admin', 'manager'))`
+
+### Key Features
+
+- **Additive only:** Works alongside existing owner-based delete policies
+- **Idempotent:** Safe to run multiple times without errors
+- **Non-destructive:** Does not modify or remove existing policies
+- **Role-based:** Leverages `app_roles` table for authorization
+- **CASCADE-compatible:** Ensures foreign key constraints work with RLS
+
+### Running the Migration
+
+1. **Prerequisite:** Ensure `2025-10-16_safe_roles_permissions_extension.sql` has been run first
+2. Open Supabase SQL Editor
+3. Copy and paste the contents of `2025-10-16_delivery_tickets_admin_delete_policy.sql`
+4. Click "Run"
+5. Verify policies were created successfully using the verification queries in the file
+
+### Verification
+
+After running the migration:
+```sql
+-- Verify the new admin delete policies exist:
+SELECT schemaname, tablename, policyname, cmd, qual
+FROM pg_policies 
+WHERE schemaname = 'public' 
+  AND tablename IN ('delivery_tickets', 'ticket_attachments')
+  AND policyname LIKE '%_admin'
+ORDER BY tablename, policyname;
+
+-- Should return 2 rows:
+-- delivery_tickets | delivery_tickets_delete_admin | DELETE | ...
+-- ticket_attachments | ticket_attachments_delete_admin | DELETE | ...
+```
+
+### Testing
+
+**As a regular user (no admin role):**
+1. Create a ticket
+2. Try to delete someone else's ticket → Should fail (expected behavior)
+3. Try to delete your own ticket → Should succeed (existing owner policy)
+
+**As an admin or manager:**
+1. Sign in with a user that has `admin` or `manager` role in `app_roles`
+2. Navigate to delivery tickets
+3. Delete a ticket created by another user → Should succeed
+4. Verify the ticket and its attachments are removed from the database
+
+### Documentation Updates
+
+See `docs/DeliveryTickets_Setup.md` for comprehensive RLS policy documentation, including the new admin/manager delete policies.
+
 ## Additional Migrations
 
 Other migrations in this directory:
 - `add_procedure_video_columns_and_owner_policies.sql` - Adds video support to procedures table
 - `procedure_video_storage_setup.sql` - Storage setup for procedure videos
+- `2025-10-16_safe_roles_permissions_extension.sql` - Creates app_roles table and role-based policies
