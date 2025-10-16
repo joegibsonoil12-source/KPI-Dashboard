@@ -21,14 +21,22 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- 2) Optional: Create index for performance on hazmat_fee column
+-- 2) Backfill NULL values to 0 for consistency with UI expectations
+-- ============================================================================
+-- Safe and idempotent: sets NULL hazmat_fee values to 0
+UPDATE public.delivery_tickets
+SET hazmat_fee = 0
+WHERE hazmat_fee IS NULL;
+
+-- ============================================================================
+-- 3) Optional: Create index for performance on hazmat_fee column
 -- ============================================================================
 -- Index is optional; only needed if frequently filtering/sorting by hazmat_fee
 -- Uncomment if needed:
 -- CREATE INDEX IF NOT EXISTS idx_delivery_tickets_hazmat_fee ON public.delivery_tickets(hazmat_fee);
 
 -- ============================================================================
--- 3) Verification queries (commented out, run separately to verify)
+-- 4) Verification queries (commented out, run separately to verify)
 -- ============================================================================
 -- Verify hazmat_fee column exists:
 -- SELECT column_name, data_type, is_nullable
