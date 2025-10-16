@@ -62,6 +62,9 @@ export default function ServiceTracking() {
   const [successMessage, setSuccessMessage] = useState("");
   const [schemaError, setSchemaError] = useState(false);
   const [schemaBannerDismissed, setSchemaBannerDismissed] = useState(false);
+  
+  // Debug: Show user ID (only in development or when needed for support)
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
   
   // Date filters (similar to Delivery Tickets)
@@ -86,24 +89,15 @@ export default function ServiceTracking() {
     return data;
   }
   
-  // Load summary (recomputed from jobs)
-  async function loadSummary(jobsData) {
-    // Summary is computed in useMemo, so we just ensure jobs are loaded
-    return calculateServiceSummary(jobsData);
-  }
-  
-  // Handle reload: fetch jobs and summary in parallel
+  // Handle reload: fetch jobs and summary
   async function handleReload() {
     setIsReloading(true);
     setError("");
     setSuccessMessage("");
     
     try {
-      // Load saved jobs
-      const jobsData = await loadSaved();
-      
-      // Compute summary
-      await loadSummary(jobsData);
+      // Load saved jobs (summary is recomputed automatically via useMemo)
+      await loadSaved();
       
       setSuccessMessage("Data reloaded successfully");
       
@@ -269,7 +263,7 @@ export default function ServiceTracking() {
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h2 className="text-xl font-semibold">Service Tracking</h2>
-          {currentUserId && (
+          {showDebugInfo && currentUserId && (
             <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 font-mono" title="Current User ID">
               {currentUserId.slice(0, 8)}...
             </span>

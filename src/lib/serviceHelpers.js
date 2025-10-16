@@ -6,6 +6,12 @@
 import { supabase } from "./supabaseClient";
 
 /**
+ * Maximum number of jobs to fetch in a single query
+ * Prevents performance issues with very large datasets
+ */
+const MAX_JOBS_LIMIT = 500;
+
+/**
  * Upsert service jobs to database
  * Uses onConflict to update existing records when (created_by, job_number) matches
  * This allows re-uploads to update jobs that have moved dates or changed status
@@ -118,7 +124,7 @@ export async function fetchServiceJobs(options = {}) {
   }
   
   // Order by job_date desc, limit to 500
-  query = query.order("job_date", { ascending: false, nullsLast: true }).limit(500);
+  query = query.order("job_date", { ascending: false, nullsLast: true }).limit(MAX_JOBS_LIMIT);
   
   const { data, error } = await query;
   
