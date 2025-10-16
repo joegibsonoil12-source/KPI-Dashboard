@@ -259,7 +259,137 @@ GROUP BY DATE_TRUNC('month', job_date), status, created_by
 ORDER BY month DESC, status;
 
 -- ============================================================================
--- 10) Verification queries (run separately to verify setup)
+-- 10) Create RPC function for bulk upsert with merge semantics
+-- ============================================================================
+-- Purpose: Atomic server-side bulk upsert for EOD imports
+-- Merge semantics: COALESCE to keep existing values when new file has blanks
+-- Deduplication: (created_by, job_number)
+CREATE OR REPLACE FUNCTION public.service_jobs_bulk_upsert(rows jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  current_user_id uuid;
+  row_data jsonb;
+  job_num text;
+  existing_row public.service_jobs%ROWTYPE;
+  new_job_date date;
+  merged_raw jsonb;
+  inserted_count int := 0;
+  updated_count int := 0;
+BEGIN
+  -- Get current user ID
+  current_user_id := auth.uid();
+  IF current_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  -- Iterate through each row in the input array
+  FOR row_data IN SELECT * FROM jsonb_array_elements(rows)
+  LOOP
+    -- Extract job_number (required)
+    job_num := COALESCE(row_data->>'job_number', '');
+    IF job_num = '' THEN
+      CONTINUE; -- Skip rows without job_number
+    END IF;
+
+    -- Derive job_date from scheduled_start_at or job_created_at
+    new_job_date := NULL;
+    IF row_data->>'scheduled_start_at' IS NOT NULL THEN
+      new_job_date := (row_data->>'scheduled_start_at')::timestamptz::date;
+    ELSIF row_data->>'job_created_at' IS NOT NULL THEN
+      new_job_date := (row_data->>'job_created_at')::timestamptz::date;
+    ELSIF row_data->>'job_date' IS NOT NULL THEN
+      new_job_date := (row_data->>'job_date')::date;
+    END IF;
+
+    -- Check if job already exists
+    SELECT * INTO existing_row
+    FROM public.service_jobs
+    WHERE created_by = current_user_id AND job_number = job_num;
+
+    -- Merge raw JSON (old + new)
+    IF existing_row.id IS NOT NULL THEN
+      merged_raw := COALESCE(existing_row.raw, '{}'::jsonb) || COALESCE((row_data->>'raw')::jsonb, '{}'::jsonb);
+    ELSE
+      merged_raw := COALESCE((row_data->>'raw')::jsonb, '{}'::jsonb);
+    END IF;
+
+    -- Upsert with COALESCE merge logic
+    INSERT INTO public.service_jobs (
+      created_by,
+      job_number,
+      job_description,
+      status,
+      raw_status,
+      customer_name,
+      address,
+      job_created_at,
+      scheduled_start_at,
+      job_date,
+      assigned_employees_raw,
+      primary_tech,
+      job_amount,
+      due_amount,
+      raw
+    ) VALUES (
+      current_user_id,
+      job_num,
+      row_data->>'job_description',
+      row_data->>'status',
+      row_data->>'raw_status',
+      row_data->>'customer_name',
+      row_data->>'address',
+      (row_data->>'job_created_at')::timestamptz,
+      (row_data->>'scheduled_start_at')::timestamptz,
+      new_job_date,
+      row_data->>'assigned_employees_raw',
+      row_data->>'primary_tech',
+      (row_data->>'job_amount')::numeric,
+      (row_data->>'due_amount')::numeric,
+      merged_raw
+    )
+    ON CONFLICT (created_by, job_number)
+    DO UPDATE SET
+      -- Latest file wins for non-null values; COALESCE preserves existing if new is null
+      job_description = COALESCE(EXCLUDED.job_description, service_jobs.job_description),
+      status = COALESCE(EXCLUDED.status, service_jobs.status),
+      raw_status = COALESCE(EXCLUDED.raw_status, service_jobs.raw_status),
+      customer_name = COALESCE(EXCLUDED.customer_name, service_jobs.customer_name),
+      address = COALESCE(EXCLUDED.address, service_jobs.address),
+      job_created_at = COALESCE(EXCLUDED.job_created_at, service_jobs.job_created_at),
+      scheduled_start_at = COALESCE(EXCLUDED.scheduled_start_at, service_jobs.scheduled_start_at),
+      job_date = COALESCE(EXCLUDED.job_date, service_jobs.job_date),
+      assigned_employees_raw = COALESCE(EXCLUDED.assigned_employees_raw, service_jobs.assigned_employees_raw),
+      primary_tech = COALESCE(EXCLUDED.primary_tech, service_jobs.primary_tech),
+      job_amount = COALESCE(EXCLUDED.job_amount, service_jobs.job_amount),
+      due_amount = COALESCE(EXCLUDED.due_amount, service_jobs.due_amount),
+      raw = merged_raw,
+      updated_at = now();
+
+    -- Track whether this was insert or update
+    IF existing_row.id IS NOT NULL THEN
+      updated_count := updated_count + 1;
+    ELSE
+      inserted_count := inserted_count + 1;
+    END IF;
+  END LOOP;
+
+  -- Return summary
+  RETURN jsonb_build_object(
+    'inserted', inserted_count,
+    'updated', updated_count,
+    'total', inserted_count + updated_count
+  );
+END;
+$$;
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION public.service_jobs_bulk_upsert(jsonb) TO authenticated;
+
+-- ============================================================================
+-- 11) Verification queries (run separately to verify setup)
 -- ============================================================================
 -- Verify table exists:
 -- SELECT table_name FROM information_schema.tables 
@@ -280,3 +410,8 @@ ORDER BY month DESC, status;
 -- SELECT indexname, indexdef 
 -- FROM pg_indexes 
 -- WHERE tablename = 'service_jobs' AND indexname LIKE '%job_number%';
+
+-- Verify RPC function exists:
+-- SELECT proname, proargnames, prosrc 
+-- FROM pg_proc 
+-- WHERE proname = 'service_jobs_bulk_upsert';
