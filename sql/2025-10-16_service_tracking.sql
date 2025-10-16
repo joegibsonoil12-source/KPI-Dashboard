@@ -311,9 +311,9 @@ BEGIN
 
     -- Merge raw JSON (old + new)
     IF existing_row.id IS NOT NULL THEN
-      merged_raw := COALESCE(existing_row.raw, '{}'::jsonb) || COALESCE((row_data->>'raw')::jsonb, '{}'::jsonb);
+      merged_raw := COALESCE(existing_row.raw, '{}'::jsonb) || COALESCE(row_data->'raw', '{}'::jsonb);
     ELSE
-      merged_raw := COALESCE((row_data->>'raw')::jsonb, '{}'::jsonb);
+      merged_raw := COALESCE(row_data->'raw', '{}'::jsonb);
     END IF;
 
     -- Upsert with COALESCE merge logic
