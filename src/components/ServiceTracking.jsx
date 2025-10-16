@@ -306,7 +306,7 @@ export default function ServiceTracking() {
             <h4 className="font-semibold mb-2">Preview Rows (first 100)</h4>
             <div className="overflow-x-auto rounded-lg border max-h-96">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left sticky top-0">
+                <thead className="bg-slate-50 text-left sticky top-0 z-10">
                   <tr>
                     <th className="px-3 py-2 text-xs">Job #</th>
                     <th className="px-3 py-2 text-xs">Customer</th>
