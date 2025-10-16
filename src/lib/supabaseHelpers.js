@@ -40,6 +40,22 @@ export async function fetchTicketsPage(page = 1, pageSize = 50) {
   };
 }
 
+/**
+ * Fetch all tickets (no pagination) for computing metrics over full filtered dataset
+ * Used by DeliveryTickets to calculate Summary/Analytics that reflect all filtered tickets,
+ * not just the current page
+ */
+export async function fetchAllTicketsForMetrics() {
+  const { data, error } = await supabase
+    .from("delivery_tickets")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .order("date", { ascending: false });
+  
+  if (error) throw error;
+  return data || [];
+}
+
 export async function insertTicket(ticket) {
   const { data, error } = await supabase
     .from("delivery_tickets")

@@ -220,13 +220,22 @@ export default function ServiceTracking() {
     <div className="space-y-6">
       <header className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Service Tracking</h2>
-        <button
-          className="rounded-lg border px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading}
-        >
-          {isUploading ? "Processing..." : "Upload Report"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            className="rounded-lg border px-3 py-1.5 bg-white hover:bg-slate-50"
+            onClick={loadJobs}
+            title="Reload saved jobs from database"
+          >
+            🔄 Reload
+          </button>
+          <button
+            className="rounded-lg border px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+          >
+            {isUploading ? "Processing..." : "Upload Report"}
+          </button>
+        </div>
         <input
           ref={fileInputRef}
           type="file"
