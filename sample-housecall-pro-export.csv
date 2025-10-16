@@ -1,0 +1,16 @@
+Job #,Job description,Job status,Customer name,Address,Job created date,Job scheduled start date,Assigned employees,Job amount,Due amount
+="1001",Annual HVAC Maintenance,Completed,John Smith,123 Main Street Odessa TX 79761,2025-10-10,2025-10-15 09:00:00,"Bob Smith",$450.00,$0.00
+="1002",Emergency Water Heater Repair,Completed,Sarah Johnson,456 Oak Avenue Midland TX 79701,2025-10-11,2025-10-15 14:30:00,"Alice Jones",$875.50,$0.00
+="1003",New AC Installation,Scheduled,Michael Brown,789 Elm Street Lubbock TX 79401,2025-10-12,2025-10-20 08:00:00,"Bob Smith, Charlie Davis",$4250.00,$4250.00
+="1004",Plumbing Service Call,In Progress,Emily Davis,321 Pine Road Abilene TX 79601,2025-10-13,2025-10-16 10:00:00,"Alice Jones",$325.00,$125.00
+="1005",Furnace Inspection,Scheduled,David Wilson,654 Maple Drive San Angelo TX 76901,2025-10-14,2025-10-18 11:30:00,"Charlie Davis",$200.00,$200.00
+="1006",Emergency Heating Repair,Completed,Jennifer Martinez,987 Cedar Lane Odessa TX 79762,2025-10-10,2025-10-14 07:00:00,"Bob Smith",$1125.75,$0.00
+="1007",AC Tune-Up,Pending,Christopher Lee,147 Birch Court Midland TX 79702,2025-10-15,2025-10-22 13:00:00,"Alice Jones",$295.00,$295.00
+="1008",Duct Cleaning Service,Completed,Amanda Garcia,258 Spruce Avenue Lubbock TX 79402,2025-10-09,2025-10-13 15:00:00,"Charlie Davis",$550.00,$0.00
+="1009",Water Line Repair,Pro canceled,James Rodriguez,369 Willow Street Abilene TX 79602,2025-10-08,2025-10-12 09:30:00,"Bob Smith",$0.00,$0.00
+="1010",Thermostat Replacement,Scheduled,Jessica Taylor,741 Aspen Drive San Angelo TX 76902,2025-10-15,2025-10-21 14:00:00,"Alice Jones, Bob Smith",$385.00,$385.00
+="1011",Leak Detection,In Progress,Daniel Anderson,852 Hickory Road Odessa TX 79763,2025-10-14,2025-10-16 08:30:00,"Charlie Davis",$425.00,$200.00
+="1012",Full System Replacement,Scheduled,Lisa Thomas,963 Redwood Boulevard Midland TX 79703,2025-10-11,2025-10-25 07:30:00,"Bob Smith, Alice Jones, Charlie Davis",$8500.00,$8500.00
+="1013",Drain Cleaning,Completed,Kevin White,159 Cypress Street Lubbock TX 79403,2025-10-13,2025-10-15 16:00:00,"Alice Jones",$275.00,$0.00
+="1014",Gas Line Inspection,Scheduled,Michelle Harris,357 Magnolia Avenue Abilene TX 79603,2025-10-16,2025-10-19 10:30:00,"Charlie Davis",$150.00,$150.00
+="1015",Emergency AC Repair,Completed,Robert Clark,486 Sycamore Lane San Angelo TX 76903,2025-10-12,2025-10-14 12:00:00,"Bob Smith",$975.25,$0.00
