@@ -61,6 +61,54 @@ Stores metadata for file attachments associated with tickets:
 **RLS Policies:**
 - Users can only read/insert attachments for tickets they created
 - Policy checks that the ticket's created_by matches auth.uid()
+- **Admin/Manager Delete:** Users with 'admin' or 'manager' role in app_roles can delete ANY ticket and its attachments, even if they didn't create them
+
+## Row-Level Security (RLS) Policies
+
+Both `delivery_tickets` and `ticket_attachments` tables have RLS enabled to control data access based on user authentication and role.
+
+### delivery_tickets Policies
+
+**SELECT (Read):**
+- All authenticated users can view all tickets
+- Policy: `delivery_tickets_select_authenticated`
+
+**INSERT (Create):**
+- Authenticated users can create tickets with their own user ID as `created_by`
+- Policy: `delivery_tickets_insert_authenticated`
+
+**UPDATE (Modify):**
+- Ticket owner can update their own tickets
+- Policy: `delivery_tickets_update_owner`
+
+**DELETE (Remove):**
+- Ticket owner can delete their own tickets
+- Policy: `delivery_tickets_delete_owner`
+- **Admin/Manager can delete ANY ticket**
+- Policy: `delivery_tickets_delete_admin` (checks app_roles for admin/manager role)
+
+### ticket_attachments Policies
+
+**SELECT (Read):**
+- All authenticated users can view all attachments
+- Policy: `ticket_attachments_select_authenticated`
+
+**INSERT (Create):**
+- Authenticated users can upload attachments with their own user ID as `uploaded_by`
+- Policy: `ticket_attachments_insert_authenticated`
+
+**UPDATE (Modify):**
+- Attachment uploader can update their own attachments
+- Policy: `ticket_attachments_update_owner`
+
+**DELETE (Remove):**
+- Attachment uploader can delete their own attachments
+- Policy: `ticket_attachments_delete_owner`
+- **Admin/Manager can delete ANY attachment**
+- Policy: `ticket_attachments_delete_admin` (checks app_roles for admin/manager role)
+
+**Note on CASCADE Delete:**
+The admin/manager delete policy on `ticket_attachments` is essential for allowing CASCADE delete to work properly when an admin/manager deletes a ticket. Without it, RLS would block the automatic deletion of child attachments even though the foreign key constraint specifies `ON DELETE CASCADE`.
 
 ## Storage Configuration
 
