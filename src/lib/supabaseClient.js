@@ -19,23 +19,33 @@ const anon =
   (typeof process !== 'undefined' && process.env.SUPABASE_ANON_KEY) ||
   "";
 
-if (!url || !anon) {
+// localStorage fallback for static hosting (GitHub Pages, Netlify, etc.)
+// This allows users to configure credentials via the SupabaseSettings UI component
+// when env vars are not available at build/runtime
+const urlLS = typeof window !== 'undefined' ? (localStorage.getItem('SUPABASE_URL') || '') : '';
+const anonLS = typeof window !== 'undefined' ? (localStorage.getItem('SUPABASE_ANON_KEY') || '') : '';
+
+// Final values: env vars take precedence, fall back to localStorage
+const urlFinal = url || urlLS;
+const anonFinal = anon || anonLS;
+
+if (!urlFinal || !anonFinal) {
   // Keep message terse so it isn't noisy in production, but helpful in dev
   // (If you run in CI you'll normally set these at build time.)
   // DO NOT commit service role keys to source. Use environment variables or secrets.
   /* eslint-disable no-console */
   console.warn(
-    '[supabaseClient] Missing Supabase URL or anon key. Provide VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or NEXT_PUBLIC_/REACT_APP_ equivalents) via environment variables.'
+    '[supabaseClient] Missing Supabase URL or anon key. Provide VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or NEXT_PUBLIC_/REACT_APP_ equivalents) via environment variables, or configure via Supabase Settings panel.'
   );
   /* eslint-enable no-console */
 }
 
-export const supabase = createClient(url, anon, {
+export const supabase = createClient(urlFinal, anonFinal, {
   auth: { persistSession: true, autoRefreshToken: true },
 });
 
 // Export factory function for creating client instances (keeps existing API)
-export function createSupabaseClient(supabaseUrl = url, supabaseKey = anon) {
+export function createSupabaseClient(supabaseUrl = urlFinal, supabaseKey = anonFinal) {
   return createClient(supabaseUrl, supabaseKey, {
     auth: { persistSession: true, autoRefreshToken: true },
   });
