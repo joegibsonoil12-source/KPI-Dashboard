@@ -3,6 +3,7 @@ import supabase from "../lib/supabaseClient";
 import {
   fetchTickets,
   fetchTicketsPage,
+  fetchAllTicketsForMetrics,
   insertTicket,
   updateTicket,
   updateTicketBatchSequential,
@@ -27,7 +28,8 @@ DeliveryTickets (Supabase-backed)
 */
 
 export default function DeliveryTickets() {
-  const [tickets, setTickets] = useState([]);
+  const [tickets, setTickets] = useState([]); // Current page tickets for display
+  const [allTickets, setAllTickets] = useState([]); // All tickets for metrics computation
   const [batchStatus, setBatchStatus] = useState("open"); // open | posted
   const [errors, setErrors] = useState([]);
   const csvRef = useRef(null);
@@ -69,7 +71,40 @@ export default function DeliveryTickets() {
     },
   });
 
-  // Filtering logic
+  // Filtering logic for METRICS (uses allTickets for full dataset)
+  const allFilteredByDate = useMemo(() => {
+    if (dateFilter === "all") return allTickets;
+    
+    const now = new Date();
+    let startDate, endDate;
+    
+    if (dateFilter === "today") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    } else if (dateFilter === "week") {
+      const dayOfWeek = now.getDay();
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (7 - dayOfWeek));
+    } else if (dateFilter === "month") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    } else if (dateFilter === "year") {
+      startDate = new Date(now.getFullYear(), 0, 1);
+      endDate = new Date(now.getFullYear() + 1, 0, 1);
+    } else if (dateFilter === "custom") {
+      if (!customStartDate && !customEndDate) return allTickets;
+      startDate = customStartDate ? new Date(customStartDate) : new Date(0);
+      endDate = customEndDate ? new Date(new Date(customEndDate).getTime() + 86400000) : new Date(8640000000000000);
+    }
+    
+    return allTickets.filter(t => {
+      if (!t.date) return false;
+      const ticketDate = new Date(t.date);
+      return ticketDate >= startDate && ticketDate < endDate;
+    });
+  }, [allTickets, dateFilter, customStartDate, customEndDate]);
+  
+  // Filtering logic for DISPLAY (uses current page tickets)
   const filteredByDate = useMemo(() => {
     if (dateFilter === "all") return tickets;
     
@@ -102,10 +137,10 @@ export default function DeliveryTickets() {
     });
   }, [tickets, dateFilter, customStartDate, customEndDate]);
   
-  // Get available trucks from filtered data
-  const availableTrucks = useMemo(() => getUniqueTrucks(filteredByDate), [filteredByDate]);
+  // Get available trucks from ALL filtered data for metrics
+  const availableTrucks = useMemo(() => getUniqueTrucks(allFilteredByDate), [allFilteredByDate]);
   
-  // Filter by truck selection
+  // Filter by truck selection for DISPLAY (current page only)
   const filteredTickets = useMemo(() => {
     if (selectedTruck === "ALL") return filteredByDate;
     return filteredByDate.filter(t => {
@@ -114,23 +149,32 @@ export default function DeliveryTickets() {
     });
   }, [filteredByDate, selectedTruck]);
   
-  // Overall metrics (for all trucks in date range)
-  const overallMetrics = useMemo(() => computeMetrics(filteredByDate), [filteredByDate]);
+  // Filter by truck selection for METRICS (all tickets)
+  const allFilteredByTruck = useMemo(() => {
+    if (selectedTruck === "ALL") return allFilteredByDate;
+    return allFilteredByDate.filter(t => {
+      const truckKey = t.truck || t.truck_id || "Unassigned";
+      return truckKey === selectedTruck;
+    });
+  }, [allFilteredByDate, selectedTruck]);
   
-  // Selected truck metrics
+  // Overall metrics (for all trucks in date range) - uses FULL dataset
+  const overallMetrics = useMemo(() => computeMetrics(allFilteredByDate), [allFilteredByDate]);
+  
+  // Selected truck metrics - uses FULL dataset
   const truckMetrics = useMemo(() => {
     if (selectedTruck === "ALL") return overallMetrics;
-    return computeMetrics(filteredTickets);
-  }, [filteredTickets, selectedTruck, overallMetrics]);
+    return computeMetrics(allFilteredByTruck);
+  }, [allFilteredByTruck, selectedTruck, overallMetrics]);
   
-  // Per-truck breakdown
+  // Per-truck breakdown - uses FULL dataset
   const perTruckData = useMemo(() => {
-    const metrics = computePerTruck(filteredByDate);
+    const metrics = computePerTruck(allFilteredByDate);
     return Object.keys(metrics).map(truck => ({
       truck,
       ...metrics[truck],
     })).sort((a, b) => b.amount - a.amount);
-  }, [filteredByDate]);
+  }, [allFilteredByDate]);
   
   // Legacy control object for compatibility
   const control = useMemo(() => {
@@ -152,10 +196,15 @@ export default function DeliveryTickets() {
     let mounted = true;
     async function load() {
       try {
-        const { rows, count } = await fetchTicketsPage(page, pageSize);
+        // Fetch both paginated tickets for display AND all tickets for metrics
+        const [{ rows, count }, allRows] = await Promise.all([
+          fetchTicketsPage(page, pageSize),
+          fetchAllTicketsForMetrics(),
+        ]);
         if (!mounted) return;
         
         setTotalCount(count);
+        setAllTickets(allRows); // Store all tickets for metrics computation
         
         // Load any persisted draft and merge into state
         const draft = autosave.loadDraft();
