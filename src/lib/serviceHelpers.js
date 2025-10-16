@@ -3,7 +3,13 @@
  * Handles upsert logic for service jobs with deduplication on (created_by, job_number)
  */
 
-import supabase from "./supabaseClient";
+import { supabase } from "./supabaseClient";
+
+/**
+ * Maximum number of jobs to fetch in a single query
+ * Prevents performance issues with very large datasets
+ */
+const MAX_JOBS_LIMIT = 500;
 
 /**
  * Upsert service jobs to database
@@ -56,7 +62,20 @@ export async function upsertServiceJobs(rows, userId) {
   
   if (error) {
     console.error("Upsert error:", error);
-    throw error;
+    
+    // Provide clearer error messages for common issues
+    if (error.code === "42P01") {
+      throw new Error("Table 'service_jobs' does not exist. Please run the setup migration.");
+    } else if (error.code === "42501" || error.message?.includes("permission denied")) {
+      throw new Error("Permission denied. Please ensure you are authenticated and have the required permissions.");
+    } else if (error.code === "23505") {
+      throw new Error("Duplicate key violation. This should not happen with upsert.");
+    } else if (error.message?.includes("JWT")) {
+      throw new Error("Authentication required. Please sign in and try again.");
+    }
+    
+    // Generic error with original message
+    throw new Error(error.message || "Failed to save jobs to database");
   }
   
   return {
@@ -68,14 +87,24 @@ export async function upsertServiceJobs(rows, userId) {
 
 /**
  * Fetch service jobs for current user with optional filters
+ * Filters by created_by = auth.uid() and orders by job_date desc
  * 
  * @param {Object} options - Filter options
  * @returns {Promise<Array>} - Service jobs
  */
 export async function fetchServiceJobs(options = {}) {
+  // Get current user ID
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  
+  if (!userId) {
+    throw new Error("Not authenticated");
+  }
+  
   let query = supabase
     .from("service_jobs")
-    .select("*");
+    .select("*")
+    .eq("created_by", userId);
   
   // Apply filters
   if (options.startDate) {
@@ -94,14 +123,22 @@ export async function fetchServiceJobs(options = {}) {
     query = query.eq("primary_tech", options.tech);
   }
   
-  // Order by job_date desc
-  query = query.order("job_date", { ascending: false });
+  // Order by job_date desc, limit to 500
+  query = query.order("job_date", { ascending: false, nullsLast: true }).limit(MAX_JOBS_LIMIT);
   
   const { data, error } = await query;
   
   if (error) {
     console.error("Fetch error:", error);
-    throw error;
+    
+    // Provide clearer error messages
+    if (error.code === "42P01") {
+      throw new Error("Table 'service_jobs' does not exist. Please run the setup migration.");
+    } else if (error.message?.includes("JWT")) {
+      throw new Error("Authentication required. Please sign in and try again.");
+    }
+    
+    throw new Error(error.message || "Failed to fetch jobs from database");
   }
   
   return data || [];
@@ -189,10 +226,41 @@ export async function deleteServiceJob(id) {
   return true;
 }
 
+/**
+ * Check if service_jobs table exists
+ * Returns true if table exists, false otherwise
+ * 
+ * @returns {Promise<boolean>}
+ */
+export async function checkServiceJobsTableExists() {
+  try {
+    // Attempt a simple select with limit 0 to check table existence
+    const { error } = await supabase
+      .from("service_jobs")
+      .select("id")
+      .limit(0);
+    
+    if (error) {
+      // Error code 42P01 means "undefined_table"
+      if (error.code === "42P01") {
+        return false;
+      }
+      // Other errors might be RLS or auth issues, but table exists
+      return true;
+    }
+    
+    return true;
+  } catch (e) {
+    console.error("Schema check error:", e);
+    return false;
+  }
+}
+
 export default {
   upsertServiceJobs,
   fetchServiceJobs,
   calculateServiceSummary,
   getUniqueTechs,
   deleteServiceJob,
+  checkServiceJobsTableExists,
 };

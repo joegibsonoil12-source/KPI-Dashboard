@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import supabase from "../lib/supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 import { parseServiceReport } from "../lib/parseServiceReport";
 import {
   upsertServiceJobs,
@@ -7,6 +7,7 @@ import {
   calculateServiceSummary,
   getUniqueTechs,
   deleteServiceJob,
+  checkServiceJobsTableExists,
 } from "../lib/serviceHelpers";
 
 /**
@@ -56,8 +57,15 @@ export default function ServiceTracking() {
   const [previewData, setPreviewData] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [schemaError, setSchemaError] = useState(false);
+  const [schemaBannerDismissed, setSchemaBannerDismissed] = useState(false);
+  
+  // Debug: Show user ID (only in development or when needed for support)
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState(null);
   
   // Date filters (similar to Delivery Tickets)
   const [dateFilter, setDateFilter] = useState("all");
@@ -74,20 +82,54 @@ export default function ServiceTracking() {
     return data?.user?.id ?? null;
   }
   
-  // Load jobs on mount
-  useEffect(() => {
-    loadJobs();
-  }, []);
+  // Load saved jobs from Supabase
+  async function loadSaved() {
+    const data = await fetchServiceJobs();
+    setJobs(data);
+    return data;
+  }
   
-  async function loadJobs() {
+  // Handle reload: fetch jobs and summary
+  async function handleReload() {
+    setIsReloading(true);
+    setError("");
+    setSuccessMessage("");
+    
     try {
-      const data = await fetchServiceJobs();
-      setJobs(data);
+      // Load saved jobs (summary is recomputed automatically via useMemo)
+      await loadSaved();
+      
+      setSuccessMessage("Data reloaded successfully");
+      
+      // Auto-dismiss success message after 3 seconds
+      setTimeout(() => setSuccessMessage(""), 3000);
     } catch (e) {
-      console.error("Failed to load jobs:", e);
-      setError(`Failed to load jobs: ${e.message}`);
+      console.error("Reload error:", e);
+      setError(`Failed to reload: ${e.message}`);
+    } finally {
+      setIsReloading(false);
     }
   }
+  
+  // Check schema and load jobs on mount
+  useEffect(() => {
+    async function initialize() {
+      // Get current user
+      const userId = await getCurrentUserId();
+      setCurrentUserId(userId);
+      
+      // Check if table exists
+      const tableExists = await checkServiceJobsTableExists();
+      if (!tableExists) {
+        setSchemaError(true);
+      }
+      
+      // Load jobs even if table doesn't exist (will show error if needed)
+      await handleReload();
+    }
+    
+    initialize();
+  }, []);
   
   // Handle file upload
   async function handleFileSelect(e) {
@@ -131,8 +173,8 @@ export default function ServiceTracking() {
       );
       setPreviewData(null);
       
-      // Reload jobs
-      await loadJobs();
+      // Reload jobs and summary immediately
+      await handleReload();
     } catch (e) {
       console.error("Import error:", e);
       setError(`Failed to import: ${e.message}`);
@@ -219,14 +261,22 @@ export default function ServiceTracking() {
   return (
     <div className="space-y-6">
       <header className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Service Tracking</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-semibold">Service Tracking</h2>
+          {showDebugInfo && currentUserId && (
+            <span className="text-xs px-2 py-1 rounded bg-slate-100 text-slate-600 font-mono" title="Current User ID">
+              {currentUserId.slice(0, 8)}...
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <button
-            className="rounded-lg border px-3 py-1.5 bg-white hover:bg-slate-50"
-            onClick={loadJobs}
+            className="rounded-lg border px-3 py-1.5 bg-white hover:bg-slate-50 disabled:opacity-50"
+            onClick={handleReload}
+            disabled={isReloading}
             title="Reload saved jobs from database"
           >
-            🔄 Reload
+            {isReloading ? "⏳ Reloading..." : "🔄 Reload"}
           </button>
           <button
             className="rounded-lg border px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700"
@@ -244,6 +294,35 @@ export default function ServiceTracking() {
           onChange={handleFileSelect}
         />
       </header>
+      
+      {/* Schema Error Banner */}
+      {schemaError && !schemaBannerDismissed && (
+        <div className="rounded-lg border border-yellow-300 bg-yellow-50 p-4">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <strong className="text-yellow-800">⚠️ Setup Required:</strong>
+              <p className="text-yellow-700 mt-1">
+                The <code className="bg-yellow-100 px-1 rounded">service_jobs</code> table is missing. 
+                Preview and import will work, but data cannot be saved until you run the setup migration.
+              </p>
+              <p className="text-yellow-700 mt-2 text-sm">
+                👉 Run the SQL file: 
+                <code className="bg-yellow-100 px-1 rounded ml-1">
+                  sql/2025-10-16_service_tracking.sql
+                </code>
+                {" "}in your Supabase SQL editor.
+              </p>
+            </div>
+            <button
+              className="text-yellow-800 hover:text-yellow-900 ml-4"
+              onClick={() => setSchemaBannerDismissed(true)}
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Error/Success Messages */}
       {error && (
