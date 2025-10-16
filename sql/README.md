@@ -237,6 +237,7 @@ The `DeliveryTickets.jsx` component has been updated to:
 
 **What it does:**
 - Adds `hazmat_fee` column (numeric, nullable) to `delivery_tickets` table
+- Backfills NULL values to 0 for consistency with UI expectations
 - Optional: Creates index on `hazmat_fee` for performance (commented out by default)
 - Includes verification queries to confirm successful migration
 
@@ -248,7 +249,7 @@ The `DeliveryTickets.jsx` component has been updated to:
 
 - **Idempotent:** Safe to run multiple times without errors
 - **Non-destructive:** Only adds column, never removes existing data
-- **Backward compatible:** Existing rows will have null values for hazmat_fee
+- **Backward compatible:** Existing rows will have hazmat_fee set to 0 by default
 - **Amount calculation:** Frontend automatically includes hazmat_fee in amount: qty * price + tax + hazmat_fee
 
 ### Running the Migration
