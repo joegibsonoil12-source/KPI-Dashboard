@@ -117,6 +117,48 @@ WITH CHECK (true);
 4. Check RLS policies in Supabase dashboard under Authentication > Policies
 5. Ensure environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) are correctly set
 
+## Service Tracking
+
+The Service Tracking feature allows you to import Housecall Pro service job reports and track job status, revenue, and technician assignments.
+
+### Database Setup
+
+Apply the Service Tracking migration:
+```
+sql/2025-10-16_service_tracking.sql
+```
+
+This migration:
+- Creates the `service_jobs` table with all required fields
+- Sets up RLS policies (SELECT for authenticated, INSERT/UPDATE/DELETE for owner or admin/manager)
+- Creates unique constraint on `(created_by, job_number)` for deduplication
+- Adds indexes for performance
+- Creates views for per-tech and daily/monthly metrics rollups
+- Is idempotent and safe to re-run multiple times
+
+### Features
+
+- **Housecall Pro Import**: Upload CSV or XLSX files from Housecall Pro
+- **Robust Parsing**: 
+  - Handles Excel-quoted numbers (="678")
+  - Normalizes headers with BOM/NBSP/quote removal
+  - Parses currency correctly ($1,234.56 → 1234.56)
+  - Maps status variants (Pending → scheduled, Pro canceled → canceled)
+- **Smart Deduplication**: Re-uploads update existing jobs by (user, job_number)
+- **Preview Before Import**: Review parsed data with summary statistics
+- **Color-Coded Status**: completed (green), scheduled (blue), in_progress (orange), unscheduled (gray), canceled (red)
+- **Filtering**: By date range, technician, and status
+- **Summary Analytics**: Revenue and job counts by status
+
+### Usage
+
+1. Click **Upload Report** button
+2. Select a Housecall Pro CSV or XLSX export
+3. Review the preview with parsed data and summary statistics
+4. Click **Import to Database** to save jobs
+5. Use filters to analyze by date, tech, or status
+6. Click **🔄 Reload** to manually refresh saved jobs from database
+
 ## Delivery Tickets Tracking
 
 The Delivery Tickets feature has been enhanced with comprehensive tracking capabilities:
@@ -134,6 +176,8 @@ The Delivery Tickets feature has been enhanced with comprehensive tracking capab
   - Total Gallons Delivered
   - Average Miles per Ticket
   - On-Time Delivery Percentage
+- **Full-Scope Metrics**: Summary/Analytics reflect ALL filtered tickets across all pages, not just the current page
+- **Pagination**: Table displays 15 rows per page for clean, focused viewing
 
 ### Database Migration
 

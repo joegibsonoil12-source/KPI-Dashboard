@@ -303,10 +303,10 @@ export default function ServiceTracking() {
           
           {/* Sample rows */}
           <div className="mb-4">
-            <h4 className="font-semibold mb-2">Sample Rows (first 10)</h4>
-            <div className="overflow-x-auto rounded-lg border">
+            <h4 className="font-semibold mb-2">Preview Rows (first 100)</h4>
+            <div className="overflow-x-auto rounded-lg border max-h-96">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left">
+                <thead className="bg-slate-50 text-left sticky top-0">
                   <tr>
                     <th className="px-3 py-2 text-xs">Job #</th>
                     <th className="px-3 py-2 text-xs">Customer</th>
@@ -317,7 +317,7 @@ export default function ServiceTracking() {
                   </tr>
                 </thead>
                 <tbody>
-                  {previewData.rows.slice(0, 10).map((row, idx) => (
+                  {previewData.rows.slice(0, 100).map((row, idx) => (
                     <tr key={idx} className="border-t">
                       <td className="px-3 py-2">{row.job_number}</td>
                       <td className="px-3 py-2">{row.customer_name}</td>
@@ -334,9 +334,9 @@ export default function ServiceTracking() {
                 </tbody>
               </table>
             </div>
-            {previewData.rows.length > 10 && (
+            {previewData.rows.length > 100 && (
               <div className="text-sm text-slate-600 mt-2">
-                Showing 10 of {previewData.rows.length} rows
+                Showing 100 of {previewData.rows.length} rows
               </div>
             )}
           </div>
