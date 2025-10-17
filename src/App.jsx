@@ -10,6 +10,7 @@ import { supabase } from "./lib/supabaseClient";
 import Procedures from "./tabs/Procedures_v3";
 import DeliveryTicketsEditor from "./components/DeliveryTickets";
 import ServiceTracking from "./components/ServiceTracking";
+import ExecutiveDashboard from "./components/dashboard/ExecutiveDashboard";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -854,7 +855,7 @@ function ExportCenter() {
 /* Tab registry                                                                */
 /* ========================================================================== */
 const TABS = [
-  { key: "dashboard",    label: "Dashboard",        adminOnly: false, Component: LegacyDashboard },
+  { key: "dashboard",    label: "Dashboard",        adminOnly: false, Component: ExecutiveDashboard },
   { key: "financial",    label: "Financial Ops",    adminOnly: false, Component: FinancialOps },
   { key: "ops",          label: "Operational KPIs", adminOnly: false, Component: OperationalKPIs },
   { key: "budget",       label: "Budget",           adminOnly: false, Component: Budget },
