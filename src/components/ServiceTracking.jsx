@@ -591,6 +591,7 @@ export default function ServiceTracking() {
                   <th className="px-3 py-2 text-xs">Status</th>
                   <th className="px-3 py-2 text-xs">Date</th>
                   <th className="px-3 py-2 text-xs">Tech</th>
+                  <th className="px-3 py-2 text-xs">Defers</th>
                   <th className="px-3 py-2 text-xs">Description</th>
                   <th className="px-3 py-2 text-xs">Amount</th>
                   <th className="px-3 py-2 text-xs">Due</th>
@@ -607,6 +608,7 @@ export default function ServiceTracking() {
                     </td>
                     <td className="px-3 py-2">{job.job_date || "-"}</td>
                     <td className="px-3 py-2">{job.primary_tech || "-"}</td>
+                    <td className="px-3 py-2 tabular-nums">{job.reschedule_count || 0}</td>
                     <td className="px-3 py-2 max-w-xs truncate">{job.job_description || "-"}</td>
                     <td className="px-3 py-2 tabular-nums">
                       ${(job.job_amount || 0).toFixed(2)}
@@ -627,7 +629,7 @@ export default function ServiceTracking() {
                 ))}
                 {filteredJobs.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-3 py-6 text-center text-slate-500">
+                    <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
                       No jobs found. Upload a Housecall Pro report to get started.
                     </td>
                   </tr>
