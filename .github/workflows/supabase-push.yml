@@ -1,0 +1,70 @@
+name: Deploy Supabase (db push)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "supabase/**"
+      - ".supabase/**"
+      - "db/migrations/**"
+      - "sql/**"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify Supabase CLI via npx
+        run: npx --yes supabase@latest --version
+
+      - name: Debug show config/state
+        run: |
+          echo "PWD:"
+          pwd
+          echo
+          echo "Root listing:"
+          ls -la
+          echo
+          echo "supabase/ listing:"
+          ls -la supabase || true
+          echo
+          echo "Show supabase/config.toml:"
+          cat supabase/config.toml || true
+          echo
+          echo ".supabase listing:"
+          ls -la .supabase || true
+          echo
+          echo "Show .supabase/project:"
+          cat .supabase/project || true
+
+      - name: Authenticate Supabase CLI
+        run: npx --yes supabase@latest login --token "${SUPABASE_ACCESS_TOKEN}"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # Force a link in the exact directory where db push will run
+      - name: Link project (force) in supabase/
+        working-directory: supabase
+        run: npx --yes supabase@latest link --project-ref "jskajkwulaaakhaolzdu" --debug
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      # Push migrations with both env fallbacks set
+      - name: Push CLI-managed migrations (cwd: supabase)
+        working-directory: supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: jskajkwulaaakhaolzdu
+          SUPABASE_PROJECT_REF: jskajkwulaaakhaolzdu
+        run: npx --yes supabase@latest db push --debug
