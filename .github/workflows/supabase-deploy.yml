@@ -43,9 +43,7 @@ jobs:
           echo
           echo "Show supabase/config.toml:"; cat supabase/config.toml || true
           echo
-          echo ".supabase listing:"; ls -la .supabase || true
-          echo
-          echo "Show .supabase/project:"; cat .supabase/project || true
+          echo "Show supabase/.supabase/project:"; cat supabase/.supabase/project || true
 
       - name: Authenticate and link (optional link if secret provided)
         env:
@@ -59,13 +57,9 @@ jobs:
             exit 0
           fi
 
-          # Ensure supabase folder exists
           mkdir -p supabase
-
-          # Login
           npx --yes supabase@latest login --token "$SUPABASE_ACCESS_TOKEN"
 
-          # If already linked inside supabase/, skip linking.
           if [ -f "supabase/.supabase/project" ]; then
             echo "Project already linked in supabase/.supabase/project"
           elif [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
@@ -182,7 +176,6 @@ jobs:
                 fi
 
                 echo "Deploying function: $name"
-                # Relies on project being linked; no --project-ref
                 npx --yes supabase@latest functions deploy "$name" --debug || npx --yes supabase@latest functions deploy "$d" --debug
               fi
             done
