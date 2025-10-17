@@ -43,7 +43,6 @@ jobs:
           set -euo pipefail
           npx --yes supabase@latest login --token "$SUPABASE_ACCESS_TOKEN"
 
-      # Helpful logs so you can see exactly what the runner sees
       - name: Debug show config/state
         run: |
           set -euo pipefail
@@ -64,7 +63,6 @@ jobs:
           echo "Show .supabase/project:"
           cat .supabase/project || true
 
-      # Force a link exactly where db push will run (inside supabase/)
       - name: Link project (force) in supabase/
         working-directory: supabase
         env:
@@ -73,12 +71,10 @@ jobs:
           set -euo pipefail
           npx --yes supabase@latest link --project-ref "jskajkwulaaakhaolzdu" --debug
 
-      # Run CLI-managed migrations from supabase/ and pass the ref explicitly
       - name: Push CLI-managed migrations (cwd: supabase)
         working-directory: supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          # Fallbacks for older/newer CLI variants (harmless if unused)
           SUPABASE_PROJECT_ID: jskajkwulaaakhaolzdu
           SUPABASE_PROJECT_REF: jskajkwulaaakhaolzdu
         run: |
@@ -180,16 +176,6 @@ jobs:
             echo "No functions directory found in any of the candidate locations: ${candidates[*]}"
             echo "Skipping functions deployment."
           fi
-
-      - name: Post Set up Node.js
-        run: |
-          set -euo pipefail
-          echo "Post setup"
-
-      - name: Post Checkout
-        run: |
-          set -euo pipefail
-          echo "Post checkout"
 
       - name: Complete job
         run: echo "Done"
