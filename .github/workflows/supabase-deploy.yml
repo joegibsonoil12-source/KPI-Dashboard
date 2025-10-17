@@ -9,6 +9,7 @@ on:
       - 'db/**'
       - 'functions/**'
       - 'supabase/**'
+      - '.supabase/**'
       - '.github/workflows/**'
       - 'package.json'
       - 'yarn.lock'
@@ -42,7 +43,7 @@ jobs:
           set -euo pipefail
           npx --yes supabase@latest login --token "$SUPABASE_ACCESS_TOKEN"
 
-      # Show what the runner actually sees (helps debug paths/config)
+      # Helpful logs so you can see exactly what the runner sees
       - name: Debug show config/state
         run: |
           set -euo pipefail
@@ -72,7 +73,7 @@ jobs:
           set -euo pipefail
           npx --yes supabase@latest link --project-ref "jskajkwulaaakhaolzdu" --debug
 
-      # Run CLI-managed migrations from the same directory (supabase/)
+      # Run CLI-managed migrations from supabase/ and pass the ref explicitly
       - name: Push CLI-managed migrations (cwd: supabase)
         working-directory: supabase
         env:
@@ -82,7 +83,7 @@ jobs:
           SUPABASE_PROJECT_REF: jskajkwulaaakhaolzdu
         run: |
           set -euo pipefail
-          npx --yes supabase@latest db push --debug
+          npx --yes supabase@latest db push -p "jskajkwulaaakhaolzdu" --debug
 
       - name: Run direct SQL migrations (psql) if SUPABASE_DB_URL provided
         env:
