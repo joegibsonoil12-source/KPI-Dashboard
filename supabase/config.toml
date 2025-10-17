@@ -1,4 +1,2 @@
-# Supabase CLI reads this when db push runs inside the supabase/ folder.
-# Your Project Reference from Supabase Settings → General → Project ID.
 project_id = "jskajkwulaaakhaolzdu"
 project_ref = "jskajkwulaaakhaolzdu"
