@@ -47,14 +47,12 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: npx --yes supabase@latest login --token "${SUPABASE_ACCESS_TOKEN}"
 
-      # Force a link exactly where db push runs
       - name: Link project (force) in supabase/
         working-directory: supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: npx --yes supabase@latest link --project-ref "jskajkwulaaakhaolzdu" --debug
 
-      # Explicitly pass the project ref to avoid any CLI version quirks
       - name: Push CLI-managed migrations (cwd: supabase)
         working-directory: supabase
         env:
