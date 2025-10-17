@@ -37,25 +37,20 @@ jobs:
           set -euo pipefail
           echo "PWD: $(pwd)"
           echo
-          echo "Repo root listing:"
-          ls -la
+          echo "Repo root listing:"; ls -la
           echo
-          echo "supabase/ listing:"
-          ls -la supabase || true
+          echo "supabase/ listing:"; ls -la supabase || true
           echo
-          echo "Show supabase/config.toml:"
-          cat supabase/config.toml || true
+          echo "Show supabase/config.toml:"; cat supabase/config.toml || true
           echo
-          echo ".supabase listing:"
-          ls -la .supabase || true
+          echo ".supabase listing:"; ls -la .supabase || true
           echo
-          echo "Show .supabase/project:"
-          cat .supabase/project || true
+          echo "Show .supabase/project:"; cat .supabase/project || true
 
-      - name: Authenticate and link (skip when secret missing or folder absent)
+      - name: Authenticate and link (optional link if secret provided)
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        working-directory: .
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
 
@@ -64,13 +59,21 @@ jobs:
             exit 0
           fi
 
-          if [ ! -d "supabase" ]; then
-            echo "No supabase/ directory; skipping Supabase deploy"
-            exit 0
-          fi
+          # Ensure supabase folder exists
+          mkdir -p supabase
 
+          # Login
           npx --yes supabase@latest login --token "$SUPABASE_ACCESS_TOKEN"
-          (cd supabase && npx --yes supabase@latest link --project-ref "jskajkwulaaakhaolzdu" --debug)
+
+          # If already linked inside supabase/, skip linking.
+          if [ -f "supabase/.supabase/project" ]; then
+            echo "Project already linked in supabase/.supabase/project"
+          elif [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
+            echo "Linking Supabase project using SUPABASE_PROJECT_REF (not printed)"
+            (cd supabase && npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" --debug)
+          else
+            echo "No SUPABASE_PROJECT_REF secret and no existing link; Supabase operations will be skipped."
+          fi
 
       - name: Show Supabase link status (cwd: supabase)
         env:
@@ -90,7 +93,11 @@ jobs:
             echo "SUPABASE_ACCESS_TOKEN not set; skipping"
             exit 0
           fi
-          npx --yes supabase@latest db push --project-ref "jskajkwulaaakhaolzdu" --debug
+          if [ ! -f ".supabase/project" ]; then
+            echo "Not linked (supabase/.supabase/project missing); skipping db push"
+            exit 0
+          fi
+          npx --yes supabase@latest db push --debug
 
       - name: Run direct SQL migrations (psql) if SUPABASE_DB_URL provided
         env:
@@ -128,16 +135,11 @@ jobs:
         run: |
           set -euo pipefail
           echo "PWD: $(pwd)"
-          echo "Repo root listing:"
-          ls -la
-          echo "supabase directory:"
-          ls -la supabase || true
-          echo "supabase/functions:"
-          ls -la supabase/functions || true
-          echo "Top-level functions directory (if any):"
-          ls -la functions || true
-          echo "Print entry file if exists:"
-          head -n 200 supabase/functions/api/index.ts || true
+          echo "Repo root listing:"; ls -la
+          echo "supabase directory:"; ls -la supabase || true
+          echo "supabase/functions:"; ls -la supabase/functions || true
+          echo "Top-level functions directory (if any):"; ls -la functions || true
+          echo "Print entry file if exists:"; head -n 200 supabase/functions/api/index.ts || true
 
       - name: Deploy Edge Functions (check multiple locations) (via npx)
         env:
@@ -148,7 +150,6 @@ jobs:
           functions_dir=""
           for dir in "${candidates[@]}"; do
             if [ -d "$dir" ]; then
-              # Has either subdirectories or .js/.ts files
               if [ "$(find "$dir" -maxdepth 1 -type d ! -path "$dir" | wc -l)" -gt 0 ] || \
                  [ "$(find "$dir" -maxdepth 1 -name "*.js" -o -name "*.ts" | wc -l)" -gt 0 ]; then
                 functions_dir="$dir"
@@ -181,6 +182,7 @@ jobs:
                 fi
 
                 echo "Deploying function: $name"
+                # Relies on project being linked; no --project-ref
                 npx --yes supabase@latest functions deploy "$name" --debug || npx --yes supabase@latest functions deploy "$d" --debug
               fi
             done
