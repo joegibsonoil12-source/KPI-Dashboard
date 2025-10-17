@@ -20,6 +20,7 @@ jobs:
   deploy:
     name: Deploy Supabase
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,7 +28,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Verify supabase CLI via npx
         run: |
@@ -41,24 +42,47 @@ jobs:
           set -euo pipefail
           npx --yes supabase@latest login --token "$SUPABASE_ACCESS_TOKEN"
 
-      - name: Link project (via npx)
-        env:
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      # Show what the runner actually sees (helps debug paths/config)
+      - name: Debug show config/state
         run: |
           set -euo pipefail
-          npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" || true
+          echo "PWD: $(pwd)"
+          echo
+          echo "Repo root listing:"
+          ls -la
+          echo
+          echo "supabase/ listing:"
+          ls -la supabase || true
+          echo
+          echo "Show supabase/config.toml:"
+          cat supabase/config.toml || true
+          echo
+          echo ".supabase listing:"
+          ls -la .supabase || true
+          echo
+          echo "Show .supabase/project:"
+          cat .supabase/project || true
 
-      - name: Push CLI-managed migrations (only if supabase/ exists) (via npx)
+      # Force a link exactly where db push will run (inside supabase/)
+      - name: Link project (force) in supabase/
+        working-directory: supabase
         env:
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -d "supabase" ]; then
-            echo "Found supabase/ directory -- running supabase db push (via npx)"
-            npx --yes supabase@latest db push --yes || npx --yes supabase@latest db push
-          else
-            echo "No supabase/ directory found -- skipping CLI-managed migrations"
-          fi
+          npx --yes supabase@latest link --project-ref "jskajkwulaaakhaolzdu" --debug
+
+      # Run CLI-managed migrations from the same directory (supabase/)
+      - name: Push CLI-managed migrations (cwd: supabase)
+        working-directory: supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          # Fallbacks for older/newer CLI variants (harmless if unused)
+          SUPABASE_PROJECT_ID: jskajkwulaaakhaolzdu
+          SUPABASE_PROJECT_REF: jskajkwulaaakhaolzdu
+        run: |
+          set -euo pipefail
+          npx --yes supabase@latest db push --debug
 
       - name: Run direct SQL migrations (psql) if SUPABASE_DB_URL provided
         env:
@@ -108,7 +132,7 @@ jobs:
 
       - name: Deploy Edge Functions (check multiple locations) (via npx)
         env:
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
           candidates=("./functions" "./server/functions" "./services/functions" "./server" "./services" "./supabase/functions")
