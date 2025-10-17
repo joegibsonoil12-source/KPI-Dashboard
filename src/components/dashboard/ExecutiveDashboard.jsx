@@ -103,6 +103,34 @@ function parseTicketDate(row) {
   return isNaN(+d) ? null : d;
 }
 
+// NEW: helpers for delivery grouping
+function toISODate(d) { return d.toISOString().slice(0,10); }
+function isoWeekNumber(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - dayNum + 3);
+  const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+  const weekNum = 1 + Math.round(((date - firstThursday) / 86400000 - 3) / 7);
+  return `${date.getUTCFullYear()}-W${String(weekNum).padStart(2,"0")}`;
+}
+function bucketKey(d, group) {
+  if (group === "day") return toISODate(d); // YYYY-MM-DD
+  if (group === "week") return isoWeekNumber(d); // YYYY-Www
+  if (group === "month") return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; // YYYY-MM
+  if (group === "year") return String(d.getFullYear()); // YYYY
+  return toISODate(d);
+}
+function fmtKeyLabel(key, group) {
+  if (group === "day") return key;
+  if (group === "week") {
+    const [y, w] = key.split("-W");
+    return `W${w} ${y}`;
+  }
+  if (group === "month") return key; // YYYY-MM
+  if (group === "year") return key;  // YYYY
+  return key;
+}
+
 export default function ExecutiveDashboard() {
   const [preset, setPreset] = useState("30d");
   const [fromTo, setFromTo] = useState(rangePreset("30d"));
@@ -111,6 +139,8 @@ export default function ExecutiveDashboard() {
   const [serviceDaily, setServiceDaily] = useState([]);
   const [serviceTechs, setServiceTechs] = useState([]);
   const [tickets, setTickets] = useState([]);
+  // NEW: grouping for deliveries chart
+  const [delivGroup, setDelivGroup] = useState("day"); // 'day' | 'week' | 'month' | 'year'
 
   useEffect(() => { setFromTo(rangePreset(preset)); }, [preset]);
 
@@ -165,8 +195,9 @@ export default function ExecutiveDashboard() {
   const agg = useMemo(() => {
     const dayKey = (s) => (s ? String(s).slice(0,10) : "");
 
+    // Service aggregations (daily)
     const serviceDays = Array.from(new Set(serviceDaily.map((r) => dayKey(r.job_date)))).sort();
-    const S = ["completed", "scheduled", "in_progress", "canceled"]; 
+    const S = ["completed", "scheduled", "in_progress", "canceled"];
     const mapService = new Map();
     const addS = (day, status, cnt, rev, due) => {
       if (!mapService.has(day)) mapService.set(day, new Map());
@@ -194,10 +225,10 @@ export default function ExecutiveDashboard() {
       canceled: serviceDaily.filter(r=>r.status==="canceled").reduce((a,b)=>a+(b.job_count||0),0),
     };
 
+    // Deliveries — for combined daily revenue (unchanged day basis)
     const ticketsDays = Array.from(new Set(tickets.map((t) => {
       const d = parseTicketDate(t); return d ? d.toISOString().slice(0,10) : null;
     }).filter(Boolean))).sort();
-
     const byDayTickets = new Map();
     const addT = (day, amount, status) => {
       if (!byDayTickets.has(day)) byDayTickets.set(day, { amount: 0, statusCounts: {} });
@@ -212,11 +243,25 @@ export default function ExecutiveDashboard() {
       addT(day, t.amount, t.status);
     });
     const deliveriesRevenueByDay = ticketsDays.map((d) => byDayTickets.get(d)?.amount || 0);
+
+    // Deliveries — NEW grouped buckets for the chart (day/week/month/year)
+    const ticketMap = new Map(); // key -> { amount, statusCounts }
+    const keysOrder = [];
+    tickets.forEach((t) => {
+      const d = parseTicketDate(t); if (!d) return;
+      const k = bucketKey(d, delivGroup);
+      if (!ticketMap.has(k)) { ticketMap.set(k, { amount: 0, statusCounts: {} }); keysOrder.push(k); }
+      const o = ticketMap.get(k);
+      o.amount += Number(t.amount || 0);
+      const st = String(t.status || "{}").toLowerCase();
+      o.statusCounts[st] = (o.statusCounts[st] || 0) + 1;
+    });
+    const ticketsBuckets = keysOrder.sort();
     const deliveriesSeriesStatus = [
       { name: "Delivered", key: "delivered", color: "#16A34A" },
       { name: "Scheduled", key: "scheduled", color: "#4338CA" },
       { name: "Issues", key: "issue", color: "#DC2626" },
-    ].map((s) => ({ name: s.name, color: s.color, values: ticketsDays.map((d)=> byDayTickets.get(d)?.statusCounts[s.key] || 0) }));
+    ].map((s) => ({ name: s.name, color: s.color, values: ticketsBuckets.map((k)=> ticketMap.get(k)?.statusCounts[s.key] || 0) }));
 
     const deliveriesTotals = {
       tickets: tickets.length,
@@ -225,11 +270,13 @@ export default function ExecutiveDashboard() {
     };
     const deliveriesAvgPrice = deliveriesTotals.gallons > 0 ? deliveriesTotals.revenue / deliveriesTotals.gallons : 0;
 
+    // Combined revenue trend (service completed + delivery amounts) on daily axis
     const allDays = Array.from(new Set([...serviceDays, ...ticketsDays])).sort();
     const mapSvcRev = new Map(serviceDays.map((d,i)=>[d, serviceCompletedRevenueByDay[i] || 0]));
     const mapDelRev = new Map(ticketsDays.map((d,i)=>[d, deliveriesRevenueByDay[i] || 0]));
     const combinedRevenueByDay = allDays.map((d)=> (mapSvcRev.get(d)||0) + (mapDelRev.get(d)||0));
 
+    // Top techs by service revenue (unchanged)
     const techSums = new Map();
     serviceTechs.forEach((t)=> {
       const key = (t.tech_name || "").trim() || "Unassigned";
@@ -243,11 +290,12 @@ export default function ExecutiveDashboard() {
     return {
       serviceDays, serviceCompletedRevenueByDay, serviceSeriesStatus,
       svcCompletedRevenue, svcPipelineRevenue, svcCounts,
-      ticketsDays, deliveriesRevenueByDay, deliveriesSeriesStatus,
+      ticketsDays, deliveriesRevenueByDay, // kept for combined chart
+      ticketsBuckets, deliveriesSeriesStatus, // used by grouped delivery chart
       deliveriesTotals, deliveriesAvgPrice,
       allDays, combinedRevenueByDay, topTechs,
     };
-  }, [serviceDaily, serviceTechs, tickets]);
+  }, [serviceDaily, serviceTechs, tickets, delivGroup]);
 
   const usd = (n) => "$" + Math.round(n||0).toLocaleString();
   const num = (n) => (n||0).toLocaleString();
@@ -313,9 +361,27 @@ export default function ExecutiveDashboard() {
           </Card>
         </Section>
 
-        <Section title="Deliveries — Tickets by Status (Daily)">
+        <Section
+          title="Deliveries — Tickets by Status"
+          actions={
+            <select
+              value={delivGroup}
+              onChange={(e)=>setDelivGroup(e.target.value)}
+              style={{ padding:"6px 10px", border:"1px solid #E5E7EB", borderRadius:8 }}
+              title="Group by"
+            >
+              <option value="day">Day</option>
+              <option value="week">Week</option>
+              <option value="month">Month</option>
+              <option value="year">Year</option>
+            </select>
+          }
+        >
           <Card>
-            <StackedBars categories={agg.ticketsDays} series={agg.deliveriesSeriesStatus} />
+            <StackedBars
+              categories={agg.ticketsBuckets.map(k=>fmtKeyLabel(k, delivGroup))}
+              series={agg.deliveriesSeriesStatus}
+            />
             <div style={{ display:"flex", gap:12, marginTop:8, fontSize:12, color:"#6B7280", flexWrap:"wrap" }}>
               {agg.deliveriesSeriesStatus.map((s)=>(
                 <div key={s.name} style={{ display:"flex", alignItems:"center", gap:6 }}>
