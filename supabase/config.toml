@@ -1,4 +1,4 @@
-# Supabase CLI will read one of these depending on version.
-# Using both is safe and increases compatibility.
+# Supabase CLI reads this when db push runs inside the supabase/ folder.
+# Your Project Reference from Supabase Settings → General → Project ID.
 project_id = "jskajkwulaaakhaolzdu"
 project_ref = "jskajkwulaaakhaolzdu"
