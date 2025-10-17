@@ -1,0 +1,4 @@
+# Supabase CLI will read one of these depending on version.
+# Using both is safe and increases compatibility.
+project_id = "jskajkwulaaakhaolzdu"
+project_ref = "jskajkwulaaakhaolzdu"
