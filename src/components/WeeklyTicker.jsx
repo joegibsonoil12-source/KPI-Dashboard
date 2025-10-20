@@ -1,156 +1,167 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
-/**
- * WeeklyTicker - Displays weekly metrics (tickets, gallons, revenue) with deltas and percentage change
- * Designed for full-screen TV display
- */
-export default function WeeklyTicker({ 
-  title = "Deliveries", 
+/*
+WeeklyTicker (updated)
+- Props:
+  - title: string
+  - thisWeek: { tickets, gallons, revenue }
+  - lastWeek: { tickets, gallons, revenue }
+  - highlight: "gallons" | "revenue" | "tickets"
+  - unitLabels: { tickets, gallons, revenue }
+- Features:
+  - Animated progress bar behind each metric (fills toward beating last week)
+  - Smooth count-up for metric numbers
+  - Entrance fade/scale animation on mount
+  - Tolerant of missing data (coerces to 0)
+*/
+
+function useCountUp(value = 0, duration = 750) {
+  const [display, setDisplay] = useState(value);
+  useEffect(() => {
+    let raf = null;
+    const start = performance.now();
+    const from = Number(display) || 0;
+    const to = Number(value) || 0;
+    if (from === to) {
+      setDisplay(to);
+      return;
+    }
+    function tick(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      const v = from + (to - from) * eased;
+      setDisplay(v);
+      if (t < 1) raf = requestAnimationFrame(tick);
+      else raf = null;
+    }
+    raf = requestAnimationFrame(tick);
+    return () => { if (raf) cancelAnimationFrame(raf); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, duration]);
+  return display;
+}
+
+export default function WeeklyTicker({
+  title = "Deliveries",
   thisWeek = { tickets: 0, gallons: 0, revenue: 0 },
-  lastWeek = { tickets: 0, gallons: 0, revenue: 0 }
+  lastWeek = { tickets: 0, gallons: 0, revenue: 0 },
+  highlight = "gallons",
+  unitLabels = { tickets: "stops", gallons: "gal", revenue: "$" },
 }) {
-  // Calculate deltas and percentages
-  const ticketsDelta = thisWeek.tickets - lastWeek.tickets;
-  const gallonsDelta = thisWeek.gallons - lastWeek.gallons;
-  const revenueDelta = thisWeek.revenue - lastWeek.revenue;
-  
-  const ticketsPercent = lastWeek.tickets > 0 
-    ? ((ticketsDelta / lastWeek.tickets) * 100).toFixed(1)
-    : "0.0";
-  const gallonsPercent = lastWeek.gallons > 0
-    ? ((gallonsDelta / lastWeek.gallons) * 100).toFixed(1)
-    : "0.0";
-  const revenuePercent = lastWeek.revenue > 0
-    ? ((revenueDelta / lastWeek.revenue) * 100).toFixed(1)
-    : "0.0";
-  
-  // Calculate remaining to beat last week
-  const ticketsRemaining = Math.max(0, lastWeek.tickets - thisWeek.tickets);
-  const gallonsRemaining = Math.max(0, lastWeek.gallons - thisWeek.gallons);
-  const revenueRemaining = Math.max(0, lastWeek.revenue - thisWeek.revenue);
-  
-  // Format helpers
-  const formatNumber = (num) => Math.round(num).toLocaleString();
-  const formatCurrency = (num) => "$" + Math.round(num).toLocaleString();
-  const formatDelta = (delta, isPercent = false) => {
-    const prefix = delta >= 0 ? "+" : "";
-    return isPercent ? `${prefix}${delta}%` : `${prefix}${formatNumber(delta)}`;
+  // Coerce to numbers and guard null/undefined
+  const TW = {
+    tickets: Number(thisWeek?.tickets || 0),
+    gallons: Number(thisWeek?.gallons || 0),
+    revenue: Number(thisWeek?.revenue || 0),
   };
-  
-  // Color helper based on delta
-  const getDeltaColor = (delta) => {
-    if (delta > 0) return "#10b981"; // green
-    if (delta < 0) return "#ef4444"; // red
-    return "#6b7280"; // gray
+  const LW = {
+    tickets: Number(lastWeek?.tickets || 0),
+    gallons: Number(lastWeek?.gallons || 0),
+    revenue: Number(lastWeek?.revenue || 0),
   };
-  
+
+  const delta = {
+    tickets: TW.tickets - LW.tickets,
+    gallons: TW.gallons - LW.gallons,
+    revenue: TW.revenue - LW.revenue,
+  };
+
+  const pctChange = (k) =>
+    LW[k] === 0 ? (TW[k] === 0 ? 0 : 100) : ((delta[k] / Math.abs(LW[k])) * 100);
+
+  const percentComplete = (k) => {
+    // If last week is zero: treat as complete if this week > 0 (so bar shows full)
+    if (LW[k] === 0) return TW[k] > 0 ? 100 : 0;
+    const p = Math.round((TW[k] / LW[k]) * 100);
+    return Math.max(0, Math.min(100, p));
+  };
+
+  // animated values
+  const displayTickets = useCountUp(TW.tickets, 750);
+  const displayGallons = useCountUp(TW.gallons, 750);
+  const displayRevenue = useCountUp(TW.revenue, 750);
+
+  // mount animation
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setMounted(true), 20);
+    return () => clearTimeout(id);
+  }, []);
+
+  const metrics = useMemo(() => ([
+    { key: "tickets", label: "Tickets", val: TW.tickets, display: displayTickets, unit: unitLabels.tickets },
+    { key: "gallons", label: "Gallons", val: TW.gallons, display: displayGallons, unit: unitLabels.gallons },
+    { key: "revenue", label: "Revenue", val: TW.revenue, display: displayRevenue, unit: unitLabels.revenue },
+  ]), [TW, displayTickets, displayGallons, displayRevenue, unitLabels]);
+
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
-      {/* Title */}
-      <h2 className="text-4xl font-bold text-gray-900 mb-8 border-b-4 border-gray-900 pb-4">
-        {title}
-      </h2>
-      
-      {/* Metrics Grid */}
-      <div className="space-y-6">
-        {/* Tickets */}
-        <div className="border-b border-gray-200 pb-6">
-          <div className="flex items-baseline justify-between mb-2">
-            <h3 className="text-2xl font-semibold text-gray-700">Tickets</h3>
-            <div className="text-right">
-              <span 
-                className="text-3xl font-bold"
-                style={{ color: getDeltaColor(ticketsDelta) }}
-              >
-                {formatDelta(ticketsDelta)}
-              </span>
-              <span className="text-xl text-gray-500 ml-2">
-                ({formatDelta(ticketsPercent, true)})
-              </span>
+    <div
+      className={`rounded-lg border p-6 bg-white shadow-lg transform transition duration-500 ${mounted ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}
+      style={{ minWidth: 420 }}
+      aria-live="polite"
+    >
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-2xl font-bold">{title}</h2>
+        <div className="text-sm text-slate-500">This week vs Last week</div>
+      </div>
+
+      <div className="mt-4 space-y-6">
+        {metrics.map((m) => {
+          const key = m.key;
+          const isHighlight = key === highlight;
+          const pct = percentComplete(key);
+          const lastVal = LW[key];
+          const dimLast = lastVal || 0;
+          const deltaValue = delta[key];
+
+          return (
+            <div key={key} className="relative">
+              <div className="flex justify-between items-baseline">
+                <div>
+                  <div className="text-xs text-slate-600">{m.label}</div>
+                  <div className={`mt-1 ${isHighlight ? "text-4xl font-extrabold" : "text-3xl font-semibold"}`}>
+                    {/* formatted display */}
+                    {key === "revenue" ? (
+                      <span>{(Number(m.display) || 0).toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })}</span>
+                    ) : (
+                      <span>{Math.round(m.display).toLocaleString()}</span>
+                    )}
+                    {key !== "revenue" && <span className="text-sm text-slate-500"> {m.unit}</span>}
+                  </div>
+                </div>
+
+                <div className="text-right">
+                  <div className={`text-lg ${deltaValue < 0 ? "text-red-600" : "text-green-600"} font-medium`}>
+                    {deltaValue < 0 ? "-" : "+"}{Math.abs(Math.round(deltaValue)).toLocaleString()}
+                  </div>
+                  <div className="text-sm text-slate-500">
+                    Last: {key === "revenue" ? `$${Number(dimLast || 0).toFixed(0)}` : Number(dimLast || 0).toLocaleString()} · ({pctChange(key).toFixed(0)}%)
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress bar background */}
+              <div className="mt-3 h-3 bg-slate-200 rounded-full overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${m.label} progress`}>
+                <div
+                  className="h-3 rounded-full transition-all duration-1000 ease-out"
+                  style={{
+                    width: `${pct}%`,
+                    background: "linear-gradient(90deg,#34d399 0%,#60a5fa 100%)"
+                  }}
+                />
+              </div>
+
+              {/* small goal text */}
+              <div className="mt-2 text-sm">
+                {Math.max(0, (LW[key] || 0) - (TW[key] || 0)) > 0 ? (
+                  <span className="text-orange-600">Need {key === "revenue" ? `$${(Math.max(0, (LW[key] || 0) - (TW[key] || 0))).toFixed(0)}` : (Math.max(0, (LW[key] || 0) - (TW[key] || 0))).toLocaleString()} more to beat last week</span>
+                ) : (
+                  <span className="text-green-600 font-medium">On track — beat last week!</span>
+                )}
+              </div>
             </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-5xl font-bold text-gray-900">{formatNumber(thisWeek.tickets)}</p>
-              <p className="text-lg text-gray-500 mt-1">This Week</p>
-            </div>
-            <div className="text-right">
-              <p className="text-3xl font-semibold text-gray-600">{formatNumber(lastWeek.tickets)}</p>
-              <p className="text-sm text-gray-500 mt-1">Last Week</p>
-            </div>
-          </div>
-          {ticketsRemaining > 0 && (
-            <p className="text-lg text-gray-600 mt-3">
-              Need <span className="font-bold text-orange-600">{formatNumber(ticketsRemaining)}</span> more to beat last week
-            </p>
-          )}
-        </div>
-        
-        {/* Gallons */}
-        <div className="border-b border-gray-200 pb-6">
-          <div className="flex items-baseline justify-between mb-2">
-            <h3 className="text-2xl font-semibold text-gray-700">Gallons</h3>
-            <div className="text-right">
-              <span 
-                className="text-3xl font-bold"
-                style={{ color: getDeltaColor(gallonsDelta) }}
-              >
-                {formatDelta(gallonsDelta)}
-              </span>
-              <span className="text-xl text-gray-500 ml-2">
-                ({formatDelta(gallonsPercent, true)})
-              </span>
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-5xl font-bold text-gray-900">{formatNumber(thisWeek.gallons)}</p>
-              <p className="text-lg text-gray-500 mt-1">This Week</p>
-            </div>
-            <div className="text-right">
-              <p className="text-3xl font-semibold text-gray-600">{formatNumber(lastWeek.gallons)}</p>
-              <p className="text-sm text-gray-500 mt-1">Last Week</p>
-            </div>
-          </div>
-          {gallonsRemaining > 0 && (
-            <p className="text-lg text-gray-600 mt-3">
-              Need <span className="font-bold text-orange-600">{formatNumber(gallonsRemaining)}</span> more to beat last week
-            </p>
-          )}
-        </div>
-        
-        {/* Revenue */}
-        <div>
-          <div className="flex items-baseline justify-between mb-2">
-            <h3 className="text-2xl font-semibold text-gray-700">Revenue</h3>
-            <div className="text-right">
-              <span 
-                className="text-3xl font-bold"
-                style={{ color: getDeltaColor(revenueDelta) }}
-              >
-                {formatDelta(revenueDelta)}
-              </span>
-              <span className="text-xl text-gray-500 ml-2">
-                ({formatDelta(revenuePercent, true)})
-              </span>
-            </div>
-          </div>
-          <div className="flex justify-between items-center">
-            <div>
-              <p className="text-5xl font-bold text-gray-900">{formatCurrency(thisWeek.revenue)}</p>
-              <p className="text-lg text-gray-500 mt-1">This Week</p>
-            </div>
-            <div className="text-right">
-              <p className="text-3xl font-semibold text-gray-600">{formatCurrency(lastWeek.revenue)}</p>
-              <p className="text-sm text-gray-500 mt-1">Last Week</p>
-            </div>
-          </div>
-          {revenueRemaining > 0 && (
-            <p className="text-lg text-gray-600 mt-3">
-              Need <span className="font-bold text-orange-600">{formatCurrency(revenueRemaining)}</span> more to beat last week
-            </p>
-          )}
-        </div>
+          );
+        })}
       </div>
     </div>
   );
