@@ -11,6 +11,7 @@ import Procedures from "./tabs/Procedures_v3";
 import DeliveryTicketsEditor from "./components/DeliveryTickets";
 import ServiceTracking from "./components/ServiceTracking";
 import ExecutiveDashboard from "./components/dashboard/ExecutiveDashboard";
+import Billboard from "./pages/Billboard";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -861,6 +862,7 @@ const TABS = [
   { key: "budget",       label: "Budget",           adminOnly: false, Component: Budget },
   { key: "export",       label: "Export",           adminOnly: false, Component: ExportCenter },
   { key: "procedures",   label: "Procedures",       adminOnly: false, Component: Procedures },
+  { key: "billboard",    label: "Billboard",        adminOnly: false, Component: Billboard },
   // Admin-only group:
   { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,  Component: StoreInvoicing },
   { key: "tickets",      label: "Delivery Tickets", adminOnly: true,  Component: DeliveryTicketsEditor },
@@ -1002,7 +1004,7 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
       }}>
         <nav style={{ padding: 12 }}>
           {/* Top-level tabs */}
-          {["dashboard","financial","ops","budget","export","procedures"].map((key) => {
+          {["dashboard","financial","ops","budget","export","procedures","billboard"].map((key) => {
             const tab = TABS.find(t => t.key === key);
             const isActive = Current.key === key;
             return (
