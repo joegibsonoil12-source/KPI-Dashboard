@@ -1,183 +1,214 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import WeeklyTicker from "../components/WeeklyTicker";
 
 /**
- * Billboard - Full-screen TV-friendly display of weekly delivery and service metrics
- * Shows this week vs last week with auto-refresh
+ * Billboard - extended from your version
+ * - adds kiosk/popout support (?kiosk=1)
+ * - tries fallback service table names
+ * - shows unobtrusive notice when service table missing
+ * - keeps your delivery logic and field names
  */
+
 export default function Billboard() {
   const [deliveryData, setDeliveryData] = useState({
     thisWeek: { tickets: 0, gallons: 0, revenue: 0 },
     lastWeek: { tickets: 0, gallons: 0, revenue: 0 }
   });
-  
+
   const [serviceData, setServiceData] = useState({
     thisWeek: { tickets: 0, gallons: 0, revenue: 0 },
     lastWeek: { tickets: 0, gallons: 0, revenue: 0 }
   });
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [serviceTableExists, setServiceTableExists] = useState(true);
-  
-  // Get start and end of current week (Sunday to Saturday)
+  const [serviceNotice, setServiceNotice] = useState(null);
+
+  const [intervalSeconds, setIntervalSeconds] = useState(60);
+  const intervalRef = useRef(null);
+
+  // kiosk detection: ?kiosk=1
+  const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const kiosk = params.get("kiosk") === "1";
+
   const getWeekBounds = (date) => {
     const d = new Date(date);
     const day = d.getDay();
-    const diff = d.getDate() - day; // Adjust to Sunday
-    
+    const diff = d.getDate() - day;
     const weekStart = new Date(d.setDate(diff));
     weekStart.setHours(0, 0, 0, 0);
-    
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
     weekEnd.setHours(0, 0, 0, 0);
-    
     return { weekStart, weekEnd };
   };
-  
-  // Fetch and aggregate delivery tickets
-  const fetchDeliveryMetrics = async () => {
-    try {
-      const now = new Date();
-      const { weekStart: thisWeekStart, weekEnd: thisWeekEnd } = getWeekBounds(now);
-      
-      // Last week bounds
-      const lastWeekStart = new Date(thisWeekStart);
-      lastWeekStart.setDate(thisWeekStart.getDate() - 7);
-      const lastWeekEnd = new Date(thisWeekStart);
-      
-      // Fetch this week's tickets
-      const { data: thisWeekTickets, error: thisWeekError } = await supabase
-        .from("delivery_tickets")
-        .select("*")
-        .gte("delivery_date", thisWeekStart.toISOString())
-        .lt("delivery_date", thisWeekEnd.toISOString());
-      
-      if (thisWeekError) throw thisWeekError;
-      
-      // Fetch last week's tickets
-      const { data: lastWeekTickets, error: lastWeekError } = await supabase
-        .from("delivery_tickets")
-        .select("*")
-        .gte("delivery_date", lastWeekStart.toISOString())
-        .lt("delivery_date", lastWeekEnd.toISOString());
-      
-      if (lastWeekError) throw lastWeekError;
-      
-      // Aggregate this week
-      const thisWeek = {
-        tickets: thisWeekTickets?.length || 0,
-        gallons: thisWeekTickets?.reduce((sum, t) => sum + (parseFloat(t.gallons) || 0), 0) || 0,
-        revenue: thisWeekTickets?.reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0) || 0
-      };
-      
-      // Aggregate last week
-      const lastWeek = {
-        tickets: lastWeekTickets?.length || 0,
-        gallons: lastWeekTickets?.reduce((sum, t) => sum + (parseFloat(t.gallons) || 0), 0) || 0,
-        revenue: lastWeekTickets?.reduce((sum, t) => sum + (parseFloat(t.total_amount) || 0), 0) || 0
-      };
-      
-      setDeliveryData({ thisWeek, lastWeek });
-    } catch (err) {
-      console.error("Error fetching delivery metrics:", err);
-      throw err;
-    }
-  };
-  
-  // Fetch and aggregate service tickets
-  const fetchServiceMetrics = async () => {
-    try {
-      const now = new Date();
-      const { weekStart: thisWeekStart, weekEnd: thisWeekEnd } = getWeekBounds(now);
-      
-      // Last week bounds
-      const lastWeekStart = new Date(thisWeekStart);
-      lastWeekStart.setDate(thisWeekStart.getDate() - 7);
-      const lastWeekEnd = new Date(thisWeekStart);
-      
-      // Fetch this week's service tickets
-      const { data: thisWeekTickets, error: thisWeekError } = await supabase
-        .from("service_tickets")
-        .select("*")
-        .gte("date", thisWeekStart.toISOString())
-        .lt("date", thisWeekEnd.toISOString());
-      
-      if (thisWeekError) {
-        // Check if table doesn't exist
-        if (thisWeekError.code === "42P01" || thisWeekError.message?.includes("does not exist")) {
-          setServiceTableExists(false);
-          return;
+
+  // try multiple service table names
+  async function tryFetchFromTables(tables, gteField, ltField, startISO, endISO) {
+    const attempts = [];
+    for (const table of tables) {
+      try {
+        const { data, error } = await supabase
+          .from(table)
+          .select("*")
+          .gte(gteField, startISO)
+          .lt(ltField, endISO)
+          .limit(10000);
+        if (error) {
+          attempts.push({ table, error });
+          // special-case missing relation (Postgres 42P01 or message contains does not exist)
+          if (error.code === "42P01" || String(error.message).toLowerCase().includes("does not exist")) {
+            // continue trying other names but keep note
+            continue;
+          }
+          continue;
         }
-        throw thisWeekError;
+        return { table, data: data || [], attempts };
+      } catch (e) {
+        attempts.push({ table, exception: e });
+        continue;
       }
-      
-      // Fetch last week's service tickets
-      const { data: lastWeekTickets, error: lastWeekError } = await supabase
-        .from("service_tickets")
-        .select("*")
-        .gte("date", lastWeekStart.toISOString())
-        .lt("date", lastWeekEnd.toISOString());
-      
-      if (lastWeekError) throw lastWeekError;
-      
-      // Aggregate this week
-      const thisWeek = {
-        tickets: thisWeekTickets?.length || 0,
-        gallons: 0, // Service tickets typically don't track gallons
-        revenue: thisWeekTickets?.reduce((sum, t) => sum + (parseFloat(t.total) || 0), 0) || 0
-      };
-      
-      // Aggregate last week
-      const lastWeek = {
-        tickets: lastWeekTickets?.length || 0,
-        gallons: 0,
-        revenue: lastWeekTickets?.reduce((sum, t) => sum + (parseFloat(t.total) || 0), 0) || 0
-      };
-      
-      setServiceData({ thisWeek, lastWeek });
-      setServiceTableExists(true);
-    } catch (err) {
-      console.error("Error fetching service metrics:", err);
-      // Don't throw - allow delivery metrics to still display
-      setServiceTableExists(false);
     }
+    return { table: null, data: [], attempts, error: new Error("no-table-found") };
+  }
+
+  // fetch delivery metrics (keeps your field names)
+  const fetchDeliveryMetrics = async () => {
+    const now = new Date();
+    const { weekStart: thisWeekStart, weekEnd: thisWeekEnd } = getWeekBounds(now);
+    const lastWeekStart = new Date(thisWeekStart);
+    lastWeekStart.setDate(thisWeekStart.getDate() - 7);
+    const lastWeekEnd = new Date(thisWeekStart);
+
+    // this week
+    const { data: thisWeekTickets, error: thisWeekError } = await supabase
+      .from("delivery_tickets")
+      .select("*")
+      .gte("delivery_date", thisWeekStart.toISOString())
+      .lt("delivery_date", thisWeekEnd.toISOString());
+
+    if (thisWeekError) throw thisWeekError;
+
+    // last week
+    const { data: lastWeekTickets, error: lastWeekError } = await supabase
+      .from("delivery_tickets")
+      .select("*")
+      .gte("delivery_date", lastWeekStart.toISOString())
+      .lt("delivery_date", lastWeekEnd.toISOString());
+
+    if (lastWeekError) throw lastWeekError;
+
+    const thisWeek = {
+      tickets: thisWeekTickets?.length || 0,
+      gallons: thisWeekTickets?.reduce((s, t) => s + (parseFloat(t.gallons) || 0), 0) || 0,
+      revenue: thisWeekTickets?.reduce((s, t) => s + (parseFloat(t.total_amount) || 0), 0) || 0
+    };
+
+    const lastWeek = {
+      tickets: lastWeekTickets?.length || 0,
+      gallons: lastWeekTickets?.reduce((s, t) => s + (parseFloat(t.gallons) || 0), 0) || 0,
+      revenue: lastWeekTickets?.reduce((s, t) => s + (parseFloat(t.total_amount) || 0), 0) || 0
+    };
+
+    setDeliveryData({ thisWeek, lastWeek });
   };
-  
-  // Load all metrics
+
+  // fetch service metrics with fallbacks
+  const fetchServiceMetrics = async () => {
+    const now = new Date();
+    const { weekStart: thisWeekStart, weekEnd: thisWeekEnd } = getWeekBounds(now);
+    const lastWeekStart = new Date(thisWeekStart);
+    lastWeekStart.setDate(thisWeekStart.getDate() - 7);
+    const lastWeekEnd = new Date(thisWeekStart);
+
+    const startISO = thisWeekStart.toISOString();
+    const endISO = thisWeekEnd.toISOString();
+    const lastStartISO = lastWeekStart.toISOString();
+    const lastEndISO = lastWeekEnd.toISOString();
+
+    // try common names: service_tickets, service_jobs, service_orders
+    const possible = ["service_tickets", "service_jobs", "service_orders"];
+    const res = await tryFetchFromTables(possible, "date", "date", startISO, endISO);
+
+    if (res.error || !res.table) {
+      // no table found - show unobtrusive notice and leave placeholders
+      setServiceTableExists(false);
+      setServiceNotice("Service tracking not available — showing placeholders.");
+      console.warn("Billboard service fetch attempts:", res.attempts);
+      // placeholders already set by initial state
+      return;
+    }
+
+    setServiceTableExists(true);
+    setServiceNotice(null);
+
+    // got data for this week from res.table
+    const thisWeekTickets = res.data || [];
+
+    // fetch last week from same table
+    let lastWeekTickets = [];
+    try {
+      const { data: lwData, error: lwErr } = await supabase
+        .from(res.table)
+        .select("*")
+        .gte("date", lastStartISO)
+        .lt("date", lastEndISO)
+        .limit(10000);
+      if (lwErr) {
+        console.warn("Billboard: error fetching last-week service rows:", lwErr);
+      } else lastWeekTickets = lwData || [];
+    } catch (e) {
+      console.warn("Billboard: exception fetching last-week service rows:", e);
+    }
+
+    const thisWeek = {
+      tickets: thisWeekTickets?.length || 0,
+      gallons: 0,
+      revenue: thisWeekTickets?.reduce((s, t) => s + (parseFloat(t.total) || 0), 0) || 0
+    };
+    const lastWeek = {
+      tickets: lastWeekTickets?.length || 0,
+      gallons: 0,
+      revenue: lastWeekTickets?.reduce((s, t) => s + (parseFloat(t.total) || 0), 0) || 0
+    };
+
+    setServiceData({ thisWeek, lastWeek });
+  };
+
   const loadMetrics = async () => {
     setLoading(true);
     setError(null);
-    
     try {
       await fetchDeliveryMetrics();
       await fetchServiceMetrics();
       setLastUpdate(new Date());
     } catch (err) {
       console.error("Error loading metrics:", err);
-      setError(err.message || "Failed to load metrics");
+      // keep service placeholder behavior: only set error if delivery failed
+      setError(err?.message || "Failed to load metrics");
     } finally {
       setLoading(false);
     }
   };
-  
-  // Initial load
+
   useEffect(() => {
     loadMetrics();
-  }, []);
-  
-  // Auto-refresh every 60 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadMetrics();
-    }, 60000); // 60 seconds
-    
-    return () => clearInterval(interval);
-  }, []);
-  
+    intervalRef.current = setInterval(loadMetrics, intervalSeconds * 1000);
+    return () => clearInterval(intervalRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intervalSeconds]);
+
+  // Popout for kiosk
+  function openKiosk() {
+    const url = `${window.location.origin}/billboard?kiosk=1`;
+    const features = "toolbar=0,location=0,status=0,menubar=0,scrollbars=1,resizable=1,width=1280,height=720";
+    window.open(url, "Billboard", features);
+  }
+
+  // render loading
   if (loading && !lastUpdate) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
@@ -188,71 +219,84 @@ export default function Billboard() {
       </div>
     );
   }
-  
+
+  const pageWrapper = kiosk ? "min-h-screen bg-black text-white p-8" : "min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-8";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-6xl font-bold text-white mb-4">
-          Weekly Performance Dashboard
-        </h1>
-        <div className="flex justify-between items-center">
-          <p className="text-2xl text-gray-300">
-            This Week vs Last Week
-          </p>
-          {lastUpdate && (
-            <p className="text-lg text-gray-400">
-              Last updated: {lastUpdate.toLocaleTimeString()}
-            </p>
-          )}
+    <div className={pageWrapper}>
+      {/* header (hidden in kiosk) */}
+      {!kiosk && (
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-6xl font-bold text-white mb-2">Weekly Performance Dashboard</h1>
+            <p className="text-2xl text-gray-300">This Week vs Last Week</p>
+          </div>
+
+          <div className="flex flex-col items-end">
+            {lastUpdate && <p className="text-lg text-gray-400">Last updated: {lastUpdate.toLocaleTimeString()}</p>}
+            <div className="mt-3 flex items-center gap-3">
+              <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white" onClick={openKiosk}>Pop out (Kiosk)</button>
+              <label className="text-gray-300">Auto-refresh:</label>
+              <select value={intervalSeconds} onChange={(e) => setIntervalSeconds(Number(e.target.value))} className="rounded px-2 py-1 bg-gray-800 text-white">
+                <option value={30}>30s</option>
+                <option value={60}>60s</option>
+                <option value={120}>2m</option>
+                <option value={300}>5m</option>
+              </select>
+            </div>
+          </div>
         </div>
-      </div>
-      
-      {/* Error Display */}
+      )}
+
+      {/* small service notice (non-blocking) */}
+      {!kiosk && serviceNotice && (
+        <div className="mb-6 p-3 rounded bg-yellow-50 text-yellow-800 border border-yellow-100">
+          {serviceNotice}
+        </div>
+      )}
+
+      {/* Error */}
       {error && (
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-6 mb-8 rounded-lg">
           <p className="font-bold text-xl">Error</p>
           <p className="text-lg">{error}</p>
         </div>
       )}
-      
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Deliveries */}
-        <WeeklyTicker 
+
+      {/* metrics */}
+      <div className={`grid gap-8 ${kiosk ? "grid-cols-1" : "grid-cols-2"}`}>
+        <WeeklyTicker
           title="Deliveries"
           thisWeek={deliveryData.thisWeek}
           lastWeek={deliveryData.lastWeek}
+          unitLabels={{ tickets: "stops", gallons: "gal", revenue: "$" }}
         />
-        
-        {/* Service */}
+
+        {/* Service: if missing show subtle placeholder box (not blocking) */}
         {serviceTableExists ? (
-          <WeeklyTicker 
+          <WeeklyTicker
             title="Service"
             thisWeek={serviceData.thisWeek}
             lastWeek={serviceData.lastWeek}
+            unitLabels={{ tickets: "jobs", gallons: "", revenue: "$" }}
           />
         ) : (
-          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
-            <h2 className="text-4xl font-bold text-gray-900 mb-8 border-b-4 border-gray-900 pb-4">
-              Service
-            </h2>
-            <div className="text-center py-12">
-              <p className="text-2xl text-gray-500">
-                Service tracking table not configured
-              </p>
-              <p className="text-lg text-gray-400 mt-4">
-                Contact your administrator to set up service ticket tracking
-              </p>
+          <div className="rounded-xl border p-6 bg-white shadow-md">
+            <h3 className="text-2xl font-bold mb-4">Service</h3>
+            <div className="py-12 text-center text-gray-500">
+              <p className="text-xl">Service tracking not configured</p>
+              <p className="text-sm mt-2 text-gray-400">Showing placeholders — contact your administrator if you expect service data.</p>
             </div>
           </div>
         )}
       </div>
-      
-      {/* Footer Note */}
-      <div className="mt-8 text-center text-gray-400 text-sm">
-        <p>Auto-refreshes every 60 seconds • Week starts on Sunday</p>
-      </div>
+
+      {/* footer */}
+      {!kiosk && (
+        <div className="mt-8 text-center text-gray-400 text-sm">
+          <p>Auto-refreshes every {intervalSeconds} seconds • Week starts on Sunday</p>
+        </div>
+      )}
     </div>
   );
 }
