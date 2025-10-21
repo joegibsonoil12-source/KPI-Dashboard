@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import WeeklyTicker from "../components/WeeklyTicker";
+import RollingTicker from "../components/RollingTicker";
 
 /**
- * Billboard - extended from your version
- * - adds kiosk/popout support (?kiosk=1)
- * - tries fallback service table names
- * - shows unobtrusive notice when service table missing
- * - keeps your delivery logic and field names
+ * Billboard - extended:
+ * - robust service table handling (tries fallbacks)
+ * - popup/kiosk URL builder that respects GitHub Pages base path
+ * - unobtrusive service notice when missing
+ * - integrated RollingTicker (NASDAQ-like roller)
  */
 
 export default function Billboard() {
@@ -46,7 +47,7 @@ export default function Billboard() {
     return { weekStart, weekEnd };
   };
 
-  // try multiple service table names
+  // try multiple tables, return first that works or empty data
   async function tryFetchFromTables(tables, gteField, ltField, startISO, endISO) {
     const attempts = [];
     for (const table of tables) {
@@ -59,11 +60,7 @@ export default function Billboard() {
           .limit(10000);
         if (error) {
           attempts.push({ table, error });
-          // special-case missing relation (Postgres 42P01 or message contains does not exist)
-          if (error.code === "42P01" || String(error.message).toLowerCase().includes("does not exist")) {
-            // continue trying other names but keep note
-            continue;
-          }
+          // continue trying other table names for missing relation or permission
           continue;
         }
         return { table, data: data || [], attempts };
@@ -75,7 +72,7 @@ export default function Billboard() {
     return { table: null, data: [], attempts, error: new Error("no-table-found") };
   }
 
-  // fetch delivery metrics (keeps your field names)
+  // delivery metrics (keeps your field names)
   const fetchDeliveryMetrics = async () => {
     const now = new Date();
     const { weekStart: thisWeekStart, weekEnd: thisWeekEnd } = getWeekBounds(now);
@@ -83,7 +80,6 @@ export default function Billboard() {
     lastWeekStart.setDate(thisWeekStart.getDate() - 7);
     const lastWeekEnd = new Date(thisWeekStart);
 
-    // this week
     const { data: thisWeekTickets, error: thisWeekError } = await supabase
       .from("delivery_tickets")
       .select("*")
@@ -92,7 +88,6 @@ export default function Billboard() {
 
     if (thisWeekError) throw thisWeekError;
 
-    // last week
     const { data: lastWeekTickets, error: lastWeekError } = await supabase
       .from("delivery_tickets")
       .select("*")
@@ -116,7 +111,7 @@ export default function Billboard() {
     setDeliveryData({ thisWeek, lastWeek });
   };
 
-  // fetch service metrics with fallbacks
+  // service metrics with fallback table names and graceful handling
   const fetchServiceMetrics = async () => {
     const now = new Date();
     const { weekStart: thisWeekStart, weekEnd: thisWeekEnd } = getWeekBounds(now);
@@ -129,26 +124,23 @@ export default function Billboard() {
     const lastStartISO = lastWeekStart.toISOString();
     const lastEndISO = lastWeekEnd.toISOString();
 
-    // try common names: service_tickets, service_jobs, service_orders
     const possible = ["service_tickets", "service_jobs", "service_orders"];
     const res = await tryFetchFromTables(possible, "date", "date", startISO, endISO);
 
     if (res.error || !res.table) {
-      // no table found - show unobtrusive notice and leave placeholders
+      // show unobtrusive notice, keep placeholders
       setServiceTableExists(false);
       setServiceNotice("Service tracking not available — showing placeholders.");
       console.warn("Billboard service fetch attempts:", res.attempts);
-      // placeholders already set by initial state
       return;
     }
 
     setServiceTableExists(true);
     setServiceNotice(null);
 
-    // got data for this week from res.table
     const thisWeekTickets = res.data || [];
 
-    // fetch last week from same table
+    // fetch last week from the same table
     let lastWeekTickets = [];
     try {
       const { data: lwData, error: lwErr } = await supabase
@@ -187,7 +179,6 @@ export default function Billboard() {
       setLastUpdate(new Date());
     } catch (err) {
       console.error("Error loading metrics:", err);
-      // keep service placeholder behavior: only set error if delivery failed
       setError(err?.message || "Failed to load metrics");
     } finally {
       setLoading(false);
@@ -201,14 +192,47 @@ export default function Billboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervalSeconds]);
 
+  // Build kiosk URL that respects GitHub Pages base path (prevents 404)
+  function buildKioskUrl() {
+    if (typeof window === "undefined") return "/billboard?kiosk=1";
+    const origin = window.location.origin;
+    const pathname = window.location.pathname || "/";
+    // If the pathname already contains /billboard, strip that part to get base
+    const base = pathname.split("/billboard")[0].replace(/\/$/, "");
+    return origin + (base || "") + "/billboard?kiosk=1";
+  }
+
   // Popout for kiosk
   function openKiosk() {
-    const url = `${window.location.origin}/billboard?kiosk=1`;
+    const url = buildKioskUrl();
     const features = "toolbar=0,location=0,status=0,menubar=0,scrollbars=1,resizable=1,width=1280,height=720";
     window.open(url, "Billboard", features);
   }
 
-  // render loading
+  // prepare rolling ticker items (NASDAQ style)
+  function buildRollerItems() {
+    const items = [];
+    const dT = deliveryData.thisWeek;
+    const dL = deliveryData.lastWeek;
+    const sT = serviceData.thisWeek;
+    const sL = serviceData.lastWeek;
+
+    // deliveries
+    items.push({ label: "Deliveries - Tickets (this wk)", value: dT.tickets, change: dT.tickets - dL.tickets });
+    items.push({ label: "Deliveries - Gallons (this wk)", value: Math.round(dT.gallons), change: Math.round(dT.gallons - dL.gallons) });
+    items.push({ label: "Deliveries - Revenue (this wk)", value: `$${Math.round(dT.revenue)}`, change: Math.round(dT.revenue - dL.revenue) });
+
+    // service (placeholders if missing)
+    items.push({ label: "Service - Tickets (this wk)", value: sT.tickets, change: sT.tickets - sL.tickets });
+    items.push({ label: "Service - Revenue (this wk)", value: `$${Math.round(sT.revenue)}`, change: Math.round(sT.revenue - sL.revenue) });
+
+    // some quick ratios (guard div by zero)
+    const onTimePct = dL.tickets ? Math.round(((dT.tickets / (dL.tickets || 1)) - 1) * 100) : 0;
+    items.push({ label: "Deliveries - Week % vs last", value: `${onTimePct}%`, change: onTimePct });
+
+    return items;
+  }
+
   if (loading && !lastUpdate) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
@@ -220,20 +244,20 @@ export default function Billboard() {
     );
   }
 
-  const pageWrapper = kiosk ? "min-h-screen bg-black text-white p-8" : "min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-8";
+  const pageWrapper = kiosk ? "min-h-screen bg-black text-white p-6" : "min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-8";
 
   return (
     <div className={pageWrapper}>
       {/* header (hidden in kiosk) */}
       {!kiosk && (
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-6 flex items-start justify-between">
           <div>
-            <h1 className="text-6xl font-bold text-white mb-2">Weekly Performance Dashboard</h1>
-            <p className="text-2xl text-gray-300">This Week vs Last Week</p>
+            <h1 className="text-5xl font-bold text-white mb-2">Weekly Performance Dashboard</h1>
+            <p className="text-lg text-gray-300">This Week vs Last Week</p>
           </div>
 
           <div className="flex flex-col items-end">
-            {lastUpdate && <p className="text-lg text-gray-400">Last updated: {lastUpdate.toLocaleTimeString()}</p>}
+            {lastUpdate && <p className="text-sm text-gray-400">Last updated: {lastUpdate.toLocaleTimeString()}</p>}
             <div className="mt-3 flex items-center gap-3">
               <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white" onClick={openKiosk}>Pop out (Kiosk)</button>
               <label className="text-gray-300">Auto-refresh:</label>
@@ -247,6 +271,11 @@ export default function Billboard() {
           </div>
         </div>
       )}
+
+      {/* rolling/nasdaq style ticker */}
+      <div className="mb-4">
+        <RollingTicker items={buildRollerItems()} kiosk={kiosk} />
+      </div>
 
       {/* small service notice (non-blocking) */}
       {!kiosk && serviceNotice && (
@@ -272,7 +301,6 @@ export default function Billboard() {
           unitLabels={{ tickets: "stops", gallons: "gal", revenue: "$" }}
         />
 
-        {/* Service: if missing show subtle placeholder box (not blocking) */}
         {serviceTableExists ? (
           <WeeklyTicker
             title="Service"
