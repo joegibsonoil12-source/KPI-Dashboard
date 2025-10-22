@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import WeeklyTicker from "../components/WeeklyTicker";
-import RollingTicker from "../components/RollingTicker";
+// Fixed import casing to match actual filename on disk (src/components/rollingticker.jsx)
+import RollingTicker from "../components/rollingticker";
 
 /**
  * Billboard - extended:
