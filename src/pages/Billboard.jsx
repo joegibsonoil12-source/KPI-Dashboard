@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import WeeklyTicker from "../components/WeeklyTicker";
 // Fixed import casing to match actual filename on disk (src/components/rollingticker.jsx)
@@ -10,6 +10,7 @@ import RollingTicker from "../components/rollingticker";
  * - popup/kiosk URL builder that respects GitHub Pages base path
  * - unobtrusive service notice when missing
  * - integrated RollingTicker (NASDAQ-like roller)
+ * - service detail table with Defer reset on completion and sortable Defer column
  */
 
 export default function Billboard() {
@@ -19,9 +20,14 @@ export default function Billboard() {
   });
 
   const [serviceData, setServiceData] = useState({
-    thisWeek: { tickets: 0, gallons: 0, revenue: 0 },
-    lastWeek: { tickets: 0, gallons: 0, revenue: 0 }
+    thisWeek: { tickets: 0, gallons: 0, revenue: 0, defer: 0 },
+    lastWeek: { tickets: 0, gallons: 0, revenue: 0, defer: 0 }
   });
+
+  // service details for sorting / per-customer view
+  const [serviceDetails, setServiceDetails] = useState([]); // [{ customer, status, defer, jobs, revenue }]
+  const [serviceSortBy, setServiceSortBy] = useState("defer");
+  const [serviceSortDir, setServiceSortDir] = useState("desc");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -133,6 +139,12 @@ export default function Billboard() {
       setServiceTableExists(false);
       setServiceNotice("Service tracking not available — showing placeholders.");
       console.warn("Billboard service fetch attempts:", res.attempts);
+      // still set placeholder service data so the UI looks like deliveries
+      setServiceData({
+        thisWeek: { tickets: 0, gallons: 0, revenue: 0, defer: 0 },
+        lastWeek: { tickets: 0, gallons: 0, revenue: 0, defer: 0 }
+      });
+      setServiceDetails([]);
       return;
     }
 
@@ -157,18 +169,59 @@ export default function Billboard() {
       console.warn("Billboard: exception fetching last-week service rows:", e);
     }
 
-    const thisWeek = {
-      tickets: thisWeekTickets?.length || 0,
-      gallons: 0,
-      revenue: thisWeekTickets?.reduce((s, t) => s + (parseFloat(t.total) || 0), 0) || 0
-    };
-    const lastWeek = {
-      tickets: lastWeekTickets?.length || 0,
-      gallons: 0,
-      revenue: lastWeekTickets?.reduce((s, t) => s + (parseFloat(t.total) || 0), 0) || 0
+    // Compute totals, resetting defer to 0 for completed statuses
+    const normalizeDefer = (row) => {
+      // rows might use fields like defer, deferred_count, etc. Adjust defensively.
+      const rawDefer = row.defer ?? row.deferred ?? row.defer_count ?? 0;
+      const status = (row.status || "").toString().toLowerCase();
+      return status === "completed" || status === "complete" ? 0 : Number(rawDefer) || 0;
     };
 
-    setServiceData({ thisWeek, lastWeek });
+    const thisWeekTotals = {
+      tickets: thisWeekTickets?.length || 0,
+      gallons: 0,
+      revenue: thisWeekTickets?.reduce((s, t) => s + (parseFloat(t.total) || 0), 0) || 0,
+      defer: thisWeekTickets?.reduce((s, t) => s + normalizeDefer(t), 0) || 0
+    };
+    const lastWeekTotals = {
+      tickets: lastWeekTickets?.length || 0,
+      gallons: 0,
+      revenue: lastWeekTickets?.reduce((s, t) => s + (parseFloat(t.total) || 0), 0) || 0,
+      defer: lastWeekTickets?.reduce((s, t) => s + normalizeDefer(t), 0) || 0
+    };
+
+    setServiceData({ thisWeek: thisWeekTotals, lastWeek: lastWeekTotals });
+
+    // Build per-customer detail list for sorting/inspection.
+    // Attempt to group by common customer fields (customer, customer_name, account)
+    const groupMap = new Map();
+    const getCustomerKey = (r) => r.customer || r.customer_name || r.account || r.account_name || r.client || "Unknown";
+
+    thisWeekTickets.forEach((r) => {
+      const key = getCustomerKey(r);
+      const existing = groupMap.get(key) || { customer: key, jobs: 0, revenue: 0, defer: 0, status: "unknown" };
+      existing.jobs += 1;
+      existing.revenue += parseFloat(r.total || 0) || 0;
+      const d = normalizeDefer(r);
+      existing.defer += d;
+      // if any open status present, keep the status; if completed, mark completed only if all rows completed
+      const st = (r.status || "").toString().toLowerCase();
+      if (st === "completed" || st === "complete") {
+        // leave status as-is only if no other statuses exist, we'll set later
+      } else {
+        existing.status = st || "open";
+      }
+      groupMap.set(key, existing);
+    });
+
+    // Map to array
+    const details = Array.from(groupMap.values()).map((it) => ({
+      ...it,
+      // normalize status: if status wasn't set above, infer "completed" if defer==0 and jobs>0
+      status: it.status === "unknown" ? (it.defer === 0 ? "completed" : "open") : it.status
+    }));
+
+    setServiceDetails(details);
   };
 
   const loadMetrics = async () => {
@@ -210,7 +263,7 @@ export default function Billboard() {
     window.open(url, "Billboard", features);
   }
 
-  // prepare rolling ticker items (NASDAQ style)
+  // prepare rolling ticker items (NASDAQ style) - include service defer metric
   function buildRollerItems() {
     const items = [];
     const dT = deliveryData.thisWeek;
@@ -223,15 +276,66 @@ export default function Billboard() {
     items.push({ label: "Deliveries - Gallons (this wk)", value: Math.round(dT.gallons), change: Math.round(dT.gallons - dL.gallons) });
     items.push({ label: "Deliveries - Revenue (this wk)", value: `$${Math.round(dT.revenue)}`, change: Math.round(dT.revenue - dL.revenue) });
 
-    // service (placeholders if missing)
+    // service (always present visually)
     items.push({ label: "Service - Tickets (this wk)", value: sT.tickets, change: sT.tickets - sL.tickets });
     items.push({ label: "Service - Revenue (this wk)", value: `$${Math.round(sT.revenue)}`, change: Math.round(sT.revenue - sL.revenue) });
+    // Defer metric (new)
+    items.push({ label: "Service - Deferred (this wk)", value: sT.defer || 0, change: (sT.defer || 0) - (sL.defer || 0) });
 
     // some quick ratios (guard div by zero)
     const onTimePct = dL.tickets ? Math.round(((dT.tickets / (dL.tickets || 1)) - 1) * 100) : 0;
     items.push({ label: "Deliveries - Week % vs last", value: `${onTimePct}%`, change: onTimePct });
 
     return items;
+  }
+
+  // Service detail helpers: sorting, mark completed
+  const sortedServiceDetails = useMemo(() => {
+    const copy = [...serviceDetails];
+    const dir = serviceSortDir === "desc" ? -1 : 1;
+    copy.sort((a, b) => {
+      if (serviceSortBy === "defer") return dir * ((b.defer || 0) - (a.defer || 0));
+      if (serviceSortBy === "revenue") return dir * ((b.revenue || 0) - (a.revenue || 0));
+      if (serviceSortBy === "jobs") return dir * ((b.jobs || 0) - (a.jobs || 0));
+      return 0;
+    });
+    return copy;
+  }, [serviceDetails, serviceSortBy, serviceSortDir]);
+
+  function toggleServiceSort(by) {
+    if (serviceSortBy === by) {
+      setServiceSortDir((d) => (d === "desc" ? "asc" : "desc"));
+    } else {
+      setServiceSortBy(by);
+      setServiceSortDir("desc");
+    }
+  }
+
+  async function markCustomerCompleted(customerKey) {
+    // Update locally
+    setServiceDetails((prev) =>
+      prev.map((r) => (r.customer === customerKey ? { ...r, status: "completed", defer: 0 } : r))
+    );
+
+    // Update totals locally as well
+    setServiceData((prev) => ({
+      ...prev,
+      thisWeek: { ...prev.thisWeek, defer: Math.max(0, (prev.thisWeek.defer || 0) - (serviceDetails.find(s => s.customer === customerKey)?.defer || 0)) }
+    }));
+
+    // Optional: push update to Supabase (if your schema supports updating grouped rows or per-customer update)
+    // Example commented out (be careful - this will update rows; adjust to your schema):
+    /*
+    try {
+      const { error } = await supabase
+        .from("service_tickets")
+        .update({ defer: 0, status: "completed" })
+        .eq("customer", customerKey);
+      if (error) console.warn("Failed updating supabase:", error);
+    } catch (e) {
+      console.warn("Supabase exception:", e);
+    }
+    */
   }
 
   if (loading && !lastUpdate) {
@@ -302,22 +406,81 @@ export default function Billboard() {
           unitLabels={{ tickets: "stops", gallons: "gal", revenue: "$" }}
         />
 
-        {serviceTableExists ? (
+        {/* Service summary always shown (so visuals match Deliveries) */}
+        <div>
           <WeeklyTicker
             title="Service"
             thisWeek={serviceData.thisWeek}
             lastWeek={serviceData.lastWeek}
-            unitLabels={{ tickets: "jobs", gallons: "", revenue: "$" }}
+            unitLabels={{ tickets: "jobs", gallons: "", revenue: "$", defer: "" }}
           />
-        ) : (
-          <div className="rounded-xl border p-6 bg-white shadow-md">
-            <h3 className="text-2xl font-bold mb-4">Service</h3>
-            <div className="py-12 text-center text-gray-500">
-              <p className="text-xl">Service tracking not configured</p>
-              <p className="text-sm mt-2 text-gray-400">Showing placeholders — contact your administrator if you expect service data.</p>
+
+          {/* Service details table (sortable by Defer) */}
+          {serviceTableExists && serviceDetails.length > 0 && (
+            <div className="mt-6 rounded-xl border p-4 bg-white shadow-md text-gray-800">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xl font-bold">Service Details</h3>
+                <div className="text-sm text-gray-600">Click headers to sort</div>
+              </div>
+
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="text-sm text-gray-600">
+                    <th className="pb-2">Customer</th>
+                    <th className="pb-2">Status</th>
+                    <th className="pb-2 cursor-pointer" onClick={() => toggleServiceSort("defer")}>
+                      Defer
+                      {serviceSortBy === "defer" && <span className="ml-2 text-xs">({serviceSortDir})</span>}
+                    </th>
+                    <th className="pb-2 cursor-pointer" onClick={() => toggleServiceSort("jobs")}>
+                      Jobs
+                      {serviceSortBy === "jobs" && <span className="ml-2 text-xs">({serviceSortDir})</span>}
+                    </th>
+                    <th className="pb-2 cursor-pointer" onClick={() => toggleServiceSort("revenue")}>
+                      Revenue
+                      {serviceSortBy === "revenue" && <span className="ml-2 text-xs">({serviceSortDir})</span>}
+                    </th>
+                    <th className="pb-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedServiceDetails.map((row) => (
+                    <tr key={row.customer} className="border-t">
+                      <td className="py-3">{row.customer}</td>
+                      <td className="py-3 capitalize">{row.status}</td>
+                      <td className="py-3">{row.defer}</td>
+                      <td className="py-3">{row.jobs}</td>
+                      <td className="py-3">${Math.round(row.revenue)}</td>
+                      <td className="py-3">
+                        {row.status !== "completed" ? (
+                          <button
+                            className="px-3 py-1 bg-green-600 text-white rounded text-sm"
+                            onClick={() => markCustomerCompleted(row.customer)}
+                          >
+                            Mark Completed
+                          </button>
+                        ) : (
+                          <span className="text-sm text-gray-500">Completed</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* If service table was missing, keep the existing unobtrusive placeholder card (but we'll still show the summary above) */}
+          {!serviceTableExists && (
+            <div className="rounded-xl border p-6 bg-white shadow-md mt-6">
+              <h3 className="text-2xl font-bold mb-4">Service</h3>
+              <div className="py-12 text-center text-gray-500">
+                <p className="text-xl">Service tracking not configured</p>
+                <p className="text-sm mt-2 text-gray-400">Showing placeholders — contact your administrator if you expect service data.</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* footer */}
