@@ -265,6 +265,16 @@ function seedInvoices(tickets) {
     created: new Date(2025, 7, rand(1, 30)).toISOString().slice(0, 10),
   }));
 }
+function seedServiceTasks(n = 45) {
+  const JOB_TYPES = ["Maintenance", "Repair", "Installation", "Inspection", "Emergency"];
+  return Array.from({ length: n }, (_, i) => ({
+    id: i + 1,
+    date: new Date(2025, 7, rand(1, 30)).toISOString().slice(0, 10),
+    status: rand(0, 1) === 0 ? "Completed" : "Deferred",
+    revenue: rand(100, 1500),
+    jobType: JOB_TYPES[rand(0, JOB_TYPES.length - 1)],
+  }));
+}
 
 /* ========================================================================== */
 /* Reusable KPI strip (read-only)                                             */
@@ -533,15 +543,7 @@ function StoreInvoicing() {
 function Billboard() {
   // Seed demo data for ticker
   const [tickets] = useState(() => seedTickets(160));
-  const [serviceTasks] = useState(() => {
-    // Simulate service tasks (small array for demo)
-    return Array.from({ length: 45 }, (_, i) => ({
-      id: i + 1,
-      date: new Date(2025, 7, rand(1, 30)).toISOString().slice(0, 10),
-      type: ["Maintenance", "Repair", "Installation"][rand(0, 2)],
-      amount: rand(100, 1500),
-    }));
-  });
+  const [serviceTasks] = useState(() => seedServiceTasks(45));
 
   const [tickerIndex, setTickerIndex] = useState(0);
   const [wowOpen, setWowOpen] = useState(true);
@@ -585,11 +587,11 @@ function Billboard() {
     // Calculate totals
     const currentWeekTotal = 
       currentWeekTickets.reduce((sum, t) => sum + t.amount, 0) +
-      currentWeekServices.reduce((sum, s) => sum + s.amount, 0);
+      currentWeekServices.reduce((sum, s) => sum + s.revenue, 0);
     
     const lastWeekTotal = 
       lastWeekTickets.reduce((sum, t) => sum + t.amount, 0) +
-      lastWeekServices.reduce((sum, s) => sum + s.amount, 0);
+      lastWeekServices.reduce((sum, s) => sum + s.revenue, 0);
 
     // Calculate percentage change (guard against division by zero)
     const percentChange = lastWeekTotal > 0 
