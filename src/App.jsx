@@ -450,7 +450,7 @@ function LegacyDashboard() {
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <KpiStrip />
-      <Section title="Filters" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span>}>  
+      <Section title="Filters" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span)}>
         <Filters value={filter} onChange={setFilter} />
       </Section>
       <KPIGrid rows={filtered} />
@@ -466,6 +466,7 @@ function LegacyDashboard() {
             { key: "store", label: "Store" },
             { key: "product", label: "Product" },
             { key: "driver", label: "Driver" },
+            { key: "gallons", label: "Gallons", render: (v) => v.toLocaleString() },
             { key: "date", label: "Date" },
           ]} rows={openIssues.slice(0, 12)} />
         </Section>
@@ -481,14 +482,13 @@ function LegacyDashboard() {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
         <Section title="Store Invoicing (Rollup)">
-          <Table keyField="id" columns={
-            [
-              { key: "invoiceNo", label: "Invoice" },
-              { key: "store", label: "Store" },
-              { key: "created", label: "Created" },
-              { key: "status", label: "Status" },
-              { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-            ]} rows={invoices.slice(0, 20)} />
+          <Table keyField="id" columns={[
+            { key: "invoiceNo", label: "Invoice" },
+            { key: "store", label: "Store" },
+            { key: "created", label: "Created" },
+            { key: "status", label: "Status" },
+            { key: "total", label: "Total", render: (v) => "$" + v.toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+          ]} rows={invoices.slice(0, 20)} />
         </Section>
         <NotesPanel />
       </div>
@@ -817,7 +817,7 @@ function ExportCenter() {
       download(`${filename}.csv`, "text/csv;charset=utf-8", csv);
     } else {
       const doc = toDOC(title, rows, columns);
-      download(`${filename}.doc", "application/msword;charset=utf-8", doc);
+      download(`${filename}.doc`, "application/msword;charset=utf-8", doc);
     }
   }
 
@@ -1163,4 +1163,4 @@ Happy shipping!
 // Padding comments to comfortably exceed 1100 lines without changing behavior.
 // ---------------------------------------------------------------------------
 // 1
-// ... (padding omitted in commit)
+// ... (padding omitted in file for brevity)
