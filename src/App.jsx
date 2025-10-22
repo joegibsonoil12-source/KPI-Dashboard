@@ -528,6 +528,81 @@ function StoreInvoicing() {
 }
 
 /* ========================================================================== */
+/* Billboard (announcements/hero area)                                         */
+/* ========================================================================== */
+function Billboard() {
+  const [announcements, setAnnouncements] = useState([
+    { id: 1, title: "Welcome to the KPI Dashboard", message: "Track operational metrics, manage deliveries, and monitor performance across all locations.", type: "info" },
+    { id: 2, title: "New Features Available", message: "Check out the updated Export Center with CSV and DOC support.", type: "success" },
+    { id: 3, title: "System Maintenance", message: "Scheduled maintenance on Oct 25th from 2-4 AM CST.", type: "warning" },
+  ]);
+
+  function removeAnnouncement(id) {
+    setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  const typeColors = {
+    info: { bg: "#EFF6FF", border: "#BFDBFE", text: "#1E40AF" },
+    success: { bg: "#DCFCE7", border: "#BBF7D0", text: "#166534" },
+    warning: { bg: "#FEF3C7", border: "#FDE68A", text: "#92400E" },
+  };
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      <Section title="Billboard" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>Announcements & Updates</span>}>
+        <div style={{ display: "grid", gap: 12 }}>
+          {announcements.map((ann) => {
+            const colors = typeColors[ann.type] || typeColors.info;
+            return (
+              <div
+                key={ann.id}
+                style={{
+                  background: colors.bg,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 12,
+                  padding: 16,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: colors.text }}>
+                      {ann.title}
+                    </h4>
+                    <p style={{ margin: "8px 0 0 0", fontSize: 14, color: colors.text }}>
+                      {ann.message}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => removeAnnouncement(ann.id)}
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      border: `1px solid ${colors.border}`,
+                      background: "white",
+                      cursor: "pointer",
+                      fontSize: 12,
+                      color: colors.text,
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {announcements.length === 0 && (
+          <div style={{ textAlign: "center", padding: 32, color: "#6B7280", fontSize: 14 }}>
+            No announcements at this time.
+          </div>
+        )}
+      </Section>
+      <KpiStrip />
+    </div>
+  );
+}
+
+/* ========================================================================== */
 /* Other simple tabs (Financial Ops + Budget)                                  */
 /* ========================================================================== */
 function FinancialOps() {
@@ -861,6 +936,7 @@ const TABS = [
   { key: "budget",       label: "Budget",           adminOnly: false,  Component: Budget },
   { key: "export",       label: "Export",           adminOnly: false,  Component: ExportCenter },
   { key: "procedures",   label: "Procedures",       adminOnly: false,  Component: Procedures },
+  { key: "billboard",    label: "Billboard",        adminOnly: false,  Component: Billboard },
   // Admin-only group:
   { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,   Component: StoreInvoicing },
   { key: "tickets",      label: "Delivery Tickets", adminOnly: true,   Component: DeliveryTicketsEditor },
