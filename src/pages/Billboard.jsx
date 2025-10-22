@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import WeeklyTicker from "../components/WeeklyTicker";
 // Fixed import casing to match actual filename on disk (src/components/rollingticker.jsx)
 import RollingTicker from "../components/rollingticker";
+import { markCustomerCompleted as rpcMarkCustomerCompleted } from "../lib/markCustomerCompleted";
 
 /**
  * Billboard - extended:
@@ -323,19 +324,17 @@ export default function Billboard() {
       thisWeek: { ...prev.thisWeek, defer: Math.max(0, (prev.thisWeek.defer || 0) - (serviceDetails.find(s => s.customer === customerKey)?.defer || 0)) }
     }));
 
-    // Optional: push update to Supabase (if your schema supports updating grouped rows or per-customer update)
-    // Example commented out (be careful - this will update rows; adjust to your schema):
-    /*
+    // Call RPC to persist to Supabase
     try {
-      const { error } = await supabase
-        .from("service_tickets")
-        .update({ defer: 0, status: "completed" })
-        .eq("customer", customerKey);
-      if (error) console.warn("Failed updating supabase:", error);
+      const result = await rpcMarkCustomerCompleted(customerKey);
+      console.log(`Marked ${result.updatedCount} rows completed for customer: ${customerKey}`);
+      
+      // Reload metrics to ensure UI is in sync with database
+      await loadMetrics();
     } catch (e) {
-      console.warn("Supabase exception:", e);
+      console.warn("Failed to persist completed status to Supabase:", e);
+      // Optionally, you could revert the local UI changes here if the RPC fails
     }
-    */
   }
 
   if (loading && !lastUpdate) {
