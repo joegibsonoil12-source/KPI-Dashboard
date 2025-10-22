@@ -60,10 +60,25 @@ jobs:
           mkdir -p supabase
           npx --yes supabase@latest login --token "$SUPABASE_ACCESS_TOKEN"
 
+          # Safety check: print SUPABASE_PROJECT_REF length and validate project file
+          if [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
+            ref_length=${#SUPABASE_PROJECT_REF}
+            echo "SUPABASE_PROJECT_REF length: $ref_length (not printing actual value for security)"
+            
+            # Remove suspicious project file if it's too short (likely corrupted)
+            if [ -f "supabase/.supabase/project" ]; then
+              project_file_size=$(wc -c < "supabase/.supabase/project")
+              if [ "$project_file_size" -lt 10 ]; then
+                echo "WARNING: supabase/.supabase/project file is suspiciously small ($project_file_size bytes). Removing it."
+                rm -f "supabase/.supabase/project"
+              fi
+            fi
+          fi
+
           if [ -f "supabase/.supabase/project" ]; then
             echo "Project already linked in supabase/.supabase/project"
           elif [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
-            echo "Linking Supabase project using SUPABASE_PROJECT_REF (not printed)"
+            echo "Linking Supabase project using SUPABASE_PROJECT_REF"
             (cd supabase && npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" --debug)
           else
             echo "No SUPABASE_PROJECT_REF secret and no existing link; Supabase operations will be skipped."
