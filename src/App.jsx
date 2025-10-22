@@ -450,7 +450,7 @@ function LegacyDashboard() {
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <KpiStrip />
-      <Section title="Filters" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span)}>
+      <Section title="Filters" actions={<span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} tickets</span>}>
         <Filters value={filter} onChange={setFilter} />
       </Section>
       <KPIGrid rows={filtered} />
@@ -724,7 +724,7 @@ function ExportCenter() {
     const esc = (v) => {
       if (v == null) return "";
       const s = String(v);
-      if (/[",\n]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
+      if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
       return s;
     };
     const header = columns.map(c=>esc(c.label)).join(",");
