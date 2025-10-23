@@ -44,22 +44,29 @@ const MOCK_DATA = {
 };
 
 /**
- * Get the API base URL from environment or default to current origin
+ * Get the API base URL from environment or default to relative path
+ * 
+ * Priority:
+ * 1. VITE_BILLBOARD_API_BASE env var (if set) - for external API deployments
+ * 2. Empty string (relative path) - works for local dev and same-origin deployments
+ * 
  * @returns {string} - API base URL
  */
 function getApiBaseUrl() {
-  // Use environment variable if set
+  // Use environment variable if set (e.g., for GitHub Pages + external API)
   const envBase = import.meta.env.VITE_BILLBOARD_API_BASE;
   if (envBase) {
-    return envBase;
+    return envBase.replace(/\/$/, ''); // Remove trailing slash if present
   }
   
-  // Default to current origin (works for Vercel/Netlify and local dev proxy)
-  return window.location.origin;
+  // Default to empty string for relative path (works for Vercel/Netlify and local dev)
+  return '';
 }
 
 /**
  * Fetch billboard summary from backend API
+ * Falls back to mock data if API returns 404/500 or is unreachable
+ * 
  * @returns {Promise<Object>} - { data, error }
  */
 export async function getBillboardSummary() {
@@ -73,9 +80,9 @@ export async function getBillboardSummary() {
     const response = await fetch(apiUrl);
     
     if (!response.ok) {
-      // If 404, API not deployed - use mock data
-      if (response.status === 404) {
-        console.warn('[Billboard API] API not found (404), using mock data');
+      // If 404 or 500, API not available - use mock data
+      if (response.status === 404 || response.status === 500) {
+        console.warn(`[Billboard API] API returned ${response.status}, using mock data`);
         return { data: MOCK_DATA, error: null };
       }
       

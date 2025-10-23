@@ -69,15 +69,26 @@ Vercel should auto-detect these settings:
 
 In Vercel dashboard → Project Settings → Environment Variables:
 
+**Required for Backend API:**
 ```
+SUPABASE_URL=your-supabase-project-url
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 BILLBOARD_TV_TOKEN=your-secret-token-here
 ```
 
-Optional: Add Supabase credentials if using database features
+**Optional for Frontend (only if needed):**
 ```
 VITE_SUPABASE_URL=your-supabase-url
 VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_BILLBOARD_API_BASE=
+VITE_BILLBOARD_TV_TOKEN=your-secret-token-here
 ```
+
+**Important Notes:**
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are used by the serverless function to query the database
+- `BILLBOARD_TV_TOKEN` is used by the serverless function to validate TV mode access
+- `VITE_BILLBOARD_TV_TOKEN` should match `BILLBOARD_TV_TOKEN` so the frontend can append the correct token
+- Generate a secure token: `openssl rand -base64 32`
 
 ### Step 4: Deploy
 
@@ -112,9 +123,26 @@ The API will be available at `https://your-app.vercel.app/api/billboard-summary`
 
 In Netlify dashboard → Site Settings → Environment Variables:
 
+**Required for Backend API:**
 ```
+SUPABASE_URL=your-supabase-project-url
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 BILLBOARD_TV_TOKEN=your-secret-token-here
 ```
+
+**Optional for Frontend (only if needed):**
+```
+VITE_SUPABASE_URL=your-supabase-url
+VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_BILLBOARD_API_BASE=
+VITE_BILLBOARD_TV_TOKEN=your-secret-token-here
+```
+
+**Important Notes:**
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are used by the serverless function to query the database
+- `BILLBOARD_TV_TOKEN` is used by the serverless function to validate TV mode access
+- `VITE_BILLBOARD_TV_TOKEN` should match `BILLBOARD_TV_TOKEN` so the frontend can append the correct token
+- Generate a secure token: `openssl rand -base64 32`
 
 ### Step 4: Deploy
 
@@ -139,29 +167,40 @@ These are embedded in the frontend build and accessible via `import.meta.env`:
 
 ```bash
 # Optional: Override API base URL
-# Leave empty to use same origin (default)
+# Leave empty to use relative path (default - works for Vercel/Netlify and local dev)
+# Set to external API URL only if deploying frontend separately (e.g., GitHub Pages)
 VITE_BILLBOARD_API_BASE=
 
 # Billboard refresh interval in seconds
 VITE_BILLBOARD_REFRESH_SEC=30
 
-# Supabase (if using database features)
+# TV Mode Token (must match backend BILLBOARD_TV_TOKEN)
+# Used by frontend to append ?token=... when opening TV mode
+VITE_BILLBOARD_TV_TOKEN=your-secret-token-here
+
+# Supabase (if using database features in frontend)
 VITE_SUPABASE_URL=your-supabase-url
 VITE_SUPABASE_ANON_KEY=your-anon-key
 ```
 
 ### Backend Variables (serverless function)
 
-These are only accessible to serverless functions:
+These are only accessible to serverless functions and NOT exposed to the frontend:
 
 ```bash
-# Optional: Token for TV mode access control
-BILLBOARD_TV_TOKEN=your-secret-token-here
+# Required: Supabase credentials for data queries
+SUPABASE_URL=your-supabase-project-url
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# Add your database credentials here
-# Example for Supabase:
-# SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# Optional: Token for TV mode access control
+# When set, /api/billboard-summary?tv=1 will require matching token
+BILLBOARD_TV_TOKEN=your-secret-token-here
 ```
+
+**Security Notes:**
+- `SUPABASE_SERVICE_ROLE_KEY` has elevated permissions - NEVER expose to frontend
+- Set backend variables in Vercel/Netlify deployment settings, NOT in .env files
+- Frontend variables (VITE_*) are embedded in the build and publicly accessible
 
 ## TV Kiosk Mode
 
@@ -171,7 +210,9 @@ The Billboard includes a TV/kiosk mode for displaying on large screens in your o
 
 Navigate to: `/billboard?tv=1`
 
-Or use the "📺 Open TV Mode" button in the regular view.
+Or use the "📺 Pop Out TV" button in the regular view to open TV mode in a centered window.
+
+Use the "📋 Copy TV URL" button to copy the TV mode URL to clipboard for easy sharing or bookmarking.
 
 TV mode features:
 - Fullscreen display
@@ -181,11 +222,13 @@ TV mode features:
 
 ### With Token Protection
 
-If you set `BILLBOARD_TV_TOKEN` in your serverless function environment:
+If you set `BILLBOARD_TV_TOKEN` in your serverless function environment and `VITE_BILLBOARD_TV_TOKEN` in your frontend environment:
 
 ```
 /billboard?tv=1&token=YOUR_SECRET_TOKEN
 ```
+
+The frontend will automatically append the token when you use the "Pop Out TV" or "Copy TV URL" buttons.
 
 ### Hardware Options for TV Display
 
@@ -298,24 +341,37 @@ For more robust security, consider:
 
 ### Issue: Shows mock data instead of real data
 
-**Symptom**: Always shows the same numbers (42 services, 156 tickets, etc.)
+**Symptom**: API returns data but it's always the same mock numbers
 
-**Solution**: The functions are currently using mock data. To wire real data:
+**Solution**: 
 
-1. Open `api/billboard-summary.js` (or Netlify equivalent)
-2. Find the TODO comments
-3. Import and call your actual service functions
-4. Replace mock returns with real database queries
+1. Verify environment variables are set correctly in deployment:
+   - `SUPABASE_URL` 
+   - `SUPABASE_SERVICE_ROLE_KEY`
 
-Example:
-```javascript
-// TODO: Replace this mock implementation
-async function fetchServiceTrackingSummary(startDate, endDate) {
-  // Replace with:
-  const { getServiceTrackingSummary } = require('../services/serviceTracking');
-  return await getServiceTrackingSummary({ startDate, endDate });
-}
-```
+2. Check serverless function logs for errors:
+   - Vercel: Project → Deployments → Function Logs
+   - Netlify: Site → Functions → Function logs
+
+3. Test the API endpoint directly:
+   ```bash
+   curl https://your-app.vercel.app/api/billboard-summary
+   ```
+
+4. If you see "Missing SUPABASE_URL" errors:
+   - Environment variables are not configured
+   - Add them in deployment settings (not .env file)
+
+5. If you see Supabase errors:
+   - Check table and column names match your schema
+   - Verify service role key has read permissions
+   - Test query in Supabase SQL editor
+
+6. The frontend will fall back to mock data if:
+   - API returns 404 (not deployed)
+   - API returns 500 (server error)
+   - Network error (offline, timeout)
+   This is intentional so GitHub Pages deployment still works
 
 ### Issue: CORS errors
 
@@ -349,52 +405,54 @@ const CACHE_TTL_MS = 5000; // 5 seconds instead of 15
 
 ## Wiring Real Data
 
-Currently, the serverless functions use mock data. To connect to your database:
+The serverless functions now connect to Supabase to fetch real data from your database.
 
-### Step 1: Add Database Client
+### Database Schema
 
-Install database client in your project:
+The Billboard API queries these tables:
 
-```bash
-# For Supabase
-npm install @supabase/supabase-js
+**service_jobs** (Service Tracking):
+- `status`: Job status (completed, scheduled, deferred, etc.)
+- `job_amount`: Revenue amount
+- `job_date`: Date of the job
 
-# For PostgreSQL
-npm install pg
+**delivery_tickets** (Delivery Tracking):
+- `qty`: Gallons delivered
+- `amount`: Revenue
+- `date`: Date of the delivery
 
-# For MongoDB
-npm install mongodb
-```
+### Customizing Queries
 
-### Step 2: Update Serverless Functions
+If your table or column names differ, update the serverless functions:
 
-Edit `api/billboard-summary.js` and/or `netlify/functions/billboard-summary.js`:
+**For Vercel:** Edit `api/billboard-summary.js`
+**For Netlify:** Edit `netlify/functions/billboard-summary.js`
 
-1. Import your service functions at the top
-2. Replace mock implementations in `fetchServiceTrackingSummary` and `fetchDeliveryTicketsSummary`
-3. Add environment variables for database credentials
+Look for TODO comments in these files that mark where to update:
+- Table names
+- Column names
+- Status value mappings
 
-### Step 3: Test Locally
+### Testing with Real Data
 
-Use Vercel or Netlify CLI to test functions locally:
+1. Ensure your Supabase tables have data for the current and previous week
+2. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in your deployment environment
+3. Deploy and visit `/api/billboard-summary` to see the JSON response
+4. Visit `/billboard` to see the dashboard with live data
 
-**Vercel:**
-```bash
-npm install -g vercel
-vercel dev
-```
+### Troubleshooting Data Issues
 
-**Netlify:**
-```bash
-npm install -g netlify-cli
-netlify dev
-```
+If the API returns errors or unexpected data:
 
-Both will run functions locally with your environment variables.
+1. Check serverless function logs in Vercel/Netlify dashboard
+2. Verify table and column names match your schema
+3. Ensure service role key has permissions to read the tables
+4. Test queries directly in Supabase SQL editor
 
-### Step 4: Deploy
-
-Push changes to GitHub - Vercel/Netlify will auto-deploy.
+Common issues:
+- **"Missing SUPABASE_URL"**: Environment variables not set in deployment
+- **"Failed to fetch service jobs"**: Table doesn't exist or permissions issue
+- **Shows mock data**: API is falling back due to errors (check logs)
 
 ## Support
 

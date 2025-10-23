@@ -121,15 +121,40 @@ export default function BillboardPage() {
   }, [isTVMode]);
 
   /**
-   * Open TV mode in new window
+   * Open TV mode in new window with token
    */
   const openTVMode = () => {
-    const tvUrl = `${window.location.pathname}?tv=1`;
+    const tvToken = import.meta.env.VITE_BILLBOARD_TV_TOKEN || '';
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    const tvUrl = tvToken 
+      ? `${baseUrl}?tv=1&token=${encodeURIComponent(tvToken)}`
+      : `${baseUrl}?tv=1`;
+    
     window.open(
       tvUrl,
       'BillboardTV',
       'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0'
     );
+  };
+
+  /**
+   * Copy TV URL to clipboard
+   */
+  const copyTVUrl = async () => {
+    const tvToken = import.meta.env.VITE_BILLBOARD_TV_TOKEN || '';
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    const tvUrl = tvToken 
+      ? `${baseUrl}?tv=1&token=${encodeURIComponent(tvToken)}`
+      : `${baseUrl}?tv=1`;
+    
+    try {
+      await navigator.clipboard.writeText(tvUrl);
+      alert('TV URL copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      // Fallback: show the URL in a prompt
+      prompt('Copy this TV URL:', tvUrl);
+    }
   };
 
   /**
@@ -225,7 +250,10 @@ export default function BillboardPage() {
           <h1 className="billboard-title">Operations Billboard</h1>
           <div className="billboard-actions">
             <button onClick={openTVMode} className="billboard-tv-button">
-              📺 Open TV Mode
+              📺 Pop Out TV
+            </button>
+            <button onClick={copyTVUrl} className="billboard-tv-button">
+              📋 Copy TV URL
             </button>
             <button onClick={fetchData} className="billboard-refresh-button">
               🔄 Refresh
