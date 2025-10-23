@@ -309,3 +309,38 @@ For static hosting:
 - Mark Completed functionality calls Supabase RPC directly from the browser
 
 To enable full functionality, deploy to a platform that supports serverless functions (Vercel, Netlify, AWS Amplify, etc.).
+
+## Vercel Deployment
+
+This project is configured for Vercel deployment with serverless functions. The `vercel.json` file configures:
+- Static site build from the Vite output (`dist/` directory)
+- Serverless functions for `api/` and `src/pages/api/` directories
+- Proper routing for API endpoints
+
+### Required Environment Variables
+
+In your Vercel project settings, add the following environment variables:
+
+**Supabase Configuration:**
+- `SUPABASE_URL` - Your Supabase project URL (e.g., `https://xxxxx.supabase.co`)
+- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key (server-side only, bypasses RLS)
+- `VITE_SUPABASE_URL` - Same as `SUPABASE_URL` (used for client-side build)
+- `VITE_SUPABASE_ANON_KEY` - Your Supabase anonymous/public key (safe for client-side use)
+
+**QuickBooks Integration (Optional):**
+- `QUICKBOOKS_CLIENT_ID` - Your QuickBooks app client ID
+- `QUICKBOOKS_CLIENT_SECRET` - Your QuickBooks app client secret
+- `QUICKBOOKS_REDIRECT_URI` - OAuth callback URL (e.g., `https://yourdomain.vercel.app/api/quickbooks/callback`)
+- `QUICKBOOKS_ENV` - Either `sandbox` or `production`
+
+**Billboard Feature (Optional):**
+- `BILLBOARD_TV_TOKEN` - Secret token for TV mode access control (optional)
+
+### Deployment Steps
+
+1. Install the Vercel CLI: `npm i -g vercel`
+2. Link your project: `vercel link`
+3. Set environment variables in Vercel dashboard or via CLI: `vercel env add`
+4. Deploy: `vercel --prod`
+
+Alternatively, connect your GitHub repository to Vercel for automatic deployments on push.
