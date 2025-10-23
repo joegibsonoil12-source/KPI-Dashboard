@@ -10,5 +10,14 @@ export default defineConfig({
   build: {
     outDir: "dist",
     sourcemap: true
+  },
+  server: {
+    proxy: {
+      // Proxy API requests to backend server during development
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      }
+    }
   }
 });

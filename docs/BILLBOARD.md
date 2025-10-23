@@ -80,7 +80,13 @@ This will refresh the data every 15 seconds instead of the default or configured
 ### 1. Install Dependencies
 
 ```bash
+# Install frontend dependencies
 npm install
+
+# Install backend dependencies
+cd server/parser
+npm install
+cd ../..
 ```
 
 ### 2. Configure Environment
@@ -93,13 +99,26 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 VITE_BILLBOARD_REFRESH_SEC=30
 ```
 
-### 3. Run Development Server
+### 3. Run Backend Server
+
+In a separate terminal, start the backend server:
+
+```bash
+cd server/parser
+npm start
+```
+
+The server will run on `http://localhost:4000` (or the port specified in `PORT` env var).
+
+### 4. Run Frontend Development Server
+
+In another terminal:
 
 ```bash
 npm run dev
 ```
 
-### 4. Access Billboard
+### 5. Access Billboard
 
 Open your browser and navigate to:
 ```
@@ -111,7 +130,7 @@ Or for TV mode:
 http://localhost:5173/billboard?tv=1
 ```
 
-### 5. Test Different Refresh Intervals
+### 6. Test Different Refresh Intervals
 
 ```
 http://localhost:5173/billboard?refresh=5
@@ -147,10 +166,14 @@ The Billboard aggregates data from:
 
 ## API Endpoint
 
-The Billboard uses a client-side API module at:
-```
-src/pages/api/billboard-summary.js
-```
+The Billboard feature uses a backend API route for data aggregation:
+
+**Backend API Route**: `GET /api/billboard-summary`
+- **Location**: `server/parser/routes/billboard.js`
+- **Server**: Express.js backend at `server/parser/index.js`
+- **Port**: Default 4000 (configurable via `PORT` environment variable)
+
+During development, the Vite dev server proxies `/api/*` requests to `http://localhost:4000`.
 
 ### Response Structure
 
@@ -179,7 +202,28 @@ src/pages/api/billboard-summary.js
 
 ### Caching
 
-The API implements a 15-second in-memory cache to prevent excessive database queries. This can be configured or moved to Redis for production use.
+The backend API implements a 15-second in-memory cache to prevent excessive database queries. This can be configured or moved to Redis for production use.
+
+### Swapping Mock Data for Real Services
+
+The backend route currently returns mock data. To integrate with your real database:
+
+1. **Locate your service modules**: Find existing service/query functions for Service Tracking and Delivery Tickets
+2. **Update imports**: In `server/parser/routes/billboard.js`, uncomment and update the TODO import statements
+3. **Replace mock functions**: 
+   - `fetchServiceTrackingSummary()` - Replace the mock return with actual DB query
+   - `fetchDeliveryTicketsSummary()` - Replace the mock return with actual DB query
+4. **Example**:
+   ```javascript
+   // Instead of:
+   return { completed: 42, ... };
+   
+   // Use your actual service:
+   const result = await yourServiceFunction({ startDate, endDate });
+   return result;
+   ```
+
+Look for `TODO:` comments in `server/parser/routes/billboard.js` for specific integration points.
 
 ## Troubleshooting
 
