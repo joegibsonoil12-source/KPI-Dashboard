@@ -11,6 +11,8 @@ import Procedures from "./tabs/Procedures_v3";
 import DeliveryTicketsEditor from "./components/DeliveryTickets";
 import ServiceTracking from "./components/ServiceTracking";
 import ExecutiveDashboard from "./components/dashboard/ExecutiveDashboard";
+import Billboard from "./components/Billboard";
+import Budget from "./components/Budget";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -538,229 +540,9 @@ function StoreInvoicing() {
 }
 
 /* ========================================================================== */
-/* Billboard (ticker + week-over-week progress)                                */
+/* Billboard - Now imported from separate component file                      */
+/* See src/components/Billboard.jsx for the full implementation               */
 /* ========================================================================== */
-function Billboard() {
-  // Seed demo data for ticker
-  const [tickets] = useState(() => seedTickets(160));
-  const [serviceTasks] = useState(() => seedServiceTasks(45));
-
-  const [tickerIndex, setTickerIndex] = useState(0);
-  const [wowOpen, setWowOpen] = useState(true);
-
-  // Auto-advance ticker every 3 seconds
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTickerIndex((prev) => (prev + 1) % 2);
-    }, 3000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Calculate week-over-week progress
-  const wowStats = useMemo(() => {
-    // Get current date and last week's date
-    const now = new Date(2025, 7, 30); // Use end of Aug for demo
-    const weekAgo = new Date(now);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const twoWeeksAgo = new Date(now);
-    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-
-    // Filter tickets and service tasks by week
-    const currentWeekTickets = tickets.filter((t) => {
-      const d = new Date(t.date);
-      return d >= weekAgo && d <= now;
-    });
-    const lastWeekTickets = tickets.filter((t) => {
-      const d = new Date(t.date);
-      return d >= twoWeeksAgo && d < weekAgo;
-    });
-
-    const currentWeekServices = serviceTasks.filter((s) => {
-      const d = new Date(s.date);
-      return d >= weekAgo && d <= now;
-    });
-    const lastWeekServices = serviceTasks.filter((s) => {
-      const d = new Date(s.date);
-      return d >= twoWeeksAgo && d < weekAgo;
-    });
-
-    // Calculate totals
-    const currentWeekTotal = 
-      currentWeekTickets.reduce((sum, t) => sum + t.amount, 0) +
-      currentWeekServices.reduce((sum, s) => sum + s.revenue, 0);
-    
-    const lastWeekTotal = 
-      lastWeekTickets.reduce((sum, t) => sum + t.amount, 0) +
-      lastWeekServices.reduce((sum, s) => sum + s.revenue, 0);
-
-    // Calculate percentage change (guard against division by zero)
-    const percentChange = lastWeekTotal > 0 
-      ? ((currentWeekTotal - lastWeekTotal) / lastWeekTotal) * 100
-      : 0;
-
-    // Calculate progress bar percentage (cap at 100%)
-    const progressPct = lastWeekTotal > 0
-      ? Math.min(100, Math.round((currentWeekTotal / lastWeekTotal) * 100))
-      : 0;
-
-    return {
-      currentWeekTotal,
-      lastWeekTotal,
-      percentChange,
-      progressPct,
-      currentWeekCount: currentWeekTickets.length + currentWeekServices.length,
-      lastWeekCount: lastWeekTickets.length + lastWeekServices.length,
-    };
-  }, [tickets, serviceTasks]);
-
-  const tickerItems = [
-    { label: "Service Tasks", count: serviceTasks.length, color: "#3730A3" },
-    { label: "Delivery Tickets", count: tickets.length, color: "#166534" },
-  ];
-
-  const currentTicker = tickerItems[tickerIndex];
-
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      {/* Ticker */}
-      <Section title="Live Metrics Ticker">
-        <div style={{
-          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-          border: "1px solid #E5E7EB",
-          borderRadius: 12,
-          padding: 24,
-          textAlign: "center",
-          minHeight: 120,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          transition: "all 0.5s ease",
-        }}>
-          <div style={{ fontSize: 14, color: "white", opacity: 0.9, marginBottom: 8 }}>
-            {currentTicker.label}
-          </div>
-          <div style={{ fontSize: 48, fontWeight: 700, color: "white" }}>
-            {currentTicker.count.toLocaleString()}
-          </div>
-          <div style={{ fontSize: 12, color: "white", opacity: 0.8, marginTop: 8 }}>
-            {tickerIndex === 0 ? "Active service requests" : "Total deliveries this month"}
-          </div>
-        </div>
-      </Section>
-
-      {/* Week-over-Week Progress Panel */}
-      <Section 
-        title="Week-over-Week Performance" 
-        actions={
-          <button
-            onClick={() => setWowOpen(!wowOpen)}
-            style={{
-              padding: "6px 12px",
-              borderRadius: 8,
-              border: "1px solid #E5E7EB",
-              background: "white",
-              cursor: "pointer",
-              fontSize: 12,
-            }}
-          >
-            {wowOpen ? "Collapse" : "Expand"}
-          </button>
-        }
-      >
-        {wowOpen && (
-          <Card title="Progress Comparison">
-            <div style={{ marginTop: 16 }}>
-              {/* Stats Row */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-                <div>
-                  <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Current Week</div>
-                  <div style={{ fontSize: 20, fontWeight: 600 }}>
-                    ${wowStats.currentWeekTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#6B7280" }}>
-                    {wowStats.currentWeekCount} tasks/tickets
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Last Week</div>
-                  <div style={{ fontSize: 20, fontWeight: 600 }}>
-                    ${wowStats.lastWeekTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#6B7280" }}>
-                    {wowStats.lastWeekCount} tasks/tickets
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>Change</div>
-                  <div style={{ 
-                    fontSize: 20, 
-                    fontWeight: 600,
-                    color: wowStats.percentChange >= 0 ? "#166534" : "#991B1B"
-                  }}>
-                    {wowStats.percentChange >= 0 ? "+" : ""}
-                    {wowStats.percentChange.toLocaleString(undefined, { maximumFractionDigits: 1 })}%
-                  </div>
-                  <div style={{ fontSize: 11, color: "#6B7280" }}>
-                    vs last week
-                  </div>
-                </div>
-              </div>
-
-              {/* Progress Bar */}
-              <div>
-                <div style={{ 
-                  display: "flex", 
-                  justifyContent: "space-between", 
-                  alignItems: "center",
-                  marginBottom: 8 
-                }}>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>Week over week</span>
-                  <span style={{ 
-                    fontSize: 13, 
-                    fontWeight: 600,
-                    color: wowStats.percentChange >= 0 ? "#166534" : "#991B1B"
-                  }}>
-                    {wowStats.percentChange >= 0 ? "+" : ""}
-                    {wowStats.percentChange.toFixed(1)}% vs last week
-                  </span>
-                </div>
-                <div style={{
-                  height: 24,
-                  background: "#F3F4F6",
-                  borderRadius: 999,
-                  overflow: "hidden",
-                  position: "relative",
-                }}>
-                  <div style={{
-                    width: wowStats.progressPct + "%",
-                    height: "100%",
-                    background: wowStats.percentChange >= 0 
-                      ? "linear-gradient(90deg, #10b981 0%, #059669 100%)"
-                      : "linear-gradient(90deg, #ef4444 0%, #dc2626 100%)",
-                    transition: "width 0.3s ease",
-                  }} />
-                  <div style={{
-                    position: "absolute",
-                    top: "50%",
-                    left: "50%",
-                    transform: "translate(-50%, -50%)",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: wowStats.progressPct > 50 ? "white" : "#111827",
-                  }}>
-                    {wowStats.progressPct}%
-                  </div>
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
-      </Section>
-
-      <KpiStrip />
-    </div>
-  );
-}
 
 /* ========================================================================== */
 /* Other simple tabs (Financial Ops + Budget)                                  */
@@ -936,14 +718,7 @@ function OperationalKPIs() {
     </div>
   );
 }
-function Budget() {
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <KpiStrip />
-      <div><h2>Budget</h2></div>
-    </div>
-  );
-}
+/* Budget component now imported from separate file - see src/components/Budget.jsx */
 
 /* ========================================================================== */
 /* Export Center (CSV / DOC)                                                   */
