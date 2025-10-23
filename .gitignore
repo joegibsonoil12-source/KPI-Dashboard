@@ -133,3 +133,6 @@ package-lock.json
 # Misc
 *.tmp
 *.temp
+
+# Runtime config with secrets (generated from template)
+public/runtime-config.js
