@@ -1,0 +1,290 @@
+/**
+ * Netlify Serverless Function: Billboard Summary API
+ * 
+ * GET /.netlify/functions/billboard-summary
+ * Redirected from /api/billboard-summary via netlify.toml
+ * 
+ * Aggregates Service Tracking and Delivery Tickets metrics
+ * Returns JSON with This Week vs Last Week comparison
+ * 
+ * Features:
+ * - 15-second in-memory cache (serverless edge cache)
+ * - Optional token-based access control for TV mode
+ * - Same response schema as Express route
+ * 
+ * Environment Variables:
+ * - BILLBOARD_TV_TOKEN (optional): Secret token for TV mode access control
+ * 
+ * Response Schema:
+ * {
+ *   serviceTracking: {
+ *     completed: number,
+ *     scheduled: number,
+ *     deferred: number,
+ *     completedRevenue: number,
+ *     pipelineRevenue: number
+ *   },
+ *   deliveryTickets: {
+ *     totalTickets: number,
+ *     totalGallons: number,
+ *     revenue: number
+ *   },
+ *   weekCompare: {
+ *     thisWeekTotalRevenue: number,
+ *     lastWeekTotalRevenue: number,
+ *     percentChange: number
+ *   },
+ *   lastUpdated: string (ISO timestamp)
+ * }
+ */
+
+// TODO: Import your service functions here when ready to wire real data
+// Example imports (adjust paths based on your repository structure):
+// const { getServiceTrackingSummary } = require('../../services/serviceTracking');
+// const { getDeliveryTicketsSummary } = require('../../services/deliveryTickets');
+
+// In-memory cache with 15-second TTL
+let cache = null;
+let cacheTimestamp = null;
+const CACHE_TTL_MS = 15000; // 15 seconds
+
+/**
+ * Get start of week (Monday) for a given date
+ * @param {Date} date - Reference date
+ * @returns {Date} - Start of week (Monday at 00:00:00)
+ */
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+  const weekStart = new Date(d.setDate(diff));
+  weekStart.setHours(0, 0, 0, 0);
+  return weekStart;
+}
+
+/**
+ * Get end of week (Sunday) for a given date
+ * @param {Date} date - Reference date
+ * @returns {Date} - End of week (Sunday at 23:59:59.999)
+ */
+function getWeekEnd(date) {
+  const weekStart = getWeekStart(date);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  return weekEnd;
+}
+
+/**
+ * Fetch service tracking summary for a date range
+ * 
+ * TODO: Replace this mock implementation with real service calls
+ * Import and use your existing service tracking functions
+ * 
+ * @param {Date} startDate - Filter start
+ * @param {Date} endDate - Filter end
+ * @returns {Promise<Object>} - Service tracking metrics
+ */
+async function fetchServiceTrackingSummary(startDate, endDate) {
+  // TODO: Replace with actual database query
+  // Example:
+  // const result = await getServiceTrackingSummary({ 
+  //   startDate: startDate.toISOString(),
+  //   endDate: endDate.toISOString()
+  // });
+  // return result;
+  
+  // Mock data for now (replace this entire block)
+  return {
+    completed: 42,
+    scheduled: 18,
+    deferred: 3,
+    completedRevenue: 125000.00,
+    pipelineRevenue: 45000.00,
+  };
+}
+
+/**
+ * Fetch delivery tickets summary for a date range
+ * 
+ * TODO: Replace this mock implementation with real service calls
+ * Import and use your existing delivery tickets functions
+ * 
+ * @param {Date} startDate - Filter start
+ * @param {Date} endDate - Filter end
+ * @returns {Promise<Object>} - Delivery tickets metrics
+ */
+async function fetchDeliveryTicketsSummary(startDate, endDate) {
+  // TODO: Replace with actual database query
+  // Example:
+  // const result = await getDeliveryTicketsSummary({
+  //   startDate: startDate.toISOString(),
+  //   endDate: endDate.toISOString()
+  // });
+  // return result;
+  
+  // Mock data for now (replace this entire block)
+  return {
+    totalTickets: 156,
+    totalGallons: 45230.5,
+    revenue: 89450.75,
+  };
+}
+
+/**
+ * Aggregate billboard data from all sources
+ * @returns {Promise<Object>} - Complete billboard summary
+ */
+async function aggregateBillboardData() {
+  const now = new Date();
+
+  // This Week: Monday - Sunday
+  const thisWeekStart = getWeekStart(now);
+  const thisWeekEnd = getWeekEnd(now);
+
+  // Last Week: Previous Monday - Sunday
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const lastWeekEnd = new Date(thisWeekEnd);
+  lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
+
+  // Fetch data in parallel
+  const [
+    thisWeekService,
+    lastWeekService,
+    thisWeekDelivery,
+    lastWeekDelivery,
+  ] = await Promise.all([
+    fetchServiceTrackingSummary(thisWeekStart, thisWeekEnd),
+    fetchServiceTrackingSummary(lastWeekStart, lastWeekEnd),
+    fetchDeliveryTicketsSummary(thisWeekStart, thisWeekEnd),
+    fetchDeliveryTicketsSummary(lastWeekStart, lastWeekEnd),
+  ]);
+
+  // Calculate total revenue for This Week and Last Week
+  const thisWeekTotalRevenue = thisWeekService.completedRevenue + thisWeekDelivery.revenue;
+  const lastWeekTotalRevenue = lastWeekService.completedRevenue + lastWeekDelivery.revenue;
+
+  // Calculate percent change (handle division by zero per requirement)
+  let percentChange = 0;
+  if (lastWeekTotalRevenue === 0) {
+    // If last week was 0, set to 100% if this week > 0, else 0%
+    percentChange = thisWeekTotalRevenue > 0 ? 100 : 0;
+  } else {
+    percentChange = ((thisWeekTotalRevenue - lastWeekTotalRevenue) / lastWeekTotalRevenue) * 100;
+  }
+
+  return {
+    serviceTracking: thisWeekService,
+    deliveryTickets: thisWeekDelivery,
+    weekCompare: {
+      thisWeekTotalRevenue,
+      lastWeekTotalRevenue,
+      percentChange: parseFloat(percentChange.toFixed(1)),
+    },
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
+/**
+ * Verify token for TV mode access control
+ * @param {string} token - Token from query params
+ * @returns {boolean} - Whether token is valid
+ */
+function verifyToken(token) {
+  const requiredToken = process.env.BILLBOARD_TV_TOKEN;
+  
+  // If no token is configured, allow all access
+  if (!requiredToken) {
+    return true;
+  }
+  
+  // If token is configured, require it to match
+  return token === requiredToken;
+}
+
+/**
+ * Netlify Serverless Handler
+ * @param {Object} event - Netlify event object
+ * @param {Object} context - Netlify context object
+ */
+exports.handler = async (event, context) => {
+  // Set CORS headers for cross-origin requests
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json',
+  };
+
+  // Handle preflight requests
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers,
+      body: '',
+    };
+  }
+
+  // Only allow GET requests
+  if (event.httpMethod !== 'GET') {
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({
+        error: 'Method not allowed',
+        message: 'Only GET requests are supported',
+      }),
+    };
+  }
+
+  try {
+    // Optional: Check token for TV mode access
+    const token = event.queryStringParameters?.token;
+    if (token !== undefined && !verifyToken(token)) {
+      return {
+        statusCode: 403,
+        headers,
+        body: JSON.stringify({
+          error: 'Forbidden',
+          message: 'Invalid access token',
+        }),
+      };
+    }
+
+    // Check cache validity
+    const now = Date.now();
+    if (cache && cacheTimestamp && (now - cacheTimestamp) < CACHE_TTL_MS) {
+      console.log('[Billboard] Returning cached data');
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify(cache),
+      };
+    }
+
+    // Fetch fresh data
+    console.log('[Billboard] Fetching fresh data');
+    const data = await aggregateBillboardData();
+
+    // Update cache
+    cache = data;
+    cacheTimestamp = now;
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify(data),
+    };
+  } catch (error) {
+    console.error('[Billboard] Error fetching summary:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        error: 'Failed to fetch billboard summary',
+        message: error.message,
+      }),
+    };
+  }
+};
