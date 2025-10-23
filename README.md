@@ -255,3 +255,57 @@ This migration performs **no destructive operations**:
 ## Applying Migrations via GitHub Actions
 
 Add secret `SUPABASE_DB_URL` (Postgres connection string) in repository settings. Then run the "Apply Supabase Migrations" workflow (Actions > Apply Supabase Migrations > Run workflow). Provide a specific `migration_file` for a single file or leave blank to apply all. The workflow blocks if it detects potentially destructive `DROP TABLE` or `ALTER TABLE ... DROP` statements.
+
+## Environment Variables
+
+### Supabase Configuration (Client-side)
+
+These environment variables are required for the client-side Supabase connection:
+
+- `VITE_SUPABASE_URL` - Your Supabase project URL (e.g., `https://xxxxx.supabase.co`)
+- `VITE_SUPABASE_ANON_KEY` - Your Supabase anonymous/public key (safe for client-side use with RLS enabled)
+
+**Note:** These are set at build time for static hosting. For development, create a `.env` file in the project root:
+
+```env
+VITE_SUPABASE_URL=https://xxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key_here
+```
+
+### Supabase Configuration (Server-side)
+
+**For serverless function deployments only** (Vercel, Netlify, etc.):
+
+- `SUPABASE_URL` - Your Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key (server-side only, bypasses RLS)
+
+**⚠️ IMPORTANT:** Never commit `SUPABASE_SERVICE_ROLE_KEY` to source code. Set it as a secret in your deployment platform.
+
+### QuickBooks Integration (Server-side only)
+
+**For serverless function deployments only**. These are required for the QuickBooks OAuth integration in the Budget feature:
+
+- `QUICKBOOKS_CLIENT_ID` - Your QuickBooks app client ID
+- `QUICKBOOKS_CLIENT_SECRET` - Your QuickBooks app client secret (never commit to source)
+- `QUICKBOOKS_REDIRECT_URI` - OAuth callback URL (e.g., `https://yourdomain.com/api/quickbooks/callback`)
+- `QUICKBOOKS_ENV` - Either `sandbox` (for testing) or `production`
+
+**Getting QuickBooks Credentials:**
+
+1. Go to [QuickBooks Developer Portal](https://developer.intuit.com/)
+2. Create an app or use an existing one
+3. Get your Client ID and Client Secret from the app's Keys & credentials section
+4. Configure the Redirect URI in your app settings
+
+**⚠️ SECURITY:** Keep `QUICKBOOKS_CLIENT_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` in secure environment variables only. Never commit these to source control.
+
+### Static Hosting Limitations
+
+This project is currently configured for static hosting (GitHub Pages). The QuickBooks integration and server-side API endpoints require a serverless function runtime (Vercel, Netlify, etc.) to work properly. 
+
+For static hosting:
+- Billboard component fetches data directly from Supabase using client-side RLS
+- QuickBooks integration will show placeholders until serverless functions are deployed
+- Mark Completed functionality calls Supabase RPC directly from the browser
+
+To enable full functionality, deploy to a platform that supports serverless functions (Vercel, Netlify, AWS Amplify, etc.).
