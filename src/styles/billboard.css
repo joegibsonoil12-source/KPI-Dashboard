@@ -1,0 +1,550 @@
+/**
+ * Billboard Component Styles
+ * 
+ * Dark theme optimized for TV displays
+ * 60fps animations with hardware acceleration
+ * Responsive typography using clamp()
+ * Accessible contrast ratios (WCAG AA+)
+ */
+
+/* ============================================================================
+   Billboard Page Container
+   ============================================================================ */
+
+.billboard-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  color: #f8fafc;
+  padding: 2rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+}
+
+.billboard-page.tv-mode {
+  padding: 1rem;
+}
+
+/* ============================================================================
+   Header
+   ============================================================================ */
+
+.billboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.billboard-title {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(90deg, #60a5fa 0%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.billboard-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.billboard-tv-button,
+.billboard-refresh-button {
+  padding: 0.75rem 1.5rem;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.billboard-tv-button:hover,
+.billboard-refresh-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+}
+
+/* ============================================================================
+   Ticker (Marquee)
+   ============================================================================ */
+
+.billboard-ticker-container {
+  background: rgba(0, 0, 0, 0.3);
+  border-top: 2px solid #3b82f6;
+  border-bottom: 2px solid #3b82f6;
+  overflow: hidden;
+  margin-bottom: 2rem;
+  padding: 1rem 0;
+}
+
+.billboard-ticker {
+  display: flex;
+  white-space: nowrap;
+  animation: ticker-scroll linear infinite;
+  will-change: transform;
+}
+
+@keyframes ticker-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.billboard-ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 2rem;
+  font-size: 1.125rem;
+  font-weight: 500;
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.billboard-ticker-label {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.billboard-ticker-value {
+  color: #f8fafc;
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.billboard-ticker-change {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.billboard-ticker-change.positive {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+
+.billboard-ticker-change.negative {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+/* ============================================================================
+   Main Content
+   ============================================================================ */
+
+.billboard-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* ============================================================================
+   Metric Cards
+   ============================================================================ */
+
+.billboard-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.billboard-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 4px solid;
+  border-radius: 12px;
+  padding: 2rem;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.billboard-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+}
+
+.billboard-card-label {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+
+.billboard-card-value {
+  font-size: clamp(2rem, 4vw, 4rem);
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.billboard-card-unit {
+  font-size: 0.875rem;
+  color: #64748b;
+  font-weight: 400;
+}
+
+/* ============================================================================
+   Week Compare Meter
+   ============================================================================ */
+
+.week-compare-meter {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.week-compare-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.week-compare-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: #f8fafc;
+}
+
+.week-compare-status {
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.week-compare-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.week-compare-value-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.week-compare-value-label {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.week-compare-value-amount {
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.week-compare-value-amount.positive {
+  color: #10b981;
+}
+
+.week-compare-value-amount.negative {
+  color: #ef4444;
+}
+
+.week-compare-bar-container {
+  position: relative;
+  height: 60px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.week-compare-bar {
+  height: 100%;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: width 0.6s ease;
+  position: relative;
+  min-width: 80px;
+}
+
+.week-compare-bar-label {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.week-compare-legend {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.week-compare-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
+
+.week-compare-legend-marker {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+}
+
+/* ============================================================================
+   Additional Details
+   ============================================================================ */
+
+.billboard-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.billboard-detail-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  backdrop-filter: blur(10px);
+}
+
+.billboard-detail-card h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  color: #f8fafc;
+}
+
+.billboard-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+}
+
+.billboard-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.billboard-detail-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.billboard-detail-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.billboard-detail-value.warning {
+  color: #f59e0b;
+}
+
+/* ============================================================================
+   Footer
+   ============================================================================ */
+
+.billboard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.billboard-footer-text {
+  font-weight: 500;
+}
+
+/* ============================================================================
+   Loading & Error States
+   ============================================================================ */
+
+.billboard-loading,
+.billboard-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  text-align: center;
+  gap: 1rem;
+}
+
+.billboard-loading-spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spinner 0.8s linear infinite;
+}
+
+@keyframes spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.billboard-error h2 {
+  color: #ef4444;
+  font-size: 2rem;
+  margin: 0;
+}
+
+.billboard-error p {
+  color: #94a3b8;
+  font-size: 1.125rem;
+}
+
+.billboard-retry-button {
+  padding: 0.75rem 2rem;
+  border: 2px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.billboard-retry-button:hover {
+  background: rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+}
+
+/* ============================================================================
+   TV Mode Adjustments
+   ============================================================================ */
+
+.billboard-page.tv-mode .billboard-ticker-item {
+  font-size: 1.5rem;
+}
+
+.billboard-page.tv-mode .billboard-ticker-value {
+  font-size: 1.75rem;
+}
+
+.billboard-page.tv-mode .billboard-card-value {
+  font-size: clamp(3rem, 6vw, 6rem);
+}
+
+.billboard-page.tv-mode .week-compare-title {
+  font-size: 2rem;
+}
+
+.billboard-page.tv-mode .week-compare-value-amount {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+}
+
+/* ============================================================================
+   Responsive Design
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .billboard-page {
+    padding: 1rem;
+  }
+
+  .billboard-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+
+  .billboard-actions {
+    width: 100%;
+  }
+
+  .billboard-tv-button,
+  .billboard-refresh-button {
+    flex: 1;
+  }
+
+  .billboard-cards-container {
+    grid-template-columns: 1fr;
+  }
+
+  .billboard-week-compare-values {
+    grid-template-columns: 1fr;
+  }
+
+  .billboard-ticker-item {
+    font-size: 1rem;
+    padding: 0 1rem;
+  }
+
+  .billboard-ticker-value {
+    font-size: 1.125rem;
+  }
+}
+
+/* ============================================================================
+   Accessibility
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .billboard-ticker {
+    animation: none;
+  }
+
+  .billboard-card:hover {
+    transform: none;
+  }
+
+  .billboard-loading-spinner {
+    animation: none;
+    border-top-color: transparent;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .billboard-page {
+    background: #000;
+  }
+
+  .billboard-card,
+  .week-compare-meter,
+  .billboard-detail-card {
+    border-color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .billboard-ticker-container {
+    border-color: #fff;
+  }
+}
