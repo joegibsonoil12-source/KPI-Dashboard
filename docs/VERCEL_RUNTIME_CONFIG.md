@@ -2,6 +2,13 @@
 
 This document describes how to enable a runtime override for the Billboard API base URL and TV token so the front-end can be pointed to the Vercel-hosted API after the static site is deployed — without rebuilding.
 
+## Overview
+
+This PR adds the **infrastructure** for runtime configuration. To fully enable runtime config in the application, you will need to:
+
+1. Add the generated script tag to `index.html`
+2. Update the client-side code (e.g., `src/pages/api/billboard-summary.js`) to read from `window.__ENV` before falling back to build-time environment variables
+
 Files:
 - public/runtime-config.js.template — template for the runtime configuration.
   - Copy to `public/runtime-config.js` with real values before (or during) deploy.
@@ -29,8 +36,8 @@ Files:
 
 1. The template file `public/runtime-config.js.template` contains placeholders for configuration values.
 2. The script `scripts/generate-runtime-config.cjs` reads environment variables and generates `public/runtime-config.js`.
-3. The generated file is loaded by the HTML page before the main application bundle.
-4. The application reads configuration from `window.__ENV` at runtime.
+3. The generated file should be loaded by the HTML page before the main application bundle (add `<script src="/runtime-config.js"></script>` to `index.html` in the `<head>` section).
+4. The application code should be updated to read configuration from `window.__ENV` at runtime, preferring it over build-time environment variables.
 
 ## Environment Variables
 
@@ -41,14 +48,19 @@ The script reads the following environment variables:
 
 ## Client-Side Usage
 
-In your application code, read the configuration from `window.__ENV`:
+The client-side code needs to be updated to read configuration from `window.__ENV` at runtime.
+
+For example, in your API utility code, prefer runtime config over build-time env vars:
 
 ```javascript
-const apiBase = window.__ENV?.BILLBOARD_API_BASE || 'http://localhost:3000';
+// Prefer runtime config from window.__ENV, fall back to build-time VITE_ env vars
+const apiBase = window.__ENV?.BILLBOARD_API_BASE || import.meta.env.VITE_BILLBOARD_API_BASE || 'http://localhost:3000';
 const tvToken = window.__ENV?.BILLBOARD_TV_TOKEN || '';
 ```
 
-The client should prefer the runtime override from `window.__ENV` over any hardcoded or build-time configuration.
+This allows the same build to be configured differently at deploy time by just changing the runtime-config.js file.
+
+**Note:** The existing code in `src/pages/api/billboard-summary.js` uses `import.meta.env.VITE_BILLBOARD_API_BASE`. To fully support runtime configuration, this code should be updated to check `window.__ENV` first.
 
 ## Deployment
 
