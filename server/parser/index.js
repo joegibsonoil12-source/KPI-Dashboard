@@ -18,8 +18,14 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 
+// Import routes
+const billboardRouter = require('./routes/billboard');
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// Register API routes
+app.use('/api/billboard-summary', billboardRouter);
 
 app.post('/preview', (req, res) => {
   try {
