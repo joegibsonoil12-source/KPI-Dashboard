@@ -21,3 +21,4 @@ export default defineConfig({
     }
   }
 });
+Set Vite base to '/' for Vercel deploys
