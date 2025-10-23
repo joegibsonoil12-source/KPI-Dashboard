@@ -37,15 +37,35 @@
  * }
  */
 
-// TODO: Import your service functions here when ready to wire real data
-// Example imports (adjust paths based on your repository structure):
-// const { getServiceTrackingSummary } = require('../services/serviceTracking');
-// const { getDeliveryTicketsSummary } = require('../services/deliveryTickets');
+// Import Supabase client for server-side queries
+const { createClient } = require('@supabase/supabase-js');
+
+// TODO: If you want to use src/lib/serviceHelpers.js helpers server-side:
+// 1. Refactor helpers to work in Node.js (remove browser-specific code)
+// 2. Import them here: const { fetchServiceJobs } = require('../src/lib/serviceHelpers');
+// 3. Use them in the fetch functions below
+// For now, we query Supabase directly in this serverless function
 
 // In-memory cache with 15-second TTL
 let cache = null;
 let cacheTimestamp = null;
 const CACHE_TTL_MS = 15000; // 15 seconds
+
+/**
+ * Create Supabase client with service role key
+ * Shared helper to reduce duplication
+ * @returns {Object} - Supabase client instance
+ */
+function createSupabaseClient() {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables');
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
 
 /**
  * Get start of week (Monday) for a given date
@@ -75,58 +95,130 @@ function getWeekEnd(date) {
 }
 
 /**
- * Fetch service tracking summary for a date range
+ * Fetch service tracking summary for a date range from Supabase
  * 
- * TODO: Replace this mock implementation with real service calls
- * Import and use your existing service tracking functions
+ * Uses service_jobs table with columns:
+ * - status: normalized status (completed, scheduled, etc.)
+ * - job_amount: revenue amount
+ * - job_date: date of the job
+ * 
+ * TODO: If your table/column names differ:
+ * - Update table name from 'service_jobs' to your table name
+ * - Update column names in the select/filter clauses
+ * - Update status value mappings if needed
  * 
  * @param {Date} startDate - Filter start
  * @param {Date} endDate - Filter end
  * @returns {Promise<Object>} - Service tracking metrics
  */
 async function fetchServiceTrackingSummary(startDate, endDate) {
-  // TODO: Replace with actual database query
-  // Example:
-  // const result = await getServiceTrackingSummary({ 
-  //   startDate: startDate.toISOString(),
-  //   endDate: endDate.toISOString()
-  // });
-  // return result;
+  // Initialize Supabase client with service role key (server-side only)
+  const supabase = createSupabaseClient();
   
-  // Mock data for now (replace this entire block)
-  return {
-    completed: 42,
-    scheduled: 18,
-    deferred: 3,
-    completedRevenue: 125000.00,
-    pipelineRevenue: 45000.00,
+  // Format dates as ISO strings for Supabase query
+  const startDateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
+  const endDateStr = endDate.toISOString().split('T')[0];
+  
+  // Query service_jobs table
+  // TODO: If column names differ, update these field names
+  const { data, error } = await supabase
+    .from('service_jobs')
+    .select('status, job_amount, job_date')
+    .gte('job_date', startDateStr)
+    .lte('job_date', endDateStr);
+  
+  if (error) {
+    console.error('[Billboard] Error fetching service jobs:', error);
+    throw new Error(`Failed to fetch service jobs: ${error.message}`);
+  }
+  
+  // Aggregate data by status
+  const summary = {
+    completed: 0,
+    scheduled: 0,
+    deferred: 0,
+    completedRevenue: 0,
+    pipelineRevenue: 0,
   };
+  
+  (data || []).forEach(job => {
+    const amount = parseFloat(job.job_amount) || 0;
+    const status = (job.status || '').toLowerCase();
+    
+    // TODO: If your status values differ, update these mappings
+    if (status === 'completed') {
+      summary.completed += 1;
+      summary.completedRevenue += amount;
+    } else if (status === 'scheduled') {
+      summary.scheduled += 1;
+      summary.pipelineRevenue += amount;
+    } else if (status === 'deferred') {
+      summary.deferred += 1;
+      summary.pipelineRevenue += amount;
+    } else if (status === 'unscheduled' || status === 'in_progress') {
+      // Count as scheduled for pipeline
+      summary.scheduled += 1;
+      summary.pipelineRevenue += amount;
+    }
+  });
+  
+  return summary;
 }
 
 /**
- * Fetch delivery tickets summary for a date range
+ * Fetch delivery tickets summary for a date range from Supabase
  * 
- * TODO: Replace this mock implementation with real service calls
- * Import and use your existing delivery tickets functions
+ * Uses delivery_tickets table with columns:
+ * - qty: gallons delivered (maps to totalGallons)
+ * - amount: revenue (maps to revenue)
+ * - date: created_at date field
+ * 
+ * TODO: If your table/column names differ:
+ * - The schema shows 'qty' for gallons and 'amount' for revenue
+ * - The schema shows 'date' field (not 'created_at') for filtering
+ * - Update these field names if your schema differs
  * 
  * @param {Date} startDate - Filter start
  * @param {Date} endDate - Filter end
  * @returns {Promise<Object>} - Delivery tickets metrics
  */
 async function fetchDeliveryTicketsSummary(startDate, endDate) {
-  // TODO: Replace with actual database query
-  // Example:
-  // const result = await getDeliveryTicketsSummary({
-  //   startDate: startDate.toISOString(),
-  //   endDate: endDate.toISOString()
-  // });
-  // return result;
+  // Initialize Supabase client with service role key (server-side only)
+  const supabase = createSupabaseClient();
   
-  // Mock data for now (replace this entire block)
+  // Format dates as ISO strings for Supabase query
+  const startDateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
+  const endDateStr = endDate.toISOString().split('T')[0];
+  
+  // Query delivery_tickets table
+  // TODO: Update field names if your schema differs
+  // Note: The schema uses 'date' (not 'created_at') and 'qty' (not 'gallons')
+  const { data, error } = await supabase
+    .from('delivery_tickets')
+    .select('qty, amount, date')
+    .gte('date', startDateStr)
+    .lte('date', endDateStr);
+  
+  if (error) {
+    console.error('[Billboard] Error fetching delivery tickets:', error);
+    throw new Error(`Failed to fetch delivery tickets: ${error.message}`);
+  }
+  
+  // Aggregate data
+  let totalTickets = 0;
+  let totalGallons = 0;
+  let revenue = 0;
+  
+  (data || []).forEach(ticket => {
+    totalTickets += 1;
+    totalGallons += parseFloat(ticket.qty) || 0; // TODO: qty maps to gallons
+    revenue += parseFloat(ticket.amount) || 0;    // TODO: amount maps to revenue
+  });
+  
   return {
-    totalTickets: 156,
-    totalGallons: 45230.5,
-    revenue: 89450.75,
+    totalTickets,
+    totalGallons,
+    revenue,
   };
 }
 
@@ -228,8 +320,11 @@ module.exports = async (req, res) => {
 
   try {
     // Optional: Check token for TV mode access
-    const { token } = req.query;
-    if (token !== undefined && !verifyToken(token)) {
+    // When ?tv=1 is present, token is required if BILLBOARD_TV_TOKEN is set
+    const { tv, token } = req.query;
+    const isTVMode = tv === '1';
+    
+    if (isTVMode && !verifyToken(token)) {
       return res.status(403).json({
         error: 'Forbidden',
         message: 'Invalid access token',
