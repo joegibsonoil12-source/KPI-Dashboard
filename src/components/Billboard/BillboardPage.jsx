@@ -121,15 +121,22 @@ export default function BillboardPage() {
   }, [isTVMode]);
 
   /**
+   * Get TV mode URL with token
+   * Shared helper to reduce duplication
+   */
+  const getTVUrl = () => {
+    const tvToken = import.meta.env.VITE_BILLBOARD_TV_TOKEN || '';
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    return tvToken 
+      ? `${baseUrl}?tv=1&token=${encodeURIComponent(tvToken)}`
+      : `${baseUrl}?tv=1`;
+  };
+
+  /**
    * Open TV mode in new window with token
    */
   const openTVMode = () => {
-    const tvToken = import.meta.env.VITE_BILLBOARD_TV_TOKEN || '';
-    const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    const tvUrl = tvToken 
-      ? `${baseUrl}?tv=1&token=${encodeURIComponent(tvToken)}`
-      : `${baseUrl}?tv=1`;
-    
+    const tvUrl = getTVUrl();
     window.open(
       tvUrl,
       'BillboardTV',
@@ -141,12 +148,7 @@ export default function BillboardPage() {
    * Copy TV URL to clipboard
    */
   const copyTVUrl = async () => {
-    const tvToken = import.meta.env.VITE_BILLBOARD_TV_TOKEN || '';
-    const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    const tvUrl = tvToken 
-      ? `${baseUrl}?tv=1&token=${encodeURIComponent(tvToken)}`
-      : `${baseUrl}?tv=1`;
-    
+    const tvUrl = getTVUrl();
     try {
       await navigator.clipboard.writeText(tvUrl);
       alert('TV URL copied to clipboard!');

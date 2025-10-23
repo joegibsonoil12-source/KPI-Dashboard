@@ -53,6 +53,22 @@ let cacheTimestamp = null;
 const CACHE_TTL_MS = 15000; // 15 seconds
 
 /**
+ * Create Supabase client with service role key
+ * Shared helper to reduce duplication
+ * @returns {Object} - Supabase client instance
+ */
+function createSupabaseClient() {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables');
+  }
+  
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+/**
  * Get start of week (Monday) for a given date
  * @param {Date} date - Reference date
  * @returns {Date} - Start of week (Monday at 00:00:00)
@@ -98,14 +114,7 @@ function getWeekEnd(date) {
  */
 async function fetchServiceTrackingSummary(startDate, endDate) {
   // Initialize Supabase client with service role key (server-side only)
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables');
-  }
-  
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const supabase = createSupabaseClient();
   
   // Format dates as ISO strings for Supabase query
   const startDateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
@@ -176,14 +185,7 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
  */
 async function fetchDeliveryTicketsSummary(startDate, endDate) {
   // Initialize Supabase client with service role key (server-side only)
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables');
-  }
-  
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const supabase = createSupabaseClient();
   
   // Format dates as ISO strings for Supabase query
   const startDateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
