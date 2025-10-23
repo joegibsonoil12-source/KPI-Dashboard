@@ -55,11 +55,38 @@ jobs:
 
           if [ -f "supabase/.supabase/project" ]; then
             echo "Project already linked in supabase/.supabase/project"
+            echo "Contents of supabase/.supabase/project:"
+            cat supabase/.supabase/project || true
           elif [ -n "${SUPABASE_PROJECT_REF:-}" ]; then
-            echo "Linking using SUPABASE_PROJECT_REF (not printed)"
-            (cd supabase && npx --yes supabase@latest link --project-ref "$SUPABASE_PROJECT_REF" --debug)
+            echo "SUPABASE_PROJECT_REF is set (value not printed for security)"
+
+            # Strip leading/trailing quotes and whitespace from the secret
+            CLEANED_REF=$(echo "$SUPABASE_PROJECT_REF" | \
+              sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//' | \
+              sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+            # Validate format: must be 20 lowercase alphanumeric characters
+            if ! echo "$CLEANED_REF" | grep -qE '^[a-z0-9]{20}$'; then
+              echo "ERROR: SUPABASE_PROJECT_REF has invalid format."
+              echo "Expected: 20 lowercase alphanumeric characters"
+              echo "Example: 'abcdefghijklmnopqrst'"
+              echo "Please check the repository secret configuration."
+              exit 1
+            fi
+
+            echo "SUPABASE_PROJECT_REF format validated successfully"
+            echo "Linking to Supabase project..."
+            (cd supabase && \
+             npx --yes supabase@latest link \
+             --project-ref "$CLEANED_REF" --debug)
+
+            if [ -f "supabase/.supabase/project" ]; then
+              echo "Link successful. Contents of supabase/.supabase/project:"
+              cat supabase/.supabase/project || true
+            fi
           else
-            echo "No SUPABASE_PROJECT_REF and no existing link; db push will be skipped."
+            echo "No SUPABASE_PROJECT_REF and no existing link."
+            echo "Database push will be skipped in the next step."
           fi
 
       - name: Push CLI-managed migrations
