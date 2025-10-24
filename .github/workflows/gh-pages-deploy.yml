@@ -36,9 +36,6 @@ jobs:
           NODE_ENV: production
         run: npm run build
 
-      - name: Copy index.html to 404.html for SPA fallback
-        run: node scripts/copy-index-to-404.js
-
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:

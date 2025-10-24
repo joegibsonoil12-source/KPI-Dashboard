@@ -37,6 +37,6 @@ try {
   console.log(`✓ Successfully copied ${indexPath} to ${fallbackPath}`);
   process.exit(0);
 } catch (error) {
-  console.error(`Error copying index.html to 404.html: ${error.message}`);
+  console.error(`Error copying index.html to 404.html:`, error);
   process.exit(1);
 }
