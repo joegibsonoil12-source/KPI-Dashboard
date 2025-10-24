@@ -1,50 +1,32 @@
 /**
  * Vercel Serverless Function: Billboard Summary API
- * 
+ *
  * GET /api/billboard-summary
- * 
+ *
  * Aggregates Service Tracking and Delivery Tickets metrics
  * Returns JSON with This Week vs Last Week comparison
- * 
+ *
  * Features:
  * - 15-second in-memory cache (serverless edge cache)
  * - Optional token-based access control for TV mode
  * - Same response schema as Express route
- * 
+ *
  * Environment Variables:
- * - BILLBOARD_TV_TOKEN (optional): Secret token for TV mode access control
- * 
+ * - BILLBOARD_TV_TOKEN or VERCEL_BILLBOARD_TV_TOKEN (optional): Secret token for TV mode access control
+ * - SUPABASE_URL: Supabase project URL
+ * - SUPABASE_SERVICE_ROLE_KEY: Supabase service role key (server-only)
+ *
  * Response Schema:
  * {
- *   serviceTracking: {
- *     completed: number,
- *     scheduled: number,
- *     deferred: number,
- *     completedRevenue: number,
- *     pipelineRevenue: number
- *   },
- *   deliveryTickets: {
- *     totalTickets: number,
- *     totalGallons: number,
- *     revenue: number
- *   },
- *   weekCompare: {
- *     thisWeekTotalRevenue: number,
- *     lastWeekTotalRevenue: number,
- *     percentChange: number
- *   },
+ *   serviceTracking: { ... },
+ *   deliveryTickets: { ... },
+ *   weekCompare: { thisWeekTotalRevenue, lastWeekTotalRevenue, percentChange },
  *   lastUpdated: string (ISO timestamp)
  * }
  */
 
 // Import Supabase client for server-side queries
 const { createClient } = require('@supabase/supabase-js');
-
-// TODO: If you want to use src/lib/serviceHelpers.js helpers server-side:
-// 1. Refactor helpers to work in Node.js (remove browser-specific code)
-// 2. Import them here: const { fetchServiceJobs } = require('../src/lib/serviceHelpers');
-// 3. Use them in the fetch functions below
-// For now, we query Supabase directly in this serverless function
 
 // In-memory cache with 15-second TTL
 let cache = null;
@@ -53,17 +35,16 @@ const CACHE_TTL_MS = 15000; // 15 seconds
 
 /**
  * Create Supabase client with service role key
- * Shared helper to reduce duplication
  * @returns {Object} - Supabase client instance
  */
 function createSupabaseClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
+
   if (!supabaseUrl || !supabaseServiceKey) {
     throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables');
   }
-  
+
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
@@ -96,43 +77,27 @@ function getWeekEnd(date) {
 
 /**
  * Fetch service tracking summary for a date range from Supabase
- * 
- * Uses service_jobs table with columns:
- * - status: normalized status (completed, scheduled, etc.)
- * - job_amount: revenue amount
- * - job_date: date of the job
- * 
- * TODO: If your table/column names differ:
- * - Update table name from 'service_jobs' to your table name
- * - Update column names in the select/filter clauses
- * - Update status value mappings if needed
- * 
  * @param {Date} startDate - Filter start
  * @param {Date} endDate - Filter end
  * @returns {Promise<Object>} - Service tracking metrics
  */
 async function fetchServiceTrackingSummary(startDate, endDate) {
-  // Initialize Supabase client with service role key (server-side only)
   const supabase = createSupabaseClient();
-  
-  // Format dates as ISO strings for Supabase query
-  const startDateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+  const startDateStr = startDate.toISOString().split('T')[0];
   const endDateStr = endDate.toISOString().split('T')[0];
-  
-  // Query service_jobs table
-  // TODO: If column names differ, update these field names
+
   const { data, error } = await supabase
     .from('service_jobs')
     .select('status, job_amount, job_date')
     .gte('job_date', startDateStr)
     .lte('job_date', endDateStr);
-  
+
   if (error) {
     console.error('[Billboard] Error fetching service jobs:', error);
     throw new Error(`Failed to fetch service jobs: ${error.message}`);
   }
-  
-  // Aggregate data by status
+
   const summary = {
     completed: 0,
     scheduled: 0,
@@ -140,12 +105,11 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
     completedRevenue: 0,
     pipelineRevenue: 0,
   };
-  
+
   (data || []).forEach(job => {
     const amount = parseFloat(job.job_amount) || 0;
     const status = (job.status || '').toLowerCase();
-    
-    // TODO: If your status values differ, update these mappings
+
     if (status === 'completed') {
       summary.completed += 1;
       summary.completedRevenue += amount;
@@ -156,65 +120,47 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
       summary.deferred += 1;
       summary.pipelineRevenue += amount;
     } else if (status === 'unscheduled' || status === 'in_progress') {
-      // Count as scheduled for pipeline
       summary.scheduled += 1;
       summary.pipelineRevenue += amount;
     }
   });
-  
+
   return summary;
 }
 
 /**
  * Fetch delivery tickets summary for a date range from Supabase
- * 
- * Uses delivery_tickets table with columns:
- * - qty: gallons delivered (maps to totalGallons)
- * - amount: revenue (maps to revenue)
- * - date: created_at date field
- * 
- * TODO: If your table/column names differ:
- * - The schema shows 'qty' for gallons and 'amount' for revenue
- * - The schema shows 'date' field (not 'created_at') for filtering
- * - Update these field names if your schema differs
- * 
  * @param {Date} startDate - Filter start
  * @param {Date} endDate - Filter end
  * @returns {Promise<Object>} - Delivery tickets metrics
  */
 async function fetchDeliveryTicketsSummary(startDate, endDate) {
-  // Initialize Supabase client with service role key (server-side only)
   const supabase = createSupabaseClient();
-  
-  // Format dates as ISO strings for Supabase query
-  const startDateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+  const startDateStr = startDate.toISOString().split('T')[0];
   const endDateStr = endDate.toISOString().split('T')[0];
-  
-  // Query delivery_tickets table
-  // TODO: Update field names if your schema differs
-  // Note: The schema uses 'date' (not 'created_at') and 'qty' (not 'gallons')
+
   const { data, error } = await supabase
     .from('delivery_tickets')
     .select('qty, amount, date')
     .gte('date', startDateStr)
     .lte('date', endDateStr);
-  
+
   if (error) {
     console.error('[Billboard] Error fetching delivery tickets:', error);
     throw new Error(`Failed to fetch delivery tickets: ${error.message}`);
   }
-  
-  // Aggregate data
+
   let totalTickets = 0;
   let totalGallons = 0;
   let revenue = 0;
-  
+
   (data || []).forEach(ticket => {
     totalTickets += 1;
-    totalGallons += parseFloat(ticket.qty) || 0; // TODO: qty maps to gallons
-    revenue += parseFloat(ticket.amount) || 0;    // TODO: amount maps to revenue
+    totalGallons += parseFloat(ticket.qty) || 0;
+    revenue += parseFloat(ticket.amount) || 0;
   });
-  
+
   return {
     totalTickets,
     totalGallons,
@@ -229,17 +175,14 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
 async function aggregateBillboardData() {
   const now = new Date();
 
-  // This Week: Monday - Sunday
   const thisWeekStart = getWeekStart(now);
   const thisWeekEnd = getWeekEnd(now);
 
-  // Last Week: Previous Monday - Sunday
   const lastWeekStart = new Date(thisWeekStart);
   lastWeekStart.setDate(lastWeekStart.getDate() - 7);
   const lastWeekEnd = new Date(thisWeekEnd);
   lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
 
-  // Fetch data in parallel
   const [
     thisWeekService,
     lastWeekService,
@@ -252,14 +195,11 @@ async function aggregateBillboardData() {
     fetchDeliveryTicketsSummary(lastWeekStart, lastWeekEnd),
   ]);
 
-  // Calculate total revenue for This Week and Last Week
   const thisWeekTotalRevenue = thisWeekService.completedRevenue + thisWeekDelivery.revenue;
   const lastWeekTotalRevenue = lastWeekService.completedRevenue + lastWeekDelivery.revenue;
 
-  // Calculate percent change (handle division by zero per requirement)
   let percentChange = 0;
   if (lastWeekTotalRevenue === 0) {
-    // If last week was 0, set to 100% if this week > 0, else 0%
     percentChange = thisWeekTotalRevenue > 0 ? 100 : 0;
   } else {
     percentChange = ((thisWeekTotalRevenue - lastWeekTotalRevenue) / lastWeekTotalRevenue) * 100;
@@ -279,38 +219,61 @@ async function aggregateBillboardData() {
 
 /**
  * Verify token for TV mode access control
- * @param {string} token - Token from query params
- * @returns {boolean} - Whether token is valid
+ * Accepts token from:
+ *  - x-tv-token header
+ *  - Authorization: Bearer <token>
+ *  - ?token= query param
+ * Checks env var BILLBOARD_TV_TOKEN or VERCEL_BILLBOARD_TV_TOKEN
+ * If no token configured, TV mode access is allowed.
  */
-function verifyToken(token) {
-  const requiredToken = process.env.BILLBOARD_TV_TOKEN;
-  
-  // If no token is configured, allow all access
-  if (!requiredToken) {
-    return true;
+function verifyToken(providedToken) {
+  const requiredToken =
+    (process.env.BILLBOARD_TV_TOKEN || process.env.VERCEL_BILLBOARD_TV_TOKEN || '').toString();
+
+  // No token configured => allow all access
+  if (!requiredToken) return true;
+
+  return providedToken === requiredToken;
+}
+
+/**
+ * Extract token from request (header or query)
+ */
+function extractTokenFromRequest(req) {
+  // Header keys in Node on Vercel are lowercase
+  const headerToken = (req.headers && (req.headers['x-tv-token'] || req.headers['x-tv-token'.toLowerCase()])) || null;
+  const authHeader = (req.headers && (req.headers['authorization'] || req.headers['Authorization'])) || null;
+
+  if (headerToken) return headerToken.toString();
+
+  if (authHeader) {
+    const parts = authHeader.split(' ');
+    if (parts.length === 2 && /^Bearer$/i.test(parts[0])) {
+      return parts[1].toString();
+    }
+    // Fallback to raw auth header if not Bearer
+    return authHeader.toString();
   }
-  
-  // If token is configured, require it to match
-  return token === requiredToken;
+
+  // Query param fallback
+  if (req.query && req.query.token) return req.query.token.toString();
+
+  return '';
 }
 
 /**
  * Vercel Serverless Handler
- * @param {Object} req - Request object
- * @param {Object} res - Response object
  */
 module.exports = async (req, res) => {
-  // Set CORS headers for cross-origin requests
+  // Set CORS headers for cross-origin requests, allow token headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-tv-token, Authorization');
 
-  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // Only allow GET requests
   if (req.method !== 'GET') {
     return res.status(405).json({
       error: 'Method not allowed',
@@ -319,30 +282,33 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Optional: Check token for TV mode access
-    // When ?tv=1 is present, token is required if BILLBOARD_TV_TOKEN is set
-    const { tv, token } = req.query;
+    const { tv } = req.query;
     const isTVMode = tv === '1';
-    
-    if (isTVMode && !verifyToken(token)) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Invalid access token',
-      });
+
+    // Extract provided token from request
+    const provided = extractTokenFromRequest(req);
+
+    // If tv mode requested, enforce token if configured
+    if (isTVMode) {
+      if (!verifyToken(provided)) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Invalid access token',
+        });
+      }
     }
 
-    // Check cache validity
+    // Serve from cache if fresh
     const now = Date.now();
     if (cache && cacheTimestamp && (now - cacheTimestamp) < CACHE_TTL_MS) {
       console.log('[Billboard] Returning cached data');
       return res.status(200).json(cache);
     }
 
-    // Fetch fresh data
+    // Otherwise fetch fresh
     console.log('[Billboard] Fetching fresh data');
     const data = await aggregateBillboardData();
 
-    // Update cache
     cache = data;
     cacheTimestamp = now;
 
