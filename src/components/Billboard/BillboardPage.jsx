@@ -1,6 +1,6 @@
 /**
  * BillboardPage Component
- * 
+ *
  * Main Billboard page that orchestrates all Billboard components
  * Features:
  * - Polls /api/billboard-summary at configurable intervals
@@ -122,14 +122,31 @@ export default function BillboardPage() {
 
   /**
    * Get TV mode URL with token
-   * Shared helper to reduce duplication
+   *
+   * New behavior:
+   * - If running on GitHub Pages (hostname contains github.io), build a Vercel popout URL
+   *   so the Pop Out button opens the working Vercel billboard (which has the API).
+   * - Otherwise default to local/original behavior.
    */
   const getTVUrl = () => {
-    const tvToken = import.meta.env.VITE_BILLBOARD_TV_TOKEN || '';
-    const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    return tvToken 
-      ? `${baseUrl}?tv=1&token=${encodeURIComponent(tvToken)}`
-      : `${baseUrl}?tv=1`;
+    // token sources: Vite build-time VITE_BILLBOARD_TV_TOKEN (may be empty on GH Pages),
+    // or runtime-config (window.__ENV) if present.
+    const tvToken = import.meta.env.VITE_BILLBOARD_TV_TOKEN || (window.__ENV && window.__ENV.BILLBOARD_TV_TOKEN) || '';
+
+    // Detect GitHub Pages hosting (e.g., username.github.io or githubusercontent)
+    const hostname = (window && window.location && window.location.hostname) ? window.location.hostname : '';
+    const isGithubPages = hostname.endsWith('github.io') || hostname.includes('githubusercontent.com');
+
+    // Preferred Vercel popout base (non-secret, safe to hardcode)
+    const vercelPopoutBase = import.meta.env.VITE_BILLBOARD_VERCEL_BASE || 'https://kpi-dashboard-seven-eta.vercel.app';
+
+    // Build base URL: for GitHub Pages open Vercel billboard, otherwise use current page
+    const baseUrl = isGithubPages ? `${vercelPopoutBase}/billboard` : `${window.location.origin}${window.location.pathname}`;
+
+    if (tvToken) {
+      return `${baseUrl}?tv=1&token=${encodeURIComponent(tvToken)}`;
+    }
+    return `${baseUrl}?tv=1`;
   };
 
   /**
