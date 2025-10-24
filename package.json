@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/generate-runtime-config.js",
+    "prebuild": "node scripts/generate-runtime-config.cjs",
     "build": "vite build",
-    "build:with-runtime": "node scripts/generate-runtime-config.js && npm run build",
+    "build:with-runtime": "node scripts/generate-runtime-config.cjs && npm run build",
     "preview": "vite preview --port 4173"
   },
   "dependencies": {
