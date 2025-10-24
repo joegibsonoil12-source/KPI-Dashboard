@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KPI Dashboard - Loading...</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+    }
+    .loader {
+      text-align: center;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      margin: 0 auto 20px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .message {
+      font-size: 18px;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="loader">
+    <div class="spinner"></div>
+    <div class="message">Loading KPI Dashboard...</div>
+  </div>
+  
+  <script>
+    /**
+     * 404.html SPA Fallback for GitHub Pages
+     * 
+     * This file serves as a fallback when users navigate directly to routes
+     * like /billboard or refresh the page on a deep link. It attempts to fetch
+     * and inject the built index.html so the React SPA can handle routing.
+     * 
+     * This is a temporary fallback until the built dist/404.html is in place.
+     */
+    (function() {
+      // Get the current path
+      const path = window.location.pathname;
+      
+      // If we're at the root, just redirect to index.html
+      if (path === '/' || path === '/KPI-Dashboard/' || path === '/KPI-Dashboard') {
+        window.location.replace('/KPI-Dashboard/');
+        return;
+      }
+      
+      // Calculate the base path for the repository
+      const baseUrl = '/KPI-Dashboard/';
+      
+      // Construct the path to index.html
+      const indexUrl = baseUrl + 'index.html';
+      
+      // Try to fetch and inject the index.html
+      fetch(indexUrl)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error('Failed to fetch index.html');
+          }
+          return response.text();
+        })
+        .then(html => {
+          // Replace the current document with the fetched index.html
+          document.open();
+          document.write(html);
+          document.close();
+        })
+        .catch(error => {
+          console.error('Error loading index.html:', error);
+          // Fallback: redirect to the base URL
+          window.location.replace(baseUrl);
+        });
+    })();
+  </script>
+</body>
+</html>
