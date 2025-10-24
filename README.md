@@ -207,7 +207,24 @@ Otherwise, it's marked as late (⏱️).
 npm install
 npm run dev
 ```
-Commit to main
+
+## Deployment
+
+### GitHub Pages (Automatic via CI)
+This repository is configured to automatically build and deploy to GitHub Pages whenever changes are pushed to the `main` branch. The GitHub Actions workflow (`.github/workflows/gh-pages-deploy.yml`) handles the build and deployment process, including creating a 404.html fallback for SPA routing.
+
+**Manual Trigger**: You can also manually trigger a deployment from the Actions tab in GitHub by running the "Build and Deploy to GitHub Pages" workflow.
+
+### Local Deployment to GitHub Pages
+To manually deploy from your local machine:
+```bash
+npm run build    # Builds the site and creates dist/404.html fallback
+npm run deploy   # Deploys dist/ to gh-pages branch using gh-pages CLI
+```
+
+The `postbuild` script automatically copies `dist/index.html` to `dist/404.html` to enable SPA routing for direct links like `/billboard`.
+
+**Note**: GitHub Pages serves the site from the `/KPI-Dashboard/` subpath. The Billboard component includes logic to open the Vercel-hosted version when the "Pop Out TV" button is clicked on the GitHub Pages deployment.
 
 ## Fuel Budgets & Roles Migration
 
