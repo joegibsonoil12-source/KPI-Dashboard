@@ -104,9 +104,13 @@ async function findWorkingQuery(supabase, candidates) {
       if (!error && Array.isArray(data)) {
         console.log(`[Billboard Schema Detection] Found working table: ${candidate.table}`);
         return { candidate, sampleRow: data[0] || null };
+      } else if (error) {
+        // Log failure reason for debugging (without exposing sensitive data)
+        console.log(`[Billboard Schema Detection] Candidate ${candidate.table} failed: ${error.message}`);
       }
     } catch (err) {
-      // Silently continue to next candidate
+      // Log exception for debugging
+      console.log(`[Billboard Schema Detection] Candidate ${candidate.table} threw exception: ${err.message || String(err)}`);
     }
   }
   return null;
