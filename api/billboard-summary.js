@@ -33,6 +33,11 @@ let cache = null;
 let cacheTimestamp = null;
 const CACHE_TTL_MS = 15000; // 15 seconds
 
+// Schema detection cache: stores the working table/column configuration
+// Once detected, these are reused for subsequent requests to avoid re-probing
+let detectedServiceCandidate = null;
+let detectedDeliveryCandidate = null;
+
 /**
  * Create Supabase client with service role key
  * @returns {Object} - Supabase client instance
@@ -76,6 +81,38 @@ function getWeekEnd(date) {
 }
 
 /**
+ * Helper function to find a working table/column configuration from a list of candidates.
+ * Tries each candidate by performing a safe .select().limit(1) query.
+ * Returns the first candidate that succeeds along with a sample row.
+ *
+ * @param {Object} supabase - Supabase client instance
+ * @param {Array} candidates - Array of candidate objects: { table, select, mapping }
+ *   - table: table name to query
+ *   - select: column selection string (e.g., 'id, status, amount')
+ *   - mapping: object mapping standardized field names to actual column names
+ *              e.g., { status: 'status', amount: 'job_amount', date: 'job_date' }
+ * @returns {Promise<Object|null>} - { candidate, sampleRow } or null if none succeed
+ */
+async function findWorkingQuery(supabase, candidates) {
+  for (const candidate of candidates) {
+    try {
+      const { data, error } = await supabase
+        .from(candidate.table)
+        .select(candidate.select)
+        .limit(1);
+
+      if (!error && Array.isArray(data)) {
+        console.log(`[Billboard Schema Detection] Found working table: ${candidate.table}`);
+        return { candidate, sampleRow: data[0] || null };
+      }
+    } catch (err) {
+      // Silently continue to next candidate
+    }
+  }
+  return null;
+}
+
+/**
  * Fetch service tracking summary for a date range from Supabase
  * @param {Date} startDate - Filter start
  * @param {Date} endDate - Filter end
@@ -84,14 +121,72 @@ function getWeekEnd(date) {
 async function fetchServiceTrackingSummary(startDate, endDate) {
   const supabase = createSupabaseClient();
 
+  // Define candidate table/column configurations
+  // Add more candidates here if your database uses different naming conventions
+  const serviceCandidates = [
+    // Standard naming: service_jobs
+    {
+      table: 'service_jobs',
+      select: 'status, job_amount, job_date',
+      mapping: {
+        status: 'status',
+        amount: 'job_amount',
+        date: 'job_date'
+      }
+    },
+    // Alternative: service_tracking
+    {
+      table: 'service_tracking',
+      select: 'status, job_amount, job_date',
+      mapping: {
+        status: 'status',
+        amount: 'job_amount',
+        date: 'job_date'
+      }
+    },
+    // Alternative: different column names (amount, date)
+    {
+      table: 'service_jobs',
+      select: 'status, amount, date',
+      mapping: {
+        status: 'status',
+        amount: 'amount',
+        date: 'date'
+      }
+    },
+    // Alternative: jobs table
+    {
+      table: 'jobs',
+      select: 'status, amount, date',
+      mapping: {
+        status: 'status',
+        amount: 'amount',
+        date: 'date'
+      }
+    },
+  ];
+
+  // Detect working configuration if not already cached
+  if (!detectedServiceCandidate) {
+    console.log('[Billboard] Detecting service tracking table schema...');
+    const result = await findWorkingQuery(supabase, serviceCandidates);
+    if (!result) {
+      throw new Error('Unable to detect service tracking table. Tried: ' + 
+        serviceCandidates.map(c => c.table).join(', '));
+    }
+    detectedServiceCandidate = result.candidate;
+    console.log(`[Billboard] Using service tracking table: ${detectedServiceCandidate.table}`);
+  }
+
+  const candidate = detectedServiceCandidate;
   const startDateStr = startDate.toISOString().split('T')[0];
   const endDateStr = endDate.toISOString().split('T')[0];
 
   const { data, error } = await supabase
-    .from('service_jobs')
-    .select('status, job_amount, job_date')
-    .gte('job_date', startDateStr)
-    .lte('job_date', endDateStr);
+    .from(candidate.table)
+    .select(candidate.select)
+    .gte(candidate.mapping.date, startDateStr)
+    .lte(candidate.mapping.date, endDateStr);
 
   if (error) {
     console.error('[Billboard] Error fetching service jobs:', error);
@@ -107,8 +202,8 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
   };
 
   (data || []).forEach(job => {
-    const amount = parseFloat(job.job_amount) || 0;
-    const status = (job.status || '').toLowerCase();
+    const amount = parseFloat(job[candidate.mapping.amount]) || 0;
+    const status = (job[candidate.mapping.status] || '').toLowerCase();
 
     if (status === 'completed') {
       summary.completed += 1;
@@ -137,14 +232,72 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
 async function fetchDeliveryTicketsSummary(startDate, endDate) {
   const supabase = createSupabaseClient();
 
+  // Define candidate table/column configurations
+  // Add more candidates here if your database uses different naming conventions
+  const deliveryCandidates = [
+    // Standard naming: delivery_tickets with qty, amount, date
+    {
+      table: 'delivery_tickets',
+      select: 'qty, amount, date',
+      mapping: {
+        qty: 'qty',
+        amount: 'amount',
+        date: 'date'
+      }
+    },
+    // Alternative: quantity instead of qty
+    {
+      table: 'delivery_tickets',
+      select: 'quantity, amount, date',
+      mapping: {
+        qty: 'quantity',
+        amount: 'amount',
+        date: 'date'
+      }
+    },
+    // Alternative: deliveries table
+    {
+      table: 'deliveries',
+      select: 'qty, amount, date',
+      mapping: {
+        qty: 'qty',
+        amount: 'amount',
+        date: 'date'
+      }
+    },
+    // Alternative: delivery_date instead of date
+    {
+      table: 'delivery_tickets',
+      select: 'qty, amount, delivery_date',
+      mapping: {
+        qty: 'qty',
+        amount: 'amount',
+        date: 'delivery_date'
+      }
+    },
+  ];
+
+  // Detect working configuration if not already cached
+  if (!detectedDeliveryCandidate) {
+    console.log('[Billboard] Detecting delivery tickets table schema...');
+    const result = await findWorkingQuery(supabase, deliveryCandidates);
+    if (!result) {
+      throw new Error('Unable to detect delivery tickets table. Tried: ' + 
+        deliveryCandidates.map(c => c.table).join(', '));
+    }
+    detectedDeliveryCandidate = result.candidate;
+    console.log(`[Billboard] Using delivery tickets table: ${detectedDeliveryCandidate.table}`);
+  }
+
+  const candidate = detectedDeliveryCandidate;
   const startDateStr = startDate.toISOString().split('T')[0];
   const endDateStr = endDate.toISOString().split('T')[0];
 
   const { data, error } = await supabase
-    .from('delivery_tickets')
-    .select('qty, amount, date')
-    .gte('date', startDateStr)
-    .lte('date', endDateStr);
+    .from(candidate.table)
+    .select(candidate.select)
+    .gte(candidate.mapping.date, startDateStr)
+    .lte(candidate.mapping.date, endDateStr);
 
   if (error) {
     console.error('[Billboard] Error fetching delivery tickets:', error);
@@ -157,8 +310,8 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
 
   (data || []).forEach(ticket => {
     totalTickets += 1;
-    totalGallons += parseFloat(ticket.qty) || 0;
-    revenue += parseFloat(ticket.amount) || 0;
+    totalGallons += parseFloat(ticket[candidate.mapping.qty]) || 0;
+    revenue += parseFloat(ticket[candidate.mapping.amount]) || 0;
   });
 
   return {
