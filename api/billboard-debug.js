@@ -39,65 +39,43 @@ module.exports = async (req, res) => {
     return res.status(500).json(result);
   }
 
-  // Create server-side client
   let supabase;
   try {
     supabase = createClient(supabaseUrl, serviceKey);
   } catch (err) {
-    result.errors.push('Failed to create Supabase client: ' + err.message);
+    result.errors.push('Failed to create Supabase client: ' + (err && err.message ? err.message : String(err)));
     return res.status(500).json(result);
   }
 
-  // Safe checks: use to_regclass via SQL to test table existence (works even if table doesn't exist)
   try {
-    const { data: tj } = await supabase.rpc('sql', { /* no-op */ }).catch(()=>null);
-    // Not all projects allow RPC 'sql' - fallback to simple query below using from().select().limit(1)
-  } catch (e) {
-    // ignore - we'll use direct queries
-  }
-
-  try {
-    // Check service_jobs
-    const { data: sjData, error: sjErr } = await supabase
-      .from('service_jobs')
-      .select('id')
-      .limit(1);
-
+    const { data: sjData, error: sjErr } = await supabase.from('service_jobs').select('id').limit(1);
     if (sjErr) {
-      // If relation doesn't exist supabase-js typically returns error.message
       result.tables.service_jobs = false;
-      result.errors.push(`service_jobs check error: ${sjErr.message}`);
+      result.errors.push(`service_jobs check error: ${sjErr.message || JSON.stringify(sjErr)}`);
     } else {
       result.tables.service_jobs = Array.isArray(sjData);
     }
   } catch (err) {
     result.tables.service_jobs = false;
-    result.errors.push('service_jobs exception: ' + err.message);
+    result.errors.push('service_jobs exception: ' + (err && err.message ? err.message : String(err)));
   }
 
   try {
-    // Check delivery_tickets
-    const { data: dtData, error: dtErr } = await supabase
-      .from('delivery_tickets')
-      .select('id')
-      .limit(1);
-
+    const { data: dtData, error: dtErr } = await supabase.from('delivery_tickets').select('id').limit(1);
     if (dtErr) {
       result.tables.delivery_tickets = false;
-      result.errors.push(`delivery_tickets check error: ${dtErr.message}`);
+      result.errors.push(`delivery_tickets check error: ${dtErr.message || JSON.stringify(dtErr)}`);
     } else {
       result.tables.delivery_tickets = Array.isArray(dtData);
     }
   } catch (err) {
     result.tables.delivery_tickets = false;
-    result.errors.push('delivery_tickets exception: ' + err.message);
+    result.errors.push('delivery_tickets exception: ' + (err && err.message ? err.message : String(err)));
   }
 
-  // Final status
   result.ok = result.env.hasSupabaseUrl && result.env.hasServiceRoleKey &&
-              result.tables.service_jobs !== false && result.tables.delivery_tickets !== false;
+               result.tables.service_jobs !== false && result.tables.delivery_tickets !== false;
 
-  // If both tables are false and errors exist, return 500 so we can see logs
   const status = result.ok ? 200 : 500;
   return res.status(status).json(result);
 };
