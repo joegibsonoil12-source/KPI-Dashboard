@@ -96,12 +96,31 @@ export default function BillboardPage() {
       setError(null);
       const result = await getBillboardSummary();
 
-      // Log the full result for debugging (inspect result.debug.usedView, totals, etc)
-      // This helps confirm whether the client used the DB views or the JS fallback.
-      // Example to look for in console: result.debug.usedView === true
-      // You can remove or reduce logging after verification.
+      // Enhanced logging to verify data sources
+      // This helps confirm data is coming from service_jobs and delivery_tickets tables
       // eslint-disable-next-line no-console
-      console.debug('getBillboardSummary result:', result);
+      console.debug('📊 Billboard Data Fetch:', {
+        timestamp: new Date().toISOString(),
+        dataSource: result?.debug?.usedView ? 'Aggregate Views' : 'Direct Tables',
+        serviceTracking: {
+          completed: result?.data?.serviceTracking?.completed,
+          scheduled: result?.data?.serviceTracking?.scheduled,
+          deferred: result?.data?.serviceTracking?.deferred,
+          completedRevenue: result?.data?.serviceTracking?.completedRevenue,
+          pipelineRevenue: result?.data?.serviceTracking?.pipelineRevenue,
+        },
+        deliveryTickets: {
+          totalTickets: result?.data?.deliveryTickets?.totalTickets,
+          totalGallons: result?.data?.deliveryTickets?.totalGallons,
+          revenue: result?.data?.deliveryTickets?.revenue,
+        },
+        weekCompare: {
+          thisWeek: result?.data?.weekCompare?.thisWeekTotalRevenue,
+          lastWeek: result?.data?.weekCompare?.lastWeekTotalRevenue,
+          percentChange: result?.data?.weekCompare?.percentChange,
+        },
+        debug: result?.debug,
+      });
 
       if (result?.error) {
         throw new Error(result.error);
@@ -112,7 +131,7 @@ export default function BillboardPage() {
       setLoading(false);
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error('Error fetching billboard data:', err);
+      console.error('❌ Error fetching billboard data:', err);
       setError(err.message || 'Failed to load billboard data');
       setLoading(false);
     }
@@ -371,10 +390,13 @@ export default function BillboardPage() {
         </div>
       </div>
 
-      {/* Footer - last updated timestamp */}
+      {/* Footer - last updated timestamp and data source indicator */}
       <div className="billboard-footer">
         <span className="billboard-footer-text">
           Last Updated: {lastUpdated ? lastUpdated.toLocaleTimeString() : '—'}
+        </span>
+        <span className="billboard-footer-text" title="Data source: service_jobs and delivery_tickets tables">
+          📊 Source: Service Jobs & Delivery Tickets
         </span>
         <span className="billboard-footer-text">
           Auto-refresh: {refreshInterval}s
