@@ -2,6 +2,36 @@
 
 Upload these files to your repo root. The GitHub Actions workflow will build and publish automatically to GitHub Pages.
 
+## GitHub Pages + Supabase Setup
+
+This application is designed to run on GitHub Pages with client-side Supabase integration. No server-side deployment (like Vercel) is required.
+
+### Required GitHub Secrets
+
+Set these secrets in your GitHub repository settings (`Settings > Secrets and variables > Actions`):
+
+- `VITE_SUPABASE_URL`: Your Supabase project URL (e.g., `https://xxxxx.supabase.co`)
+- `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous/public key
+
+These secrets are automatically injected during the GitHub Actions build process.
+
+### Database Setup
+
+After creating your Supabase project, run the migration file to create the required views:
+
+1. Go to Supabase SQL Editor
+2. Run the migration: `migrations/001_create_metrics_views.sql`
+
+This creates daily, weekly, and monthly aggregation views for service jobs and delivery tickets that power the Billboard and Graphs features.
+
+### Row-Level Security (RLS)
+
+The migration automatically enables RLS and creates policies to allow anonymous read access to the aggregated views. If you need to adjust security:
+
+- Views are read-only and safe for anonymous access
+- Modify policies in the migration file if stricter security is needed
+- For production, consider implementing authentication-based policies
+
 ## Features
 
 ### Video Management
