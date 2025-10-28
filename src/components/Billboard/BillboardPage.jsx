@@ -357,12 +357,10 @@ export default function BillboardPage() {
         </div>
 
         {/* Small summary row under header for quick values (keeps the ticker + cards consistent with previous UI) */}
-        <div style={{ marginTop: 12, marginBottom: 6 }}>
-          <div className="summary-row" style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div>Delivery Tickets <strong>{metrics.deliveryTickets}</strong></div>
-            <div>Gallons Delivered <strong>{fmtGallons(metrics.totalGallons)}</strong></div>
-            <div>Delivery Revenue <strong>{fmtCurrency(num(data?.deliveryTickets?.revenue))}</strong></div>
-          </div>
+        <div className="summary-row">
+          <div>Delivery Tickets <strong>{metrics.deliveryTickets}</strong></div>
+          <div>Gallons Delivered <strong>{fmtGallons(metrics.totalGallons)}</strong></div>
+          <div>Delivery Revenue <strong>{fmtCurrency(num(data?.deliveryTickets?.revenue))}</strong></div>
         </div>
       </div>
 
