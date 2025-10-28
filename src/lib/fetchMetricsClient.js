@@ -247,33 +247,67 @@ async function aggregateFromBaseTable(source, granularity, startStr, endStr) {
       throw new Error(`Failed to fetch from ${baseTable}: ${error.message}`);
     }
 
+    // Helper: derive Y-M-D string (YYYY-MM-DD) from various date representations
+    function toYMD(value) {
+      if (!value) return null;
+      if (typeof value === 'string') {
+        // prefer the YYYY-MM-DD portion if it's present
+        return value.split('T')[0];
+      }
+      if (value instanceof Date) {
+        // Use the date's year/month/day as local components but normalize via UTC construction
+        const y = value.getFullYear();
+        const m = value.getMonth() + 1;
+        const d = value.getDate();
+        // build a UTC date representing that Y-M-D, then format to YYYY-MM-DD
+        return new Date(Date.UTC(y, m - 1, d)).toISOString().split('T')[0];
+      }
+      // fallback string conversion
+      return String(value).split('T')[0];
+    }
+
+    // Helper: compute week_start (Monday) in YYYY-MM-DD based on a YMD string
+    function computeWeekStartFromYMD(ymd) {
+      const [yStr, mStr, dStr] = ymd.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10);
+      const d = parseInt(dStr, 10);
+      // create UTC date at midnight for consistency
+      const utcDate = new Date(Date.UTC(y, m - 1, d));
+      const day = utcDate.getUTCDay(); // 0 (Sun) .. 6 (Sat)
+      // compute monday
+      const diff = d - day + (day === 0 ? -6 : 1);
+      const weekStartUtc = new Date(Date.UTC(y, m - 1, diff));
+      return weekStartUtc.toISOString().split('T')[0];
+    }
+
+    // Helper: compute month_start (YYYY-MM-01)
+    function computeMonthStartFromYMD(ymd) {
+      const [yStr, mStr] = ymd.split('-');
+      return `${yStr}-${mStr}-01`;
+    }
+
     // Group and aggregate data based on granularity and source
     const aggregated = {};
-    const truncFunc = granularity === 'day' ? 
-      (d) => d : 
-      granularity === 'week' ?
-      (d) => {
-        const date = new Date(d);
-        const day = date.getDay();
-        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-        const weekStart = new Date(date);
-        weekStart.setDate(diff);
-        // Add 1 day to match Postgres week_start behavior
-        weekStart.setDate(weekStart.getDate() + 1);
-        weekStart.setHours(0, 0, 0, 0);
-        return weekStart.toISOString().split('T')[0];
-      } :
-      (d) => {
-        const date = new Date(d);
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
-      };
 
     (rawData || []).forEach(row => {
       const dateValue = row[dateField];
       if (!dateValue) return;
-      
-      const truncatedDate = truncFunc(dateValue);
-      
+
+      // derive canonical YYYY-MM-DD day string without timezone math
+      const dayYMD = toYMD(dateValue);
+      if (!dayYMD) return;
+
+      let truncatedDate;
+      if (granularity === 'day') {
+        truncatedDate = dayYMD;
+      } else if (granularity === 'week') {
+        truncatedDate = computeWeekStartFromYMD(dayYMD);
+      } else {
+        // month
+        truncatedDate = computeMonthStartFromYMD(dayYMD);
+      }
+
       if (!aggregated[truncatedDate]) {
         if (source === 'service') {
           aggregated[truncatedDate] = {
