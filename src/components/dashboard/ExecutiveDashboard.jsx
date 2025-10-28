@@ -150,9 +150,10 @@ export default function ExecutiveDashboard() {
       setLoading(true); setErr("");
       try {
         const { from, to } = fromTo;
+        // Query service_jobs table directly instead of non-existent view
         const { data: d1, error: e1 } = await supabase
-          .from("view_service_metrics_daily")
-          .select("job_date,status,job_count,total_revenue,total_due")
+          .from("service_jobs")
+          .select("job_date,status,job_amount")
           .gte("job_date", from)
           .lte("job_date", to)
           .order("job_date", { ascending: true });
