@@ -2,14 +2,21 @@
  * BillboardPage Component
  *
  * Main Billboard page that orchestrates all Billboard components
- * Features:
- * - Fetches data directly from Supabase using client-side anon key
+ * 
+ * Data Flow:
+ * - Fetches data from Supabase service_jobs and delivery_tickets tables
+ * - Uses aggregate views (service_jobs_daily, delivery_tickets_daily) when available
+ * - Falls back to direct table queries if views don't exist
  * - Falls back to mock data if Supabase is not configured
- * - Polls at configurable intervals
+ * - All numeric fields are protected with safe helpers (num, fmtCurrency, fmtGallons)
+ * 
+ * Features:
+ * - Polls at configurable intervals (default 30s)
  * - Supports TV mode via ?tv=1 query param
  * - Configurable refresh via ?refresh=X query param or BILLBOARD_REFRESH_SEC env
  * - Fullscreen / Pop-out behavior for TV mode
  * - Dark theme optimized for display screens
+ * - Responsive layout that fits content on one screen
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
