@@ -8,7 +8,7 @@
  * - Polls at configurable intervals
  * - Supports TV mode via ?tv=1 query param
  * - Configurable refresh via ?refresh=X query param or BILLBOARD_REFRESH_SEC env
- * - Pop-out button for TV mode
+ * - Fullscreen / Pop-out behavior for TV mode
  * - Dark theme optimized for display screens
  */
 
@@ -17,8 +17,8 @@ import BillboardTicker from './BillboardTicker';
 import BillboardCards from './BillboardCards';
 import WeekCompareMeter from './WeekCompareMeter';
 import { getBillboardSummary } from '../../lib/fetchMetricsClient';
-import PopoutButton from '../Graphs/PopoutButton';
 import '../../styles/billboard.css';
+import '../../styles/brand.css'; // ensure brand variables and button classes are available
 
 // Default refresh interval in seconds (can be overridden by env or query param)
 const DEFAULT_REFRESH_SEC = 30;
@@ -78,6 +78,8 @@ export default function BillboardPage() {
       setError(null);
       const result = await getBillboardSummary();
 
+      // helpful debug: if you want to inspect whether views were used, open browser console and
+      // console.log(result.debug) — the fetcher includes debug.usedView when possible.
       if (result.error) {
         throw new Error(result.error);
       }
@@ -110,13 +112,14 @@ export default function BillboardPage() {
   }, [fetchData, refreshInterval]);
 
   /**
-   * Request fullscreen in TV mode
+   * If opened in TV mode (?tv=1) try to request fullscreen automatically.
    */
   useEffect(() => {
     if (isTVMode && document.documentElement.requestFullscreen) {
       // Small delay to ensure page is loaded
       setTimeout(() => {
         document.documentElement.requestFullscreen().catch(err => {
+          // not critical — log and continue
           console.log('Fullscreen request failed:', err);
         });
       }, 500);
@@ -126,26 +129,16 @@ export default function BillboardPage() {
   /**
    * Get TV mode URL with token
    *
-   * New behavior:
    * - If running on GitHub Pages (hostname contains github.io), build a Vercel popout URL
-   *   so the Pop Out button opens the working Vercel billboard (which has the API).
-   * - Otherwise default to local/original behavior.
+   *   so the fallback popout opens the Vercel-hosted billboard (which may have server-side API).
+   * - Otherwise default to current origin/path (local / deployed origin).
    */
   const getTVUrl = () => {
-    // token sources: Vite build-time VITE_BILLBOARD_TV_TOKEN (may be empty on GH Pages),
-    // or runtime-config (window.__ENV) if present.
     const tvToken = import.meta.env.VITE_BILLBOARD_TV_TOKEN || (window.__ENV && window.__ENV.BILLBOARD_TV_TOKEN) || '';
-
-    // Detect GitHub Pages hosting (e.g., username.github.io or githubusercontent)
     const hostname = (window && window.location && window.location.hostname) ? window.location.hostname : '';
     const isGithubPages = hostname.endsWith('github.io') || hostname.includes('githubusercontent.com');
-
-    // Preferred Vercel popout base (non-secret, safe to hardcode)
     const vercelPopoutBase = import.meta.env.VITE_BILLBOARD_VERCEL_BASE || 'https://kpi-dashboard-seven-eta.vercel.app';
-
-    // Build base URL: for GitHub Pages open Vercel billboard, otherwise use current page
     const baseUrl = isGithubPages ? `${vercelPopoutBase}/billboard` : `${window.location.origin}${window.location.pathname}`;
-
     if (tvToken) {
       return `${baseUrl}?tv=1&token=${encodeURIComponent(tvToken)}`;
     }
@@ -153,15 +146,30 @@ export default function BillboardPage() {
   };
 
   /**
-   * Open TV mode in new window with token
+   * Primary behavior: request fullscreen on the billboard container.
+   * Fallback: open a new window at the TV URL.
    */
   const openTVMode = () => {
-    const tvUrl = getTVUrl();
-    window.open(
-      tvUrl,
-      'BillboardTV',
-      'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0'
-    );
+    try {
+      // Prefer targeting the billboard container so only the billboard is fullscreen
+      const el = document.querySelector('.billboard-page') || document.documentElement;
+
+      if (el && el.requestFullscreen) {
+        el.requestFullscreen().catch(err => {
+          console.warn('Fullscreen request failed, falling back to popout window:', err);
+          const tvUrl = getTVUrl();
+          window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
+        });
+      } else {
+        // no fullscreen API support — fallback to popout window
+        const tvUrl = getTVUrl();
+        window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
+      }
+    } catch (err) {
+      console.error('openTVMode error:', err);
+      const tvUrl = getTVUrl();
+      window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
+    }
   };
 
   /**
@@ -171,10 +179,11 @@ export default function BillboardPage() {
     const tvUrl = getTVUrl();
     try {
       await navigator.clipboard.writeText(tvUrl);
+      // small visual confirmation
       alert('TV URL copied to clipboard!');
     } catch (err) {
       console.error('Failed to copy:', err);
-      // Fallback: show the URL in a prompt
+      // fallback
       prompt('Copy this TV URL:', tvUrl);
     }
   };
@@ -242,7 +251,7 @@ export default function BillboardPage() {
     return (
       <div className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
         <div className="billboard-loading">
-          <div className="billboard-loading-spinner"></div>
+          <div className="billboard-loading-spinner" />
           <p>Loading Billboard data...</p>
         </div>
       </div>
@@ -256,9 +265,7 @@ export default function BillboardPage() {
         <div className="billboard-error">
           <h2>Error Loading Billboard</h2>
           <p>{error}</p>
-          <button onClick={fetchData} className="billboard-retry-button">
-            Retry
-          </button>
+          <button onClick={fetchData} className="btn secondary">Retry</button>
         </div>
       </div>
     );
@@ -271,11 +278,14 @@ export default function BillboardPage() {
         <div className="billboard-header">
           <h1 className="billboard-title">Operations Billboard</h1>
           <div className="billboard-actions">
-            <button onClick={openTVMode} className="btn olive popout-button" title="Open billboard in a new window">
-              📺 Pop Out TV
+            {/* Primary action: full screen the billboard */}
+            <button onClick={openTVMode} className="btn olive popout-button" title="Full screen billboard">
+              📺 Full screen
             </button>
-            <button onClick={copyTVUrl} className="btn secondary popout-button">📋 Copy TV URL</button>
-            <button onClick={fetchData} className="btn secondary popout-button">🔄 Refresh</button>
+
+            {/* Secondary actions */}
+            <button onClick={copyTVUrl} className="btn secondary">📋 Copy TV URL</button>
+            <button onClick={fetchData} className="btn secondary">🔄 Refresh</button>
           </div>
         </div>
       )}
@@ -302,20 +312,20 @@ export default function BillboardPage() {
             <div className="billboard-detail-grid">
               <div className="billboard-detail-item">
                 <span className="billboard-detail-label">Completed</span>
-                <span className="billboard-detail-value">{data?.serviceTracking?.completed || 0}</span>
+                <span className="billboard-detail-value">{data?.serviceTracking?.completed ?? 0}</span>
               </div>
               <div className="billboard-detail-item">
                 <span className="billboard-detail-label">Scheduled</span>
-                <span className="billboard-detail-value">{data?.serviceTracking?.scheduled || 0}</span>
+                <span className="billboard-detail-value">{data?.serviceTracking?.scheduled ?? 0}</span>
               </div>
               <div className="billboard-detail-item">
                 <span className="billboard-detail-label">Deferred</span>
-                <span className="billboard-detail-value warning">{data?.serviceTracking?.deferred || 0}</span>
+                <span className="billboard-detail-value warning">{data?.serviceTracking?.deferred ?? 0}</span>
               </div>
               <div className="billboard-detail-item">
                 <span className="billboard-detail-label">Pipeline</span>
                 <span className="billboard-detail-value">
-                  ${(data?.serviceTracking?.pipelineRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ${(data?.serviceTracking?.pipelineRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
