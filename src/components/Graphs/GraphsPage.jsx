@@ -24,6 +24,7 @@ import TimeRangePicker from './TimeRangePicker';
 import MetricSelector from './MetricSelector';
 import PopoutButton from './PopoutButton';
 import { getMetricsTimeseries } from '../../lib/fetchMetricsClient';
+import '../../styles/brand.css';
 
 /**
  * Format date for display based on granularity

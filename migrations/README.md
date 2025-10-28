@@ -147,3 +147,5 @@ For issues with migrations:
 4. Ensure base tables exist and have data
 
 Refer to the main [README.md](../README.md) for more information about database setup.
+
+**Note**: The client-side metrics fetching code expects view columns named `day`, `week_start`, and `month_start`. Ensure that migrations/001_create_metrics_views.sql is run first to create these views with the correct column names.
