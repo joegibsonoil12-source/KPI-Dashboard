@@ -17,6 +17,7 @@ import BillboardTicker from './BillboardTicker';
 import BillboardCards from './BillboardCards';
 import WeekCompareMeter from './WeekCompareMeter';
 import { getBillboardSummary } from '../../lib/fetchMetricsClient';
+import PopoutButton from '../Graphs/PopoutButton';
 import '../../styles/billboard.css';
 
 // Default refresh interval in seconds (can be overridden by env or query param)
@@ -270,15 +271,11 @@ export default function BillboardPage() {
         <div className="billboard-header">
           <h1 className="billboard-title">Operations Billboard</h1>
           <div className="billboard-actions">
-            <button onClick={openTVMode} className="billboard-tv-button">
+            <button onClick={openTVMode} className="btn olive popout-button" title="Open billboard in a new window">
               📺 Pop Out TV
             </button>
-            <button onClick={copyTVUrl} className="billboard-tv-button">
-              📋 Copy TV URL
-            </button>
-            <button onClick={fetchData} className="billboard-refresh-button">
-              🔄 Refresh
-            </button>
+            <button onClick={copyTVUrl} className="btn secondary popout-button">📋 Copy TV URL</button>
+            <button onClick={fetchData} className="btn secondary popout-button">🔄 Refresh</button>
           </div>
         </div>
       )}
