@@ -224,6 +224,7 @@ export async function getBillboardSummary() {
 
 /**
  * Aggregate data from base table when view is not available
+ * Matches the new simplified view structure with status filtering
  * @param {string} source - 'service' or 'delivery'
  * @param {string} granularity - 'day', 'week', or 'month'
  * @param {string} startStr - Start date string (YYYY-MM-DD)
@@ -257,6 +258,8 @@ async function aggregateFromBaseTable(source, granularity, startStr, endStr) {
         const diff = date.getDate() - day + (day === 0 ? -6 : 1);
         const weekStart = new Date(date);
         weekStart.setDate(diff);
+        // Add 1 day to match Postgres week_start behavior
+        weekStart.setDate(weekStart.getDate() + 1);
         weekStart.setHours(0, 0, 0, 0);
         return weekStart.toISOString().split('T')[0];
       } :
@@ -274,55 +277,40 @@ async function aggregateFromBaseTable(source, granularity, startStr, endStr) {
       if (!aggregated[truncatedDate]) {
         if (source === 'service') {
           aggregated[truncatedDate] = {
-            total_jobs: 0,
-            completed_jobs: 0,
-            scheduled_jobs: 0,
-            deferred_jobs: 0,
-            completed_revenue: 0,
-            pipeline_revenue: 0,
-            total_amount: 0,
+            job_count: 0,
+            revenue: 0,
           };
         } else {
           aggregated[truncatedDate] = {
-            total_tickets: 0,
+            ticket_count: 0,
             total_gallons: 0,
             revenue: 0,
-            total_amount: 0,
           };
         }
       }
 
       if (source === 'service') {
         const status = (row.status || '').toLowerCase();
-        const amount = parseFloat(row.job_amount) || 0;
-        
-        aggregated[truncatedDate].total_jobs += 1;
-        aggregated[truncatedDate].total_amount += amount;
-        
-        if (status === 'completed') {
-          aggregated[truncatedDate].completed_jobs += 1;
-          aggregated[truncatedDate].completed_revenue += amount;
-        } else if (status === 'scheduled') {
-          aggregated[truncatedDate].scheduled_jobs += 1;
-          aggregated[truncatedDate].pipeline_revenue += amount;
-        } else if (status === 'deferred') {
-          aggregated[truncatedDate].deferred_jobs += 1;
-          aggregated[truncatedDate].pipeline_revenue += amount;
-        } else if (status === 'unscheduled' || status === 'in_progress') {
-          aggregated[truncatedDate].scheduled_jobs += 1;
-          aggregated[truncatedDate].pipeline_revenue += amount;
+        // Only include completed jobs, exclude canceled
+        if (!status.includes('cancel') && status.includes('completed')) {
+          const amount = parseFloat(row.job_amount) || 0;
+          aggregated[truncatedDate].job_count += 1;
+          aggregated[truncatedDate].revenue += amount;
         }
       } else {
-        aggregated[truncatedDate].total_tickets += 1;
-        aggregated[truncatedDate].total_gallons += parseFloat(row.qty) || 0;
-        aggregated[truncatedDate].revenue += parseFloat(row.amount) || 0;
-        aggregated[truncatedDate].total_amount += parseFloat(row.amount) || 0;
+        const status = (row.status || '').toLowerCase();
+        // Exclude void and canceled tickets
+        if (!status.includes('void') && !status.includes('cancel')) {
+          aggregated[truncatedDate].ticket_count += 1;
+          aggregated[truncatedDate].total_gallons += parseFloat(row.qty) || 0;
+          aggregated[truncatedDate].revenue += parseFloat(row.amount) || 0;
+        }
       }
     });
 
     // Convert to array with proper date column naming
     const dateColumnMap = {
-      day: 'date',
+      day: 'day',
       week: 'week_start',
       month: 'month_start',
     };
@@ -331,10 +319,6 @@ async function aggregateFromBaseTable(source, granularity, startStr, endStr) {
     const result = Object.entries(aggregated).map(([date, metrics]) => ({
       [dateColumn]: date,
       ...metrics,
-      // Add avg_ticket_amount for delivery tickets
-      ...(source === 'delivery' && {
-        avg_ticket_amount: metrics.total_tickets > 0 ? metrics.revenue / metrics.total_tickets : 0
-      })
     })).sort((a, b) => a[dateColumn].localeCompare(b[dateColumn]));
 
     return { data: result, error: null };
@@ -352,7 +336,7 @@ async function aggregateFromBaseTable(source, granularity, startStr, endStr) {
  * @param {string} endStr - End date string
  * @param {string} source - 'service' or 'delivery'
  * @param {string} granularity - 'day', 'week', or 'month'
- * @returns {Promise<Object>} - { data, error, debug }
+ * @returns {Promise<Object>} - { data, error, debug, totals }
  */
 async function fetchWithFallback(viewName, dateColumn, startStr, endStr, source, granularity) {
   // Try querying the view first
@@ -377,32 +361,60 @@ async function fetchWithFallback(viewName, dateColumn, startStr, endStr, source,
     return { 
       data: null, 
       error: viewError.message,
-      debug: { usedFallback: false, viewName, error: viewError.message }
+      debug: { usedFallback: false, viewName, error: viewError.message },
+      totals: null
     };
   }
+
+  // Calculate totals from data
+  const calculateTotals = (data) => {
+    if (!data || data.length === 0) return null;
+    
+    const totals = {
+      recordCount: data.length,
+    };
+
+    if (source === 'service') {
+      totals.totalJobs = data.reduce((sum, row) => sum + (parseFloat(row.job_count) || 0), 0);
+      totals.totalRevenue = data.reduce((sum, row) => sum + (parseFloat(row.revenue) || 0), 0);
+    } else {
+      totals.totalTickets = data.reduce((sum, row) => sum + (parseFloat(row.ticket_count) || 0), 0);
+      totals.totalGallons = data.reduce((sum, row) => sum + (parseFloat(row.total_gallons) || 0), 0);
+      totals.totalRevenue = data.reduce((sum, row) => sum + (parseFloat(row.revenue) || 0), 0);
+    }
+
+    return totals;
+  };
 
   if (isMissingView) {
     // View is missing, use fallback
     console.warn(`[fetchMetricsClient] View '${viewName}' not found, falling back to base table aggregation`);
     const fallbackResult = await aggregateFromBaseTable(source, granularity, startStr, endStr);
     
+    const totals = calculateTotals(fallbackResult.data);
+    
     return {
       data: fallbackResult.data,
       error: fallbackResult.error,
+      totals,
       debug: {
         usedFallback: true,
         viewName,
         reason: 'View not found in database schema',
-        suggestion: 'Run migrations/001_create_metrics_views.sql in Supabase SQL Editor'
+        suggestion: 'Run migrations/001_create_metrics_views.sql in Supabase SQL Editor',
+        totals
       }
     };
   }
 
   // View query succeeded
+  const totals = calculateTotals(viewData);
+  
   return {
     data: viewData || [],
     error: null,
-    debug: { usedFallback: false, viewName }
+    totals,
+    debug: { usedFallback: false, viewName, totals }
   };
 }
 
@@ -418,7 +430,7 @@ async function fetchWithFallback(viewName, dateColumn, startStr, endStr, source,
  * @param {Date} [options.compareStart] - Start date for comparison (if compare='custom')
  * @param {Date} [options.compareEnd] - End date for comparison (if compare='custom')
  * 
- * @returns {Promise<Object>} - { primary, comparison, error, debug }
+ * @returns {Promise<Object>} - { primary, comparison, error, debug, totals }
  */
 export async function getMetricsTimeseries(options) {
   try {
@@ -428,7 +440,8 @@ export async function getMetricsTimeseries(options) {
         primary: [], 
         comparison: null, 
         error: 'Supabase not configured',
-        debug: { usedFallback: false, error: 'No Supabase client' }
+        debug: { usedFallback: false, error: 'No Supabase client' },
+        totals: null
       };
     }
 
@@ -460,7 +473,7 @@ export async function getMetricsTimeseries(options) {
 
     // Determine date column name based on granularity
     const dateColumnMap = {
-      day: 'date',
+      day: 'day',
       week: 'week_start',
       month: 'month_start',
     };
@@ -480,6 +493,7 @@ export async function getMetricsTimeseries(options) {
     // Fetch comparison data if requested
     let comparisonData = null;
     let comparisonDebug = null;
+    let comparisonTotals = null;
     
     if (compare) {
       let compStartStr, compEndStr;
@@ -507,6 +521,7 @@ export async function getMetricsTimeseries(options) {
         } else {
           comparisonData = comparisonResult.data;
           comparisonDebug = comparisonResult.debug;
+          comparisonTotals = comparisonResult.totals;
         }
       }
     }
@@ -515,6 +530,10 @@ export async function getMetricsTimeseries(options) {
       primary: primaryResult.data || [],
       comparison: comparisonData,
       error: null,
+      totals: {
+        primary: primaryResult.totals,
+        comparison: comparisonTotals,
+      },
       debug: {
         primary: primaryResult.debug,
         comparison: comparisonDebug,
@@ -526,6 +545,7 @@ export async function getMetricsTimeseries(options) {
       primary: [],
       comparison: null,
       error: error.message,
+      totals: null,
       debug: { error: error.message },
     };
   }

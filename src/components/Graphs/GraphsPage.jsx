@@ -72,7 +72,7 @@ export default function GraphsPage() {
   
   // State for filters
   const [source, setSource] = useState('service');
-  const [metric, setMetric] = useState('completed_revenue');
+  const [metric, setMetric] = useState('revenue');
   const [granularity, setGranularity] = useState('day');
   const [startDate, setStartDate] = useState(defaultRange.start);
   const [endDate, setEndDate] = useState(defaultRange.end);
@@ -85,13 +85,14 @@ export default function GraphsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [debugInfo, setDebugInfo] = useState(null);
+  const [totals, setTotals] = useState(null);
 
   /**
    * Update metric when source changes to ensure valid combination
    */
   useEffect(() => {
     if (source === 'service') {
-      setMetric('completed_revenue');
+      setMetric('revenue');
     } else if (source === 'delivery') {
       setMetric('revenue');
     }
@@ -133,8 +134,9 @@ export default function GraphsPage() {
 
       const result = await getMetricsTimeseries(options);
 
-      // Store debug info
+      // Store debug info and totals
       setDebugInfo(result.debug || null);
+      setTotals(result.totals || null);
 
       if (result.error) {
         setError(result.error);
@@ -145,7 +147,7 @@ export default function GraphsPage() {
 
       // Transform data for recharts
       const dateColumnMap = {
-        day: 'date',
+        day: 'day',
         week: 'week_start',
         month: 'month_start',
       };
@@ -188,17 +190,10 @@ export default function GraphsPage() {
    */
   function getChartTitle() {
     const metricLabels = {
-      total_jobs: 'Total Jobs',
-      completed_jobs: 'Completed Jobs',
-      scheduled_jobs: 'Scheduled Jobs',
-      deferred_jobs: 'Deferred Jobs',
-      completed_revenue: 'Completed Revenue',
-      pipeline_revenue: 'Pipeline Revenue',
-      total_amount: 'Total Amount',
-      total_tickets: 'Total Tickets',
+      job_count: 'Job Count',
+      ticket_count: 'Ticket Count',
       total_gallons: 'Total Gallons',
       revenue: 'Revenue',
-      avg_ticket_amount: 'Average Ticket Amount',
     };
 
     const sourceLabels = {
@@ -263,6 +258,27 @@ export default function GraphsPage() {
                 <p className="mt-2">
                   <strong>To improve performance:</strong> Run <code className="bg-yellow-100 px-1 py-0.5 rounded">migrations/001_create_metrics_views.sql</code> in your Supabase SQL Editor.
                 </p>
+                {totals?.primary && (
+                  <div className="mt-3 p-3 bg-yellow-100 rounded border border-yellow-300">
+                    <p className="font-semibold text-yellow-900 mb-1">Aggregated Totals:</p>
+                    <ul className="text-xs space-y-1">
+                      <li>• Records: {totals.primary.recordCount}</li>
+                      {source === 'service' && (
+                        <>
+                          <li>• Total Jobs: {totals.primary.totalJobs?.toLocaleString()}</li>
+                          <li>• Total Revenue: ${totals.primary.totalRevenue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
+                        </>
+                      )}
+                      {source === 'delivery' && (
+                        <>
+                          <li>• Total Tickets: {totals.primary.totalTickets?.toLocaleString()}</li>
+                          <li>• Total Gallons: {totals.primary.totalGallons?.toLocaleString(undefined, { maximumFractionDigits: 1 })}</li>
+                          <li>• Total Revenue: ${totals.primary.totalRevenue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</li>
+                        </>
+                      )}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           </div>
