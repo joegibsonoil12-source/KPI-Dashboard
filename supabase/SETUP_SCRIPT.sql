@@ -148,9 +148,7 @@ ORDER BY month_start;
 -- 5. INSERT SAMPLE DATA FOR TESTING (Optional - Comment out if not needed)
 -- ============================================================================
 
--- Delete existing sample data (optional)
--- DELETE FROM public.service_jobs WHERE customer_name IN ('ABC Company', 'XYZ Corp', 'Smith LLC', 'Jones Inc', 'Brown Enterprises', 'Green Co', 'Blue Industries');
--- DELETE FROM public.delivery_tickets WHERE customer_name IN ('ABC Company', 'XYZ Corp', 'Smith LLC', 'Jones Inc', 'Brown Enterprises', 'Green Co', 'Blue Industries');
+-- Note: Comment out this entire section if you want to start with an empty database
 
 -- Insert sample service jobs (past 30 days)
 INSERT INTO public.service_jobs (job_date, status, job_amount, customer_name, tech_name, job_number) VALUES
