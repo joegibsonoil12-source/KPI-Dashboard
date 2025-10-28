@@ -1,143 +1,149 @@
 # Database Migrations
 
-This directory contains SQL migration scripts for setting up the KPI Dashboard database views and structures in Supabase.
+This directory contains SQL migration scripts for setting up the KPI Dashboard database views and populating missing data in Supabase.
 
 ## Overview
 
-The migrations in this directory are designed to be **idempotent** and **non-destructive**. They can be run multiple times safely without data loss or duplication.
+The migrations in this directory are designed to be **idempotent** and **safe to run multiple times** without data loss or duplication. They must be run manually in the Supabase SQL Editor.
 
-## Migration: 001_create_metrics_views.sql
+---
 
-### Purpose
+## Migration Files
 
-Creates read-only database views that pre-aggregate service jobs and delivery tickets data by day, week, and month. These views significantly improve the performance of the Billboard and Graphs features by avoiding real-time aggregation queries.
+### 001_create_metrics_views.sql
 
-### What It Creates
+**Purpose**: Creates read-only database views that pre-aggregate service jobs and delivery tickets data with strict status filtering and timezone awareness.
 
-The migration creates 6 aggregate views:
+**What It Creates**:
+- `service_jobs_daily`, `service_jobs_weekly`, `service_jobs_monthly`
+  - Only includes **completed** service jobs (excludes canceled)
+  - Uses UTC timezone normalization
+  - Columns: `day`/`week_start`/`month_start`, `job_count`, `revenue`
 
-**Service Jobs Views:**
-- `service_jobs_daily` - Daily aggregation of jobs with status counts and revenue
-- `service_jobs_weekly` - Weekly aggregation (Monday start) with status counts and revenue
-- `service_jobs_monthly` - Monthly aggregation with status counts and revenue
+- `delivery_tickets_daily`, `delivery_tickets_weekly`, `delivery_tickets_monthly`
+  - Excludes **void** and **canceled** tickets
+  - Uses UTC timezone normalization
+  - Columns: `day`/`week_start`/`month_start`, `ticket_count`, `total_gallons`, `revenue`
 
-**Delivery Tickets Views:**
-- `delivery_tickets_daily` - Daily aggregation with ticket count, gallons, and revenue
-- `delivery_tickets_weekly` - Weekly aggregation (Monday start)
-- `delivery_tickets_monthly` - Monthly aggregation
+**How to Run**:
+1. Open Supabase SQL Editor
+2. Copy the entire contents of `migrations/001_create_metrics_views.sql`
+3. Paste into SQL Editor and click **Run**
+4. Verify success with no errors
 
-### Performance Benefits
+**Fallback Behavior**: If views don't exist, the client will automatically aggregate from base tables and display a warning with aggregated totals.
 
-- **Faster Dashboard Loading**: Pre-aggregated views are much faster than querying and aggregating thousands of rows in real-time
-- **Reduced Database Load**: Aggregation is done once when views are created, not on every page load
-- **Better User Experience**: Billboard and Graphs pages load instantly even with large datasets
+---
 
-### How to Run the Migration
+### 002_job_amount_update_log.sql
 
-1. **Open Supabase SQL Editor**:
-   - Go to your Supabase project dashboard
-   - Click on **SQL Editor** in the left sidebar
-   - Click **+ New query** button
+**Purpose**: Creates the migration schema and audit log table for tracking job_amount updates.
 
-2. **Copy the Migration SQL**:
-   - Open `migrations/001_create_metrics_views.sql`
-   - Copy the entire contents of the file
+**What It Creates**:
+- Schema: `migrations`
+- Table: `migrations.job_amount_update_log`
+  - Tracks all updates to service_jobs.job_amount
+  - Includes old/new values, timestamp, and user
 
-3. **Paste and Execute**:
-   - Paste the SQL into the Supabase SQL Editor
-   - Click **Run** (or press Ctrl/Cmd + Enter)
+**How to Run**:
+1. Open Supabase SQL Editor
+2. Copy the entire contents of `migrations/002_job_amount_update_log.sql`
+3. Paste into SQL Editor and click **Run**
 
-4. **Verify Success**:
-   - Check for any error messages in the output panel
-   - If successful, you should see a success message
-   - You can verify the views were created by running:
-     ```sql
-     SELECT table_name 
-     FROM information_schema.views 
-     WHERE table_schema = 'public' 
-     AND table_name LIKE '%_daily' OR table_name LIKE '%_weekly' OR table_name LIKE '%_monthly';
-     ```
+---
 
-### What Happens If Views Don't Exist?
+### 002_populate_job_amounts_from_raw.sql
 
-The KPI Dashboard includes **automatic fallback behavior**:
+**Purpose**: Safely populates missing `job_amount` values from raw JSON data, only when parsed amounts are > 0, and logs all changes.
 
-- If the views don't exist, the application will detect this and automatically aggregate data from the base tables (`service_jobs` and `delivery_tickets`)
-- A warning message will be displayed in the UI explaining that views are missing
-- The Graphs page will show a yellow alert with instructions to run this migration
-- Performance will be slower, but the application will still function
+**⚠️ IMPORTANT: Preview Before Running**
 
-### Safety Features
+Before running this migration, **preview** the changes by running the SELECT query at the top of the file (lines 4-23) to see which records will be updated.
 
-This migration includes several safety features:
+**How to Run**:
 
-1. **Idempotent**: Uses `CREATE OR REPLACE VIEW` so it can be run multiple times safely
-2. **Non-destructive**: Creates views only; does not modify or delete existing data
-3. **Conditional RLS Policies**: Only creates Row-Level Security policies if they don't already exist
-4. **Permissions**: Automatically grants SELECT permissions to `anon` and `authenticated` roles
-5. **Indexes**: Creates performance indexes only if they don't exist
+1. **Preview (Required)**:
+   ```sql
+   WITH parsed AS (
+     SELECT
+       id,
+       job_number,
+       job_date,
+       status,
+       (regexp_replace(
+         (SELECT elem FROM jsonb_array_elements_text(raw) WITH ORDINALITY arr(elem, idx)
+          WHERE elem ~ '^\$[0-9]' LIMIT 1),
+         '[$,]', '', 'g'
+       ))::numeric AS parsed_amount
+     FROM public.service_jobs
+     WHERE job_amount IS NULL
+   )
+   SELECT id, job_number, job_date, parsed_amount
+   FROM parsed
+   WHERE parsed_amount IS NOT NULL AND parsed_amount > 0;
+   ```
+   Review the results to ensure they look correct.
 
-### Troubleshooting
+2. **Run the Update**:
+   - Copy the full migration file
+   - Paste into Supabase SQL Editor
+   - Click **Run**
+   - Review the returned rows showing logged changes
 
-#### Error: "permission denied for table service_jobs"
+**Safety Features**:
+- Only updates records where `job_amount IS NULL`
+- Only populates when `parsed_amount > 0`
+- Logs all changes to `migrations.job_amount_update_log`
+- Transaction-wrapped (atomic operation)
 
-**Cause**: Your database user doesn't have permission to create views on these tables.
+---
 
-**Solution**: 
-- Ensure you're running the migration with a user that has sufficient privileges (typically the project owner)
-- Check that RLS policies allow the necessary operations
+## Execution Order
 
-#### Error: "relation service_jobs does not exist"
+Run migrations in this order:
+1. `001_create_metrics_views.sql` (required for optimal performance)
+2. `002_job_amount_update_log.sql` (required before running populate script)
+3. `002_populate_job_amounts_from_raw.sql` (only if needed to fix missing amounts)
 
-**Cause**: The base tables haven't been created yet.
+---
 
-**Solution**:
-- Import or create service jobs data first
-- Run the service tracking migration: `sql/2025-10-16_service_tracking.sql`
-- Run the delivery tickets migration if needed
+## Performance Benefits
 
-#### Views created but data not showing
+**With Views (Recommended)**:
+- Dashboard loads instantly
+- Pre-aggregated data reduces database load
+- Consistent filtering logic across all queries
 
-**Cause**: The base tables might be empty or the date filters might not match your data.
+**Without Views (Fallback)**:
+- Client aggregates in real-time from base tables
+- Slower performance with large datasets
+- Warning displayed in Graphs page with totals
 
-**Solution**:
-- Check that you have data in `service_jobs` and `delivery_tickets` tables
-- Verify the date ranges of your data match what you're filtering for in the dashboard
-- Run: `SELECT COUNT(*) FROM service_jobs;` and `SELECT COUNT(*) FROM delivery_tickets;`
+---
 
-### When to Run This Migration
+## Troubleshooting
 
-You should run this migration:
+### Error: "permission denied"
+- Ensure you're running as a user with sufficient privileges (project owner)
+- Check that RLS policies allow operations
 
-- ✅ **After initial setup**: When you first set up your Supabase database
-- ✅ **If you see warnings**: When the dashboard shows "Using fallback aggregation" warnings
-- ✅ **Performance issues**: When the Graphs page is slow to load
-- ✅ **After data import**: After importing large amounts of historical data
+### Error: "relation does not exist"
+- Base tables (`service_jobs`, `delivery_tickets`) must exist first
+- Import data before running migrations
 
-You don't need to re-run it:
-- ❌ After every data change (views are dynamic and update automatically)
-- ❌ When adding new records (views query the base tables in real-time)
+### Views created but no data showing
+- Check that base tables have data: `SELECT COUNT(*) FROM service_jobs;`
+- Verify date ranges match your data
+- Check status values match filtering logic
 
-### Additional Migrations
-
-Other migrations may be located in:
-- `/sql/` - Historical SQL migrations
-- `/supabase/migrations/` - Supabase-specific migrations
-- `/db/migrations/` - Database-specific migrations
-
-Refer to the main [README.md](../README.md) for more information about database setup and configuration.
+---
 
 ## Support
 
-If you encounter issues with migrations:
+For issues with migrations:
+1. Check browser console for detailed error messages
+2. Verify Supabase connection is working
+3. Review Supabase logs in dashboard
+4. Ensure base tables exist and have data
 
-1. Check the browser console for detailed error messages
-2. Verify your Supabase connection is working
-3. Ensure you have the necessary permissions
-4. Review the Supabase logs in the dashboard
-5. Check that base tables exist and have data
-
-For more help, refer to:
-- [Supabase Documentation](https://supabase.com/docs)
-- Project README.md
-- GitHub Issues
+Refer to the main [README.md](../README.md) for more information about database setup.
