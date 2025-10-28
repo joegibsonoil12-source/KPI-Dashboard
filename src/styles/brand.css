@@ -1,0 +1,84 @@
+:root{
+  /* Gibson Oil brand palette (from provided assets) */
+  --brand-navy: #0f2136;         /* deep navy for text / header */
+  --brand-olive: #b7bf7f;        /* primary olive-green from logo */
+  --brand-olive-dark: #9ea76a;   /* slightly darker olive for accents */
+  --brand-cream: #f6f7ef;        /* light background */
+  --muted: #f1f5f9;              /* panel background */
+  --card-bg: #ffffff;
+  --accent: var(--brand-olive-dark);
+  --btn-text: #ffffff;
+  --muted-text: #6b7280;
+  --shadow: 0 6px 18px rgba(16,24,40,0.06);
+}
+
+/* App header / nav */
+.app-header, .site-topbar {
+  background: var(--brand-navy);
+  color: #ffffff;
+}
+
+/* Primary button style used for call-to-actions */
+.btn {
+  display:inline-flex;
+  align-items:center;
+  gap:.5rem;
+  background: var(--brand-navy);
+  color: var(--btn-text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255,255,255,0.06);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.btn.secondary {
+  background: var(--card-bg);
+  color: var(--brand-navy);
+  border: 1px solid rgba(15,33,54,0.06);
+}
+
+/* small accent button variant using olive as background */
+.btn.olive {
+  background: var(--brand-olive);
+  color: #0f2136;
+  border: 1px solid rgba(0,0,0,0.04);
+}
+
+/* Card / panel look */
+.card {
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(16,24,40,0.04);
+}
+
+/* Graph controls / header area */
+.panel-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:1rem;
+}
+
+/* Popout button placement */
+.popout-button {
+  margin-left: 8px;
+}
+
+/* Billboard popout - full screen helper */
+.popout-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: var(--brand-navy);
+  color: #fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+/* small responsive tweaks */
+@media (max-width: 768px) {
+  .panel-header { flex-direction: column; align-items: stretch; }
+  .btn { width: 100%; justify-content: center; }
+}
