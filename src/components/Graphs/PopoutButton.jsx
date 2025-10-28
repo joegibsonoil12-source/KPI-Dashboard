@@ -1,5 +1,4 @@
 import React from 'react';
-import '../../styles/brand.css';
 
 export default function PopoutButton({ route = '/billboard?popout=1', width = 1280, height = 720 }) {
   function onPopout() {
