@@ -1,0 +1,21 @@
+:root{
+  --brand-navy: #0f2136;
+  --brand-olive: #b7bf7f;
+  --brand-olive-dark: #9ea76a;
+  --brand-cream: #f6f7ef;
+  --muted: #f1f5f9;
+  --card-bg: #ffffff;
+  --accent: var(--brand-olive-dark);
+  --btn-text: #ffffff;
+  --muted-text: #6b7280;
+  --shadow: 0 6px 18px rgba(16,24,40,0.06);
+}
+
+.app-header, .site-topbar { background: var(--brand-navy); color: #ffffff; }
+.btn { display:inline-flex; align-items:center; gap:.5rem; background: var(--brand-navy); color: var(--btn-text); border-radius:8px; padding:8px 12px; border:1px solid rgba(255,255,255,0.06); font-weight:600; cursor:pointer; box-shadow: var(--shadow); }
+.btn.secondary { background: var(--card-bg); color: var(--brand-navy); border:1px solid rgba(15,33,54,0.06); }
+.btn.olive { background: var(--brand-olive); color:#0f2136; border:1px solid rgba(0,0,0,0.04); }
+.card { background:var(--card-bg); border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(16,24,40,0.04); }
+.panel-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+.popout-button { margin-left:8px; }
+.popout-fullscreen { width:100vw; height:100vh; background:var(--brand-navy); color:#fff; display:flex; align-items:center; justify-content:center; }

@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import TimeRangePicker from './TimeRangePicker';
 import MetricSelector from './MetricSelector';
+import PopoutButton from './PopoutButton';
 import { getMetricsTimeseries } from '../../lib/fetchMetricsClient';
 
 /**
@@ -212,7 +213,10 @@ export default function GraphsPage() {
 
   return (
     <div className="p-4">
-      <h1 className="text-2xl font-bold text-slate-800 mb-4">Metrics Graphs</h1>
+      <div className="panel-header mb-4">
+        <h1 className="text-2xl font-bold text-slate-800">Metrics Graphs</h1>
+        <PopoutButton route="/graphs?popout=1" />
+      </div>
 
       {/* Filters */}
       <MetricSelector
