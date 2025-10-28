@@ -162,6 +162,9 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
 
 /**
  * Get billboard summary (this week vs last week)
+ * Preference: use aggregate views (service_jobs_daily and delivery_tickets_daily) if available.
+ * Falls back to per-table aggregation if views are missing or error.
+ *
  * @returns {Promise<Object>} - { data, error }
  */
 export async function getBillboardSummary() {
@@ -172,14 +175,136 @@ export async function getBillboardSummary() {
       return { data: MOCK_BILLBOARD_DATA, error: null };
     }
 
+    // compute week start (Monday) and end (Sunday) as YYYY-MM-DD
     const now = new Date();
-    const thisWeekStart = getWeekStart(now);
-    const thisWeekEnd = getWeekEnd(now);
+    const thisWeekStartDate = getWeekStart(now);
+    const thisWeekEndDate = getWeekEnd(now);
+    const thisWeekStart = thisWeekStartDate.toISOString().split('T')[0];
+    const thisWeekEnd = thisWeekEndDate.toISOString().split('T')[0];
 
-    const lastWeekStart = new Date(thisWeekStart);
-    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-    const lastWeekEnd = new Date(thisWeekEnd);
-    lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
+    // Try the aggregate views first
+    try {
+      const [
+        { data: svcRows = [], error: svcErr } = {},
+        { data: delRows = [], error: delErr } = {},
+      ] = await Promise.all([
+        supabase
+          .from('service_jobs_daily')
+          .select('day, job_count, revenue')
+          .gte('day', thisWeekStart)
+          .lte('day', thisWeekEnd),
+        supabase
+          .from('delivery_tickets_daily')
+          .select('day, ticket_count, total_gallons, revenue')
+          .gte('day', thisWeekStart)
+          .lte('day', thisWeekEnd),
+      ]);
+
+      if (!svcErr && !delErr) {
+        // aggregate the week totals from the view rows
+        const thisWeekService = (svcRows || []).reduce(
+          (acc, r) => {
+            acc.completed = (acc.completed || 0) + (Number(r.job_count) || 0);
+            acc.completedRevenue = (acc.completedRevenue || 0) + (Number(r.revenue) || 0);
+            return acc;
+          },
+          { completed: 0, completedRevenue: 0 }
+        );
+
+        const thisWeekDelivery = (delRows || []).reduce(
+          (acc, r) => {
+            acc.totalTickets = (acc.totalTickets || 0) + (Number(r.ticket_count) || 0);
+            acc.totalGallons = (acc.totalGallons || 0) + (Number(r.total_gallons) || 0);
+            acc.revenue = (acc.revenue || 0) + (Number(r.revenue) || 0);
+            return acc;
+          },
+          { totalTickets: 0, totalGallons: 0, revenue: 0 }
+        );
+
+        // last week range
+        const lastWeekStart = new Date(thisWeekStartDate);
+        lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+        const lastWeekEnd = new Date(thisWeekEndDate);
+        lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
+        const lastWeekStartStr = lastWeekStart.toISOString().split('T')[0];
+        const lastWeekEndStr = lastWeekEnd.toISOString().split('T')[0];
+
+        const [
+          { data: svcLastRows = [] } = {},
+          { data: delLastRows = [] } = {},
+        ] = await Promise.all([
+          supabase
+            .from('service_jobs_daily')
+            .select('day, job_count, revenue')
+            .gte('day', lastWeekStartStr)
+            .lte('day', lastWeekEndStr),
+          supabase
+            .from('delivery_tickets_daily')
+            .select('day, ticket_count, total_gallons, revenue')
+            .gte('day', lastWeekStartStr)
+            .lte('day', lastWeekEndStr),
+        ]);
+
+        const lastWeekService = (svcLastRows || []).reduce(
+          (acc, r) => {
+            acc.completed = (acc.completed || 0) + (Number(r.job_count) || 0);
+            acc.completedRevenue = (acc.completedRevenue || 0) + (Number(r.revenue) || 0);
+            return acc;
+          },
+          { completed: 0, completedRevenue: 0 }
+        );
+
+        const lastWeekDelivery = (delLastRows || []).reduce(
+          (acc, r) => {
+            acc.totalTickets = (acc.totalTickets || 0) + (Number(r.ticket_count) || 0);
+            acc.totalGallons = (acc.totalGallons || 0) + (Number(r.total_gallons) || 0);
+            acc.revenue = (acc.revenue || 0) + (Number(r.revenue) || 0);
+            return acc;
+          },
+          { totalTickets: 0, totalGallons: 0, revenue: 0 }
+        );
+
+        const thisWeekTotalRevenue = (thisWeekService.completedRevenue || 0) + (thisWeekDelivery.revenue || 0);
+        const lastWeekTotalRevenue = (lastWeekService.completedRevenue || 0) + (lastWeekDelivery.revenue || 0);
+
+        let percentChange = 0;
+        if (lastWeekTotalRevenue === 0) {
+          percentChange = thisWeekTotalRevenue > 0 ? 100 : 0;
+        } else {
+          percentChange = ((thisWeekTotalRevenue - lastWeekTotalRevenue) / lastWeekTotalRevenue) * 100;
+        }
+
+        const data = {
+          serviceTracking: thisWeekService,
+          deliveryTickets: thisWeekDelivery,
+          weekCompare: {
+            thisWeekTotalRevenue,
+            lastWeekTotalRevenue,
+            percentChange: parseFloat(percentChange.toFixed(1)),
+          },
+          lastUpdated: new Date().toISOString(),
+          debug: { usedView: true, viewRange: { start: thisWeekStart, end: thisWeekEnd } },
+        };
+
+        return { data, error: null };
+      }
+
+      // If view query errors happened, fall back to per-table aggregator
+      console.warn('[fetchMetricsClient] One or both view queries returned errors, falling back to table-level summary', { svcErr, delErr });
+    } catch (err) {
+      // Views may not exist in DB; fall back
+      console.warn('[fetchMetricsClient] Error querying aggregate views, falling back to base table summaries', err);
+    }
+
+    // Fallback to the existing per-table aggregators
+    const nowDate = new Date();
+    const thisStart = getWeekStart(nowDate);
+    const thisEnd = getWeekEnd(nowDate);
+
+    const lastStart = new Date(thisStart);
+    lastStart.setDate(lastStart.getDate() - 7);
+    const lastEnd = new Date(thisEnd);
+    lastEnd.setDate(lastEnd.getDate() - 7);
 
     const [
       thisWeekService,
@@ -187,14 +312,14 @@ export async function getBillboardSummary() {
       thisWeekDelivery,
       lastWeekDelivery,
     ] = await Promise.all([
-      fetchServiceTrackingSummary(thisWeekStart, thisWeekEnd),
-      fetchServiceTrackingSummary(lastWeekStart, lastWeekEnd),
-      fetchDeliveryTicketsSummary(thisWeekStart, thisWeekEnd),
-      fetchDeliveryTicketsSummary(lastWeekStart, lastWeekEnd),
+      fetchServiceTrackingSummary(thisStart, thisEnd),
+      fetchServiceTrackingSummary(lastStart, lastEnd),
+      fetchDeliveryTicketsSummary(thisStart, thisEnd),
+      fetchDeliveryTicketsSummary(lastStart, lastEnd),
     ]);
 
-    const thisWeekTotalRevenue = thisWeekService.completedRevenue + thisWeekDelivery.revenue;
-    const lastWeekTotalRevenue = lastWeekService.completedRevenue + lastWeekDelivery.revenue;
+    const thisWeekTotalRevenue = (thisWeekService.completedRevenue || 0) + (thisWeekDelivery.revenue || 0);
+    const lastWeekTotalRevenue = (lastWeekService.completedRevenue || 0) + (lastWeekDelivery.revenue || 0);
 
     let percentChange = 0;
     if (lastWeekTotalRevenue === 0) {
@@ -212,12 +337,12 @@ export async function getBillboardSummary() {
         percentChange: parseFloat(percentChange.toFixed(1)),
       },
       lastUpdated: new Date().toISOString(),
+      debug: { usedView: false, reason: 'fallback to per-table aggregators' },
     };
 
     return { data, error: null };
   } catch (error) {
     console.error('[fetchMetricsClient] Error in getBillboardSummary:', error);
-    // Fall back to mock data on error
     return { data: MOCK_BILLBOARD_DATA, error: null };
   }
 }
