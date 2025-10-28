@@ -11,20 +11,14 @@
 import React from 'react';
 
 const SERVICE_METRICS = [
-  { value: 'total_jobs', label: 'Total Jobs' },
-  { value: 'completed_jobs', label: 'Completed Jobs' },
-  { value: 'scheduled_jobs', label: 'Scheduled Jobs' },
-  { value: 'deferred_jobs', label: 'Deferred Jobs' },
-  { value: 'completed_revenue', label: 'Completed Revenue' },
-  { value: 'pipeline_revenue', label: 'Pipeline Revenue' },
-  { value: 'total_amount', label: 'Total Amount' },
+  { value: 'job_count', label: 'Job Count' },
+  { value: 'revenue', label: 'Revenue' },
 ];
 
 const DELIVERY_METRICS = [
-  { value: 'total_tickets', label: 'Total Tickets' },
+  { value: 'ticket_count', label: 'Ticket Count' },
   { value: 'total_gallons', label: 'Total Gallons' },
   { value: 'revenue', label: 'Revenue' },
-  { value: 'avg_ticket_amount', label: 'Average Ticket Amount' },
 ];
 
 export default function MetricSelector({
