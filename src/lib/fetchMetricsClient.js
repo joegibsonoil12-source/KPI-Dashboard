@@ -223,6 +223,190 @@ export async function getBillboardSummary() {
 }
 
 /**
+ * Aggregate data from base table when view is not available
+ * @param {string} source - 'service' or 'delivery'
+ * @param {string} granularity - 'day', 'week', or 'month'
+ * @param {string} startStr - Start date string (YYYY-MM-DD)
+ * @param {string} endStr - End date string (YYYY-MM-DD)
+ * @returns {Promise<Object>} - { data, error }
+ */
+async function aggregateFromBaseTable(source, granularity, startStr, endStr) {
+  try {
+    const baseTable = source === 'service' ? 'service_jobs' : 'delivery_tickets';
+    const dateField = source === 'service' ? 'job_date' : 'date';
+    
+    // Fetch raw data from base table
+    const { data: rawData, error } = await supabase
+      .from(baseTable)
+      .select('*')
+      .gte(dateField, startStr)
+      .lte(dateField, endStr);
+
+    if (error) {
+      throw new Error(`Failed to fetch from ${baseTable}: ${error.message}`);
+    }
+
+    // Group and aggregate data based on granularity and source
+    const aggregated = {};
+    const truncFunc = granularity === 'day' ? 
+      (d) => d : 
+      granularity === 'week' ?
+      (d) => {
+        const date = new Date(d);
+        const day = date.getDay();
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+        const weekStart = new Date(date);
+        weekStart.setDate(diff);
+        weekStart.setHours(0, 0, 0, 0);
+        return weekStart.toISOString().split('T')[0];
+      } :
+      (d) => {
+        const date = new Date(d);
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-01`;
+      };
+
+    (rawData || []).forEach(row => {
+      const dateValue = row[dateField];
+      if (!dateValue) return;
+      
+      const truncatedDate = truncFunc(dateValue);
+      
+      if (!aggregated[truncatedDate]) {
+        if (source === 'service') {
+          aggregated[truncatedDate] = {
+            total_jobs: 0,
+            completed_jobs: 0,
+            scheduled_jobs: 0,
+            deferred_jobs: 0,
+            completed_revenue: 0,
+            pipeline_revenue: 0,
+            total_amount: 0,
+          };
+        } else {
+          aggregated[truncatedDate] = {
+            total_tickets: 0,
+            total_gallons: 0,
+            revenue: 0,
+            total_amount: 0,
+          };
+        }
+      }
+
+      if (source === 'service') {
+        const status = (row.status || '').toLowerCase();
+        const amount = parseFloat(row.job_amount) || 0;
+        
+        aggregated[truncatedDate].total_jobs += 1;
+        aggregated[truncatedDate].total_amount += amount;
+        
+        if (status === 'completed') {
+          aggregated[truncatedDate].completed_jobs += 1;
+          aggregated[truncatedDate].completed_revenue += amount;
+        } else if (status === 'scheduled') {
+          aggregated[truncatedDate].scheduled_jobs += 1;
+          aggregated[truncatedDate].pipeline_revenue += amount;
+        } else if (status === 'deferred') {
+          aggregated[truncatedDate].deferred_jobs += 1;
+          aggregated[truncatedDate].pipeline_revenue += amount;
+        } else if (status === 'unscheduled' || status === 'in_progress') {
+          aggregated[truncatedDate].scheduled_jobs += 1;
+          aggregated[truncatedDate].pipeline_revenue += amount;
+        }
+      } else {
+        aggregated[truncatedDate].total_tickets += 1;
+        aggregated[truncatedDate].total_gallons += parseFloat(row.qty) || 0;
+        aggregated[truncatedDate].revenue += parseFloat(row.amount) || 0;
+        aggregated[truncatedDate].total_amount += parseFloat(row.amount) || 0;
+      }
+    });
+
+    // Convert to array with proper date column naming
+    const dateColumnMap = {
+      day: 'date',
+      week: 'week_start',
+      month: 'month_start',
+    };
+    const dateColumn = dateColumnMap[granularity];
+
+    const result = Object.entries(aggregated).map(([date, metrics]) => ({
+      [dateColumn]: date,
+      ...metrics,
+      // Add avg_ticket_amount for delivery tickets
+      ...(source === 'delivery' && {
+        avg_ticket_amount: metrics.total_tickets > 0 ? metrics.revenue / metrics.total_tickets : 0
+      })
+    })).sort((a, b) => a[dateColumn].localeCompare(b[dateColumn]));
+
+    return { data: result, error: null };
+  } catch (error) {
+    console.error('[fetchMetricsClient] Error in aggregateFromBaseTable:', error);
+    return { data: null, error: error.message };
+  }
+}
+
+/**
+ * Fetch data from view with fallback to base table aggregation
+ * @param {string} viewName - Name of the view to query
+ * @param {string} dateColumn - Date column name in the view
+ * @param {string} startStr - Start date string
+ * @param {string} endStr - End date string
+ * @param {string} source - 'service' or 'delivery'
+ * @param {string} granularity - 'day', 'week', or 'month'
+ * @returns {Promise<Object>} - { data, error, debug }
+ */
+async function fetchWithFallback(viewName, dateColumn, startStr, endStr, source, granularity) {
+  // Try querying the view first
+  const { data: viewData, error: viewError } = await supabase
+    .from(viewName)
+    .select('*')
+    .gte(dateColumn, startStr)
+    .lte(dateColumn, endStr)
+    .order(dateColumn, { ascending: true });
+
+  // Check if the error is due to missing view
+  const isMissingView = viewError && (
+    viewError.message?.includes('does not exist') ||
+    viewError.message?.includes('relation') ||
+    viewError.message?.includes('schema cache') ||
+    viewError.code === '42P01' // Postgres error code for undefined table
+  );
+
+  if (viewError && !isMissingView) {
+    // Unexpected error, not a missing view
+    console.error('[fetchMetricsClient] Unexpected error querying view:', viewError);
+    return { 
+      data: null, 
+      error: viewError.message,
+      debug: { usedFallback: false, viewName, error: viewError.message }
+    };
+  }
+
+  if (isMissingView) {
+    // View is missing, use fallback
+    console.warn(`[fetchMetricsClient] View '${viewName}' not found, falling back to base table aggregation`);
+    const fallbackResult = await aggregateFromBaseTable(source, granularity, startStr, endStr);
+    
+    return {
+      data: fallbackResult.data,
+      error: fallbackResult.error,
+      debug: {
+        usedFallback: true,
+        viewName,
+        reason: 'View not found in database schema',
+        suggestion: 'Run migrations/001_create_metrics_views.sql in Supabase SQL Editor'
+      }
+    };
+  }
+
+  // View query succeeded
+  return {
+    data: viewData || [],
+    error: null,
+    debug: { usedFallback: false, viewName }
+  };
+}
+
+/**
  * Get metrics time series data
  * 
  * @param {Object} options - Query options
@@ -234,13 +418,18 @@ export async function getBillboardSummary() {
  * @param {Date} [options.compareStart] - Start date for comparison (if compare='custom')
  * @param {Date} [options.compareEnd] - End date for comparison (if compare='custom')
  * 
- * @returns {Promise<Object>} - { primary, comparison, error }
+ * @returns {Promise<Object>} - { primary, comparison, error, debug }
  */
 export async function getMetricsTimeseries(options) {
   try {
     if (!supabase) {
       console.warn('[fetchMetricsClient] Supabase not configured, cannot fetch timeseries');
-      return { primary: [], comparison: null, error: 'Supabase not configured' };
+      return { 
+        primary: [], 
+        comparison: null, 
+        error: 'Supabase not configured',
+        debug: { usedFallback: false, error: 'No Supabase client' }
+      };
     }
 
     const { source, start, end, granularity, compare, compareStart, compareEnd } = options;
@@ -277,24 +466,21 @@ export async function getMetricsTimeseries(options) {
     };
     const dateColumn = dateColumnMap[granularity];
 
-    // Fetch primary period data
+    // Fetch primary period data with fallback
     const startStr = start.toISOString().split('T')[0];
     const endStr = end.toISOString().split('T')[0];
 
-    const { data: primaryData, error: primaryError } = await supabase
-      .from(viewName)
-      .select('*')
-      .gte(dateColumn, startStr)
-      .lte(dateColumn, endStr)
-      .order(dateColumn, { ascending: true });
-
-    if (primaryError) {
-      console.error('[fetchMetricsClient] Error fetching primary data:', primaryError);
-      throw new Error(`Failed to fetch ${source} data: ${primaryError.message}`);
+    const primaryResult = await fetchWithFallback(viewName, dateColumn, startStr, endStr, source, granularity);
+    
+    if (primaryResult.error) {
+      console.error('[fetchMetricsClient] Error fetching primary data:', primaryResult.error);
+      throw new Error(`Failed to fetch ${source} data: ${primaryResult.error}`);
     }
 
     // Fetch comparison data if requested
     let comparisonData = null;
+    let comparisonDebug = null;
+    
     if (compare) {
       let compStartStr, compEndStr;
 
@@ -314,25 +500,25 @@ export async function getMetricsTimeseries(options) {
       }
 
       if (compStartStr && compEndStr) {
-        const { data: compData, error: compError } = await supabase
-          .from(viewName)
-          .select('*')
-          .gte(dateColumn, compStartStr)
-          .lte(dateColumn, compEndStr)
-          .order(dateColumn, { ascending: true });
-
-        if (compError) {
-          console.warn('[fetchMetricsClient] Error fetching comparison data:', compError);
+        const comparisonResult = await fetchWithFallback(viewName, dateColumn, compStartStr, compEndStr, source, granularity);
+        
+        if (comparisonResult.error) {
+          console.warn('[fetchMetricsClient] Error fetching comparison data:', comparisonResult.error);
         } else {
-          comparisonData = compData;
+          comparisonData = comparisonResult.data;
+          comparisonDebug = comparisonResult.debug;
         }
       }
     }
 
     return {
-      primary: primaryData || [],
+      primary: primaryResult.data || [],
       comparison: comparisonData,
       error: null,
+      debug: {
+        primary: primaryResult.debug,
+        comparison: comparisonDebug,
+      },
     };
   } catch (error) {
     console.error('[fetchMetricsClient] Error in getMetricsTimeseries:', error);
@@ -340,6 +526,7 @@ export async function getMetricsTimeseries(options) {
       primary: [],
       comparison: null,
       error: error.message,
+      debug: { error: error.message },
     };
   }
 }

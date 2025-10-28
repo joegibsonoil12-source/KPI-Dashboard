@@ -24,6 +24,8 @@ After creating your Supabase project, run the migration file to create the requi
 
 This creates daily, weekly, and monthly aggregation views for service jobs and delivery tickets that power the Billboard and Graphs features.
 
+**Note:** The application includes automatic fallback behavior if views are not present. If the views are missing, the Graphs page will display a warning and aggregate data from base tables in real-time. For best performance, run the migration. See [migrations/README.md](migrations/README.md) for detailed instructions.
+
 ### Row-Level Security (RLS)
 
 The migration automatically enables RLS and creates policies to allow anonymous read access to the aggregated views. If you need to adjust security:
