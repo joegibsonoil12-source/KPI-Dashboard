@@ -15,6 +15,7 @@ export default function LayoutShell({
     { id: "operations", label: "Operations" },
     { id: "budget", label: "Budget" },
     { id: "assets", label: "Assets" },
+    { id: "graphs", label: "Graphs" },
   ];
 
   return (

@@ -3,7 +3,9 @@
  *
  * Main Billboard page that orchestrates all Billboard components
  * Features:
- * - Polls /api/billboard-summary at configurable intervals
+ * - Fetches data directly from Supabase using client-side anon key
+ * - Falls back to mock data if Supabase is not configured
+ * - Polls at configurable intervals
  * - Supports TV mode via ?tv=1 query param
  * - Configurable refresh via ?refresh=X query param or BILLBOARD_REFRESH_SEC env
  * - Pop-out button for TV mode
@@ -14,7 +16,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import BillboardTicker from './BillboardTicker';
 import BillboardCards from './BillboardCards';
 import WeekCompareMeter from './WeekCompareMeter';
-import { getBillboardSummary } from '../../pages/api/billboard-summary';
+import { getBillboardSummary } from '../../lib/fetchMetricsClient';
 import '../../styles/billboard.css';
 
 // Default refresh interval in seconds (can be overridden by env or query param)
