@@ -867,10 +867,7 @@ function ExportCenter() {
 /* ========================================================================== */
 const TABS = [
   { key: "dashboard",    label: "Dashboard",        adminOnly: false,  Component: ExecutiveDashboard },
-  { key: "financial",    label: "Financial Ops",    adminOnly: false,  Component: FinancialOps },
-  { key: "ops",          label: "Operational KPIs", adminOnly: false,  Component: OperationalKPIs },
   { key: "budget",       label: "Budget",           adminOnly: false,  Component: Budget },
-  { key: "export",       label: "Export",           adminOnly: false,  Component: ExportCenter },
   { key: "procedures",   label: "Procedures",       adminOnly: false,  Component: Procedures },
   { key: "billboard",    label: "Billboard",        adminOnly: false,  Component: Billboard },
   { key: "graphs",       label: "Graphs",           adminOnly: false,  Component: GraphsPage },

@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import "./index.css";
 import "./styles/brand.css";
+import "./styles/global.css";
 
 import AuthGate from "./components/AuthGate.jsx";
 import { supabase } from "./lib/supabaseClient.js";
@@ -37,33 +38,21 @@ function TopBar() {
   }
 
   return (
-    <div
-      style={{
-        height: 44,
-        background: "#0f172a",
-        color: "white",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 12px",
-        fontSize: 14,
-      }}
-    >
-      <div>Gibson Oil & Gas — KPI Dashboard</div>
-      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+    <div className="app-header" style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "0.75rem 1.5rem",
+      fontSize: "0.875rem",
+    }}>
+      <div style={{ fontWeight: 600, fontSize: "1rem" }}>Gibson Oil & Gas — KPI Dashboard</div>
+      <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
         <span style={{ opacity: 0.8 }}>
           {email ? `Signed in as ${email}` : "Not signed in"}
         </span>
         <button
           onClick={handleSignOut}
-          style={{
-            background: "#1f2937",
-            color: "white",
-            border: "1px solid #374151",
-            padding: "6px 10px",
-            borderRadius: 8,
-            cursor: "pointer",
-          }}
+          className="btn btn-sm secondary"
         >
           Sign out
         </button>
