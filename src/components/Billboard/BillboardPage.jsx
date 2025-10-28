@@ -57,6 +57,17 @@ function useQueryParams() {
 }
 
 /**
+ * Safe numeric helpers - coerce null/undefined to 0
+ */
+const num = (v) => {
+  // If value is string or number, convert to Number; treat NaN as 0
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+};
+const fmtCurrency = (v) => `$${num(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtGallons = (v) => `${num(v).toLocaleString(undefined, { maximumFractionDigits: 1 })} gal`;
+
+/**
  * BillboardPage component
  */
 export default function BillboardPage() {
@@ -78,16 +89,22 @@ export default function BillboardPage() {
       setError(null);
       const result = await getBillboardSummary();
 
-      // helpful debug: if you want to inspect whether views were used, open browser console and
-      // console.log(result.debug) — the fetcher includes debug.usedView when possible.
-      if (result.error) {
+      // Log the full result for debugging (inspect result.debug.usedView, totals, etc)
+      // This helps confirm whether the client used the DB views or the JS fallback.
+      // Example to look for in console: result.debug.usedView === true
+      // You can remove or reduce logging after verification.
+      // eslint-disable-next-line no-console
+      console.debug('getBillboardSummary result:', result);
+
+      if (result?.error) {
         throw new Error(result.error);
       }
 
-      setData(result.data);
+      setData(result.data || null);
       setLastUpdated(new Date());
       setLoading(false);
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('Error fetching billboard data:', err);
       setError(err.message || 'Failed to load billboard data');
       setLoading(false);
@@ -120,6 +137,7 @@ export default function BillboardPage() {
       setTimeout(() => {
         document.documentElement.requestFullscreen().catch(err => {
           // not critical — log and continue
+          // eslint-disable-next-line no-console
           console.log('Fullscreen request failed:', err);
         });
       }, 500);
@@ -166,6 +184,7 @@ export default function BillboardPage() {
         window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
       }
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('openTVMode error:', err);
       const tvUrl = getTVUrl();
       window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
@@ -182,6 +201,7 @@ export default function BillboardPage() {
       // small visual confirmation
       alert('TV URL copied to clipboard!');
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('Failed to copy:', err);
       // fallback
       prompt('Copy this TV URL:', tvUrl);
@@ -197,34 +217,34 @@ export default function BillboardPage() {
     return [
       {
         label: 'Completed Services',
-        value: data.serviceTracking?.completed,
+        value: num(data.serviceTracking?.completed),
         type: 'number',
       },
       {
         label: 'Service Revenue',
-        value: data.serviceTracking?.completedRevenue,
+        value: num(data.serviceTracking?.completedRevenue),
         type: 'currency',
       },
       {
         label: 'Delivery Tickets',
-        value: data.deliveryTickets?.totalTickets,
+        value: num(data.deliveryTickets?.totalTickets),
         type: 'number',
       },
       {
         label: 'Gallons Delivered',
-        value: data.deliveryTickets?.totalGallons,
+        value: num(data.deliveryTickets?.totalGallons),
         type: 'gallons',
       },
       {
         label: 'Delivery Revenue',
-        value: data.deliveryTickets?.revenue,
+        value: num(data.deliveryTickets?.revenue),
         type: 'currency',
       },
       {
         label: 'Week Performance',
-        value: data.weekCompare?.percentChange,
+        value: num(data.weekCompare?.percentChange),
         type: 'percent',
-        change: data.weekCompare?.percentChange,
+        change: num(data.weekCompare?.percentChange),
       },
     ];
   };
@@ -235,14 +255,14 @@ export default function BillboardPage() {
   const getMetrics = () => {
     if (!data) return {};
 
-    const thisWeekTotal = data.weekCompare?.thisWeekTotalRevenue || 0;
+    const thisWeekTotal = num(data.weekCompare?.thisWeekTotalRevenue);
 
     return {
-      completedServices: data.serviceTracking?.completed,
-      deliveryTickets: data.deliveryTickets?.totalTickets,
-      totalGallons: data.deliveryTickets?.totalGallons,
+      completedServices: num(data.serviceTracking?.completed),
+      deliveryTickets: num(data.deliveryTickets?.totalTickets),
+      totalGallons: num(data.deliveryTickets?.totalGallons),
       totalRevenue: thisWeekTotal,
-      pipelineRevenue: data.serviceTracking?.pipelineRevenue,
+      pipelineRevenue: num(data.serviceTracking?.pipelineRevenue),
     };
   };
 
@@ -271,6 +291,10 @@ export default function BillboardPage() {
     );
   }
 
+  // Final render (use safe numeric helpers for display)
+  const metrics = getMetrics();
+  const tickerItems = getTickerItems();
+
   return (
     <div className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
       {/* Header - hidden in TV mode */}
@@ -291,18 +315,18 @@ export default function BillboardPage() {
       )}
 
       {/* Ticker */}
-      <BillboardTicker items={getTickerItems()} speed={80} />
+      <BillboardTicker items={tickerItems} speed={80} />
 
       {/* Main content */}
       <div className="billboard-content">
         {/* Metric Cards */}
-        <BillboardCards metrics={getMetrics()} />
+        <BillboardCards metrics={metrics} />
 
         {/* Week Comparison Meter */}
         <WeekCompareMeter
-          thisWeek={data?.weekCompare?.thisWeekTotalRevenue}
-          lastWeek={data?.weekCompare?.lastWeekTotalRevenue}
-          percentChange={data?.weekCompare?.percentChange}
+          thisWeek={num(data?.weekCompare?.thisWeekTotalRevenue)}
+          lastWeek={num(data?.weekCompare?.lastWeekTotalRevenue)}
+          percentChange={num(data?.weekCompare?.percentChange)}
         />
 
         {/* Additional Details */}
@@ -312,23 +336,32 @@ export default function BillboardPage() {
             <div className="billboard-detail-grid">
               <div className="billboard-detail-item">
                 <span className="billboard-detail-label">Completed</span>
-                <span className="billboard-detail-value">{data?.serviceTracking?.completed ?? 0}</span>
+                <span className="billboard-detail-value">{metrics.completedServices}</span>
               </div>
               <div className="billboard-detail-item">
                 <span className="billboard-detail-label">Scheduled</span>
-                <span className="billboard-detail-value">{data?.serviceTracking?.scheduled ?? 0}</span>
+                <span className="billboard-detail-value">{num(data?.serviceTracking?.scheduled)}</span>
               </div>
               <div className="billboard-detail-item">
                 <span className="billboard-detail-label">Deferred</span>
-                <span className="billboard-detail-value warning">{data?.serviceTracking?.deferred ?? 0}</span>
+                <span className="billboard-detail-value warning">{num(data?.serviceTracking?.deferred)}</span>
               </div>
               <div className="billboard-detail-item">
                 <span className="billboard-detail-label">Pipeline</span>
                 <span className="billboard-detail-value">
-                  ${(data?.serviceTracking?.pipelineRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {fmtCurrency(num(data?.serviceTracking?.pipelineRevenue))}
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Small summary row under header for quick values (keeps the ticker + cards consistent with previous UI) */}
+        <div style={{ marginTop: 12, marginBottom: 6 }}>
+          <div className="summary-row" style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div>Delivery Tickets <strong>{metrics.deliveryTickets}</strong></div>
+            <div>Gallons Delivered <strong>{fmtGallons(metrics.totalGallons)}</strong></div>
+            <div>Delivery Revenue <strong>{fmtCurrency(num(data?.deliveryTickets?.revenue))}</strong></div>
           </div>
         </div>
       </div>
