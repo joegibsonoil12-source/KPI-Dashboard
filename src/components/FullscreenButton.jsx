@@ -34,7 +34,7 @@ export default function FullscreenButton({ targetId = 'billboard-root', classNam
       } else if (target.msRequestFullscreen) {
         await target.msRequestFullscreen();
       }
-      setIsFullscreen(true);
+      // State will be updated by fullscreen change event listeners
     } catch (err) {
       console.error('requestFullscreen error', err);
     }
@@ -51,7 +51,7 @@ export default function FullscreenButton({ targetId = 'billboard-root', classNam
       } else if (document.msExitFullscreen) {
         await document.msExitFullscreen();
       }
-      setIsFullscreen(false);
+      // State will be updated by fullscreen change event listeners
     } catch (err) {
       console.error('exitFullscreen error', err);
     }

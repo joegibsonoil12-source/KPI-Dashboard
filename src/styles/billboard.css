@@ -605,7 +605,9 @@
 
 /* Adjust content layout in fullscreen for better fit */
 #billboard-root:fullscreen .billboard-content,
-#billboard-root:-webkit-full-screen .billboard-content {
+#billboard-root:-webkit-full-screen .billboard-content,
+#billboard-root:-moz-full-screen .billboard-content,
+#billboard-root:-ms-fullscreen .billboard-content {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
   gap: 1rem;
@@ -614,7 +616,9 @@
 
 /* Responsive grid in fullscreen */
 #billboard-root:fullscreen .billboard-cards-container,
-#billboard-root:-webkit-full-screen .billboard-cards-container {
+#billboard-root:-webkit-full-screen .billboard-cards-container,
+#billboard-root:-moz-full-screen .billboard-cards-container,
+#billboard-root:-ms-fullscreen .billboard-cards-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
