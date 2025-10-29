@@ -8,6 +8,26 @@ import FullscreenButton from '../../components/FullscreenButton';
 import '../../styles/billboard.css';
 
 /**
+ * Format currency value
+ * @param {number} value - Value to format
+ * @returns {string} - Formatted currency string
+ */
+function formatCurrency(value) {
+  if (value === null || value === undefined) return '$0.00';
+  return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Format gallons value
+ * @param {number} value - Value to format
+ * @returns {string} - Formatted gallons string
+ */
+function formatGallons(value) {
+  if (value === null || value === undefined) return '0.0';
+  return Number(value).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+/**
  * BillboardPage - Main orchestrator for the Billboard feature
  * 
  * Features:
@@ -24,15 +44,21 @@ export default function BillboardPage() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [isTVMode, setIsTVMode] = useState(false);
 
-  // Get refresh interval from env or query param
+  // Get refresh interval from env or query param with validation
   const getRefreshInterval = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
     const queryRefresh = params.get('refresh');
     if (queryRefresh) {
-      return parseInt(queryRefresh, 10) * 1000;
+      const parsed = parseInt(queryRefresh, 10);
+      // Clamp between 5 and 300 seconds
+      const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 30 : parsed));
+      return clamped * 1000;
     }
     const envRefresh = import.meta.env.VITE_BILLBOARD_REFRESH_SEC || 30;
-    return parseInt(envRefresh, 10) * 1000;
+    const parsed = parseInt(envRefresh, 10);
+    // Clamp between 5 and 300 seconds
+    const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 30 : parsed));
+    return clamped * 1000;
   }, []);
 
   // Fetch data from API
@@ -225,7 +251,7 @@ export default function BillboardPage() {
             <div className="billboard-summary-item">
               <span className="billboard-summary-label">Pipeline:</span>
               <span className="billboard-summary-value">
-                ${(data?.serviceTracking?.pipelineRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {formatCurrency(data?.serviceTracking?.pipelineRevenue || 0)}
               </span>
             </div>
           </div>
@@ -242,13 +268,13 @@ export default function BillboardPage() {
             <div className="billboard-summary-item">
               <span className="billboard-summary-label">Gallons Delivered:</span>
               <span className="billboard-summary-value">
-                {(data?.deliveryTickets?.totalGallons || 0).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} gal
+                {formatGallons(data?.deliveryTickets?.totalGallons || 0)} gal
               </span>
             </div>
             <div className="billboard-summary-item">
               <span className="billboard-summary-label">Delivery Revenue:</span>
               <span className="billboard-summary-value">
-                ${(data?.deliveryTickets?.revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {formatCurrency(data?.deliveryTickets?.revenue || 0)}
               </span>
             </div>
           </div>
