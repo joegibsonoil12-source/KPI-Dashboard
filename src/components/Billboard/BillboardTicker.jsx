@@ -1,66 +1,92 @@
-/**
- * BillboardTicker Component
- * 
- * CSS-only marquee ribbon that displays scrolling metrics
- * Handles null values gracefully by showing "—"
- */
-
-import React from 'react';
-import '../../styles/billboard.css';
+import React, { useEffect, useState, useRef } from 'react';
+import Marquee from 'react-fast-marquee';
 
 /**
- * Format a value with null handling
- * @param {*} value - Value to format
- * @param {string} type - Format type: 'number', 'currency', 'percent', 'text'
- * @returns {string} - Formatted value or "—" if null/undefined
+ * BillboardTicker.jsx
+ * NASDAQ-style marquee that displays key metrics in a continuous scroller.
+ * Polls /api/billboard-summary (or VITE_BILLBOARD_API_BASE + /api/billboard-summary) every 15s.
  */
-function formatValue(value, type = 'text') {
-  if (value === null || value === undefined || value === '') {
-    return '—';
+export default function BillboardTicker({ pollInterval = 15000 }) {
+  const [items, setItems] = useState([]);
+  const mounted = useRef(true);
+
+  function getApiBase() {
+    try {
+      // import.meta.env is available in Vite builds; fallback to '' for relative paths
+      // eslint-disable-next-line no-undef
+      const base = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_BILLBOARD_API_BASE)
+        ? String(import.meta.env.VITE_BILLBOARD_API_BASE).replace(/\/$/, '')
+        : '';
+      return base;
+    } catch (e) {
+      return '';
+    }
   }
 
-  switch (type) {
-    case 'number':
-      return Number(value).toLocaleString();
-    case 'currency':
-      return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    case 'percent':
-      return `${Number(value).toFixed(1)}%`;
-    case 'gallons':
-      return `${Number(value).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} gal`;
-    default:
-      return String(value);
-  }
-}
+  useEffect(() => {
+    mounted.current = true;
 
-/**
- * BillboardTicker component
- * 
- * @param {Object} props
- * @param {Array} props.items - Array of ticker items { label, value, type }
- * @param {number} props.speed - Animation speed (default: 80)
- */
-export default function BillboardTicker({ items = [], speed = 80 }) {
-  // Duplicate items to create seamless loop
-  const duplicatedItems = [...items, ...items];
+    async function fetchTicker() {
+      try {
+        const base = getApiBase();
+        const res = await fetch(`${base}/api/billboard-summary`);
+        if (!res.ok) {
+          console.warn('[BillboardTicker] API not available; using fallback data');
+          setItems([
+            'Delivery Tickets 0 • Gallons Delivered 0.0 gal • Delivery Revenue $0.00',
+            'Service Completed 0 • Service Revenue $0.00',
+            'Week Performance 0%'
+          ]);
+          return;
+        }
+        const data = await res.json();
+        const t = [];
+
+        if (data.deliveryTickets) {
+          t.push(
+            `Delivery Tickets ${data.deliveryTickets.totalTickets ?? 0} • Gallons Delivered ${Number(data.deliveryTickets.totalGallons ?? 0).toFixed(1)} gal • Delivery Revenue ${Number(data.deliveryTickets.revenue ?? 0).toFixed(2)}`
+          );
+        }
+
+        if (data.serviceTracking) {
+          t.push(
+            `Service Completed ${data.serviceTracking.completed ?? 0} • Service Revenue ${Number(data.serviceTracking.completedRevenue ?? 0).toFixed(2)}`
+          );
+          t.push(
+            `Pipeline ${Number(data.serviceTracking.pipelineRevenue ?? 0).toFixed(2)}`
+          );
+        }
+
+        if (data.weekCompare) {
+          t.push(
+            `Week Performance ${Number(data.weekCompare.percentChange ?? 0).toFixed(1)}%`
+          );
+        }
+
+        if (mounted.current) setItems(t.length ? t : ['—']);
+      } catch (err) {
+        console.error('[BillboardTicker] fetch error', err);
+        if (mounted.current) setItems(['(ticker unavailable)']);
+      }
+    }
+
+    fetchTicker();
+    const id = setInterval(fetchTicker, pollInterval);
+    return () => {
+      mounted.current = false;
+      clearInterval(id);
+    };
+  }, [pollInterval]);
+
+  const content = items.join('   •   ');
 
   return (
-    <div className="billboard-ticker-container">
-      <div className="billboard-ticker" style={{ animationDuration: `${speed}s` }}>
-        {duplicatedItems.map((item, index) => (
-          <div key={index} className="billboard-ticker-item">
-            <span className="billboard-ticker-label">{item.label || '—'}</span>
-            <span className="billboard-ticker-value">
-              {formatValue(item.value, item.type || 'text')}
-            </span>
-            {item.change !== null && item.change !== undefined && (
-              <span className={`billboard-ticker-change ${item.change >= 0 ? 'positive' : 'negative'}`}>
-                {item.change >= 0 ? '▲' : '▼'} {Math.abs(item.change).toFixed(1)}%
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
+    <div className="billboard-ticker" aria-hidden={items.length === 0}>
+      <Marquee gradient={false} speed={50} pauseOnHover={true}>
+        <div style={{ display: 'inline-flex', gap: '2rem', alignItems: 'center', color: 'var(--bb-muted, #9fb0b8)' }}>
+          {content}
+        </div>
+      </Marquee>
     </div>
   );
 }
