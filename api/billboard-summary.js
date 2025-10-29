@@ -39,7 +39,7 @@
  * }
  */
 
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 // In-memory cache with 15-second TTL
 let cache = null;
@@ -250,7 +250,7 @@ function verifyToken(token) {
  * @param {Object} req - HTTP request object
  * @param {Object} res - HTTP response object
  */
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -309,4 +309,4 @@ module.exports = async (req, res) => {
       message: error.message,
     });
   }
-};
+}

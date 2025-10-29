@@ -51,13 +51,13 @@ export default function BillboardPage() {
     if (queryRefresh) {
       const parsed = parseInt(queryRefresh, 10);
       // Clamp between 5 and 300 seconds
-      const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 30 : parsed));
+      const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 10 : parsed));
       return clamped * 1000;
     }
-    const envRefresh = import.meta.env.VITE_BILLBOARD_REFRESH_SEC || 30;
+    const envRefresh = import.meta.env.VITE_BILLBOARD_REFRESH_SEC || 10;
     const parsed = parseInt(envRefresh, 10);
     // Clamp between 5 and 300 seconds
-    const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 30 : parsed));
+    const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 10 : parsed));
     return clamped * 1000;
   }, []);
 
