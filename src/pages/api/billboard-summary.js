@@ -19,26 +19,27 @@
  */
 
 /**
- * Mock data for fallback when API is unreachable
- * Used when deployed to GitHub Pages without serverless backend
+ * Empty data structure with zeros for fallback
+ * Used when API is unreachable or returns invalid data
+ * This ensures the UI always shows numbers (zeros) instead of blanks
  */
-const MOCK_DATA = {
+const EMPTY_DATA = {
   serviceTracking: {
-    completed: 42,
-    scheduled: 18,
-    deferred: 3,
-    completedRevenue: 125000.00,
-    pipelineRevenue: 45000.00,
+    completed: 0,
+    scheduled: 0,
+    deferred: 0,
+    completedRevenue: 0,
+    pipelineRevenue: 0,
   },
   deliveryTickets: {
-    totalTickets: 156,
-    totalGallons: 45230.5,
-    revenue: 89450.75,
+    totalTickets: 0,
+    totalGallons: 0,
+    revenue: 0,
   },
   weekCompare: {
-    thisWeekTotalRevenue: 214450.75,
-    lastWeekTotalRevenue: 198320.50,
-    percentChange: 8.1,
+    thisWeekTotalRevenue: 0,
+    lastWeekTotalRevenue: 0,
+    percentChange: 0,
   },
   lastUpdated: new Date().toISOString(),
 };
@@ -64,8 +65,53 @@ function getApiBaseUrl() {
 }
 
 /**
+ * Ensure numeric fields have proper fallback values
+ * @param {*} value - Value to check
+ * @returns {number} - Number or 0
+ */
+function ensureNumber(value) {
+  if (value === null || value === undefined || isNaN(value)) {
+    return 0;
+  }
+  return Number(value);
+}
+
+/**
+ * Normalize API response to ensure all fields are present with proper types
+ * @param {Object} data - Raw API response
+ * @returns {Object} - Normalized data with all required fields
+ */
+function normalizeApiResponse(data) {
+  if (!data || typeof data !== 'object') {
+    return EMPTY_DATA;
+  }
+  
+  return {
+    serviceTracking: {
+      completed: ensureNumber(data.serviceTracking?.completed),
+      scheduled: ensureNumber(data.serviceTracking?.scheduled),
+      deferred: ensureNumber(data.serviceTracking?.deferred),
+      completedRevenue: ensureNumber(data.serviceTracking?.completedRevenue),
+      pipelineRevenue: ensureNumber(data.serviceTracking?.pipelineRevenue),
+    },
+    deliveryTickets: {
+      totalTickets: ensureNumber(data.deliveryTickets?.totalTickets),
+      totalGallons: ensureNumber(data.deliveryTickets?.totalGallons),
+      revenue: ensureNumber(data.deliveryTickets?.revenue),
+    },
+    weekCompare: {
+      thisWeekTotalRevenue: ensureNumber(data.weekCompare?.thisWeekTotalRevenue),
+      lastWeekTotalRevenue: ensureNumber(data.weekCompare?.lastWeekTotalRevenue),
+      percentChange: ensureNumber(data.weekCompare?.percentChange),
+    },
+    lastUpdated: data.lastUpdated || new Date().toISOString(),
+  };
+}
+
+/**
  * Fetch billboard summary from backend API
- * Falls back to mock data if API returns 404/500 or is unreachable
+ * Falls back to empty data (zeros) if API returns 404/500 or is unreachable
+ * Ensures all numeric fields are present with zero fallback
  * 
  * @returns {Promise<Object>} - { data, error }
  */
@@ -76,32 +122,53 @@ export async function getBillboardSummary() {
     
     console.log('[Billboard API] Fetching from:', apiUrl);
     
-    // Call backend API route
-    const response = await fetch(apiUrl);
+    // Call backend API route with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    const response = await fetch(apiUrl, {
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
-      // If 404 or 500, API not available - use mock data
+      // If 404 or 500, API not available - use empty data with zeros
       if (response.status === 404 || response.status === 500) {
-        console.warn(`[Billboard API] API returned ${response.status}, using mock data`);
-        return { data: MOCK_DATA, error: null };
+        console.warn(`[Billboard API] API returned ${response.status}, using empty data`);
+        return { data: EMPTY_DATA, error: `API returned ${response.status}` };
       }
       
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const data = await response.json();
+    // Parse JSON response
+    let rawData;
+    try {
+      rawData = await response.json();
+    } catch (parseError) {
+      console.error('[Billboard API] JSON parse error:', parseError);
+      return { data: EMPTY_DATA, error: 'Failed to parse API response' };
+    }
     
-    return { data, error: null };
+    // Normalize data to ensure all fields are present with proper types
+    const normalizedData = normalizeApiResponse(rawData);
+    
+    return { data: normalizedData, error: null };
   } catch (error) {
     console.error('[Billboard API] Error fetching billboard summary:', error);
     
-    // If network error or other failure, fall back to mock data
-    // This ensures the page still works on GitHub Pages
-    console.warn('[Billboard API] Using mock data due to error:', error.message);
+    // If network error or other failure, fall back to empty data
+    // Show zeros instead of old mock data to avoid confusion
+    const errorMessage = error.name === 'AbortError' 
+      ? 'Request timeout' 
+      : error.message || 'Network error';
+    
+    console.warn('[Billboard API] Using empty data due to error:', errorMessage);
     return {
-      data: MOCK_DATA,
-      error: null, // Don't report error when we have fallback
+      data: EMPTY_DATA,
+      error: errorMessage,
     };
   }
 }

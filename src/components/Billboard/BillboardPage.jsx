@@ -45,19 +45,20 @@ export default function BillboardPage() {
   const [isTVMode, setIsTVMode] = useState(false);
 
   // Get refresh interval from env or query param with validation
+  // Default is 15 seconds as per requirements
   const getRefreshInterval = useCallback(() => {
     const params = new URLSearchParams(window.location.search);
     const queryRefresh = params.get('refresh');
     if (queryRefresh) {
       const parsed = parseInt(queryRefresh, 10);
       // Clamp between 5 and 300 seconds
-      const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 10 : parsed));
+      const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 15 : parsed));
       return clamped * 1000;
     }
-    const envRefresh = import.meta.env.VITE_BILLBOARD_REFRESH_SEC || 10;
+    const envRefresh = import.meta.env.VITE_BILLBOARD_REFRESH_SEC || 15;
     const parsed = parseInt(envRefresh, 10);
     // Clamp between 5 and 300 seconds
-    const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 10 : parsed));
+    const clamped = Math.max(5, Math.min(300, isNaN(parsed) ? 15 : parsed));
     return clamped * 1000;
   }, []);
 
@@ -220,7 +221,7 @@ export default function BillboardPage() {
         )}
 
         {/* Scrolling Ticker */}
-        <BillboardTicker items={getTickerItems()} speed={80} />
+        <BillboardTicker items={getTickerItems()} speed={50} />
 
         {/* Metric Cards */}
         <BillboardCards metrics={getCardMetrics()} />
