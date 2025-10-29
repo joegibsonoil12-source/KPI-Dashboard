@@ -48,14 +48,15 @@ const CACHE_TTL_MS = 15000; // 15 seconds
 
 /**
  * Create Supabase client with service role key
- * @returns {Object} - Supabase client instance
+ * @returns {Object|null} - Supabase client instance or null if not configured
  */
 function createSupabaseClient() {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
   if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables');
+    console.warn('[Billboard] Supabase not configured. Using zero defaults.');
+    return null;
   }
   
   return createClient(supabaseUrl, supabaseServiceKey);
@@ -97,48 +98,78 @@ function getWeekEnd(date) {
 async function fetchServiceTrackingSummary(startDate, endDate) {
   const supabase = createSupabaseClient();
   
+  // Return empty data if Supabase is not configured
+  if (!supabase) {
+    return {
+      completed: 0,
+      scheduled: 0,
+      deferred: 0,
+      completedRevenue: 0,
+      pipelineRevenue: 0,
+    };
+  }
+  
   const startDateStr = startDate.toISOString().split('T')[0];
   const endDateStr = endDate.toISOString().split('T')[0];
   
-  const { data, error } = await supabase
-    .from('service_jobs')
-    .select('status, job_amount, job_date')
-    .gte('job_date', startDateStr)
-    .lte('job_date', endDateStr);
-  
-  if (error) {
-    console.error('[Billboard] Error fetching service jobs:', error);
-    throw new Error(`Failed to fetch service jobs: ${error.message}`);
-  }
-  
-  const summary = {
-    completed: 0,
-    scheduled: 0,
-    deferred: 0,
-    completedRevenue: 0,
-    pipelineRevenue: 0,
-  };
-  
-  (data || []).forEach(job => {
-    const amount = parseFloat(job.job_amount) || 0;
-    const status = (job.status || '').toLowerCase();
+  try {
+    const { data, error } = await supabase
+      .from('service_jobs')
+      .select('status, job_amount, job_date')
+      .gte('job_date', startDateStr)
+      .lte('job_date', endDateStr);
     
-    if (status === 'completed') {
-      summary.completed += 1;
-      summary.completedRevenue += amount;
-    } else if (status === 'scheduled') {
-      summary.scheduled += 1;
-      summary.pipelineRevenue += amount;
-    } else if (status === 'deferred') {
-      summary.deferred += 1;
-      summary.pipelineRevenue += amount;
-    } else if (status === 'unscheduled' || status === 'in_progress') {
-      summary.scheduled += 1;
-      summary.pipelineRevenue += amount;
+    if (error) {
+      console.error('[Billboard] Error fetching service jobs:', error);
+      // Return zeros instead of throwing on query error
+      return {
+        completed: 0,
+        scheduled: 0,
+        deferred: 0,
+        completedRevenue: 0,
+        pipelineRevenue: 0,
+      };
     }
-  });
-  
-  return summary;
+    
+    const summary = {
+      completed: 0,
+      scheduled: 0,
+      deferred: 0,
+      completedRevenue: 0,
+      pipelineRevenue: 0,
+    };
+    
+    (data || []).forEach(job => {
+      const amount = parseFloat(job.job_amount) || 0;
+      const status = (job.status || '').toLowerCase();
+      
+      if (status === 'completed') {
+        summary.completed += 1;
+        summary.completedRevenue += amount;
+      } else if (status === 'scheduled') {
+        summary.scheduled += 1;
+        summary.pipelineRevenue += amount;
+      } else if (status === 'deferred') {
+        summary.deferred += 1;
+        summary.pipelineRevenue += amount;
+      } else if (status === 'unscheduled' || status === 'in_progress') {
+        summary.scheduled += 1;
+        summary.pipelineRevenue += amount;
+      }
+    });
+    
+    return summary;
+  } catch (err) {
+    console.error('[Billboard] Exception fetching service jobs:', err);
+    // Return zeros on any exception
+    return {
+      completed: 0,
+      scheduled: 0,
+      deferred: 0,
+      completedRevenue: 0,
+      pipelineRevenue: 0,
+    };
+  }
 }
 
 /**
@@ -150,35 +181,59 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
 async function fetchDeliveryTicketsSummary(startDate, endDate) {
   const supabase = createSupabaseClient();
   
+  // Return empty data if Supabase is not configured
+  if (!supabase) {
+    return {
+      totalTickets: 0,
+      totalGallons: 0,
+      revenue: 0,
+    };
+  }
+  
   const startDateStr = startDate.toISOString().split('T')[0];
   const endDateStr = endDate.toISOString().split('T')[0];
   
-  const { data, error } = await supabase
-    .from('delivery_tickets')
-    .select('qty, amount, date')
-    .gte('date', startDateStr)
-    .lte('date', endDateStr);
-  
-  if (error) {
-    console.error('[Billboard] Error fetching delivery tickets:', error);
-    throw new Error(`Failed to fetch delivery tickets: ${error.message}`);
+  try {
+    const { data, error } = await supabase
+      .from('delivery_tickets')
+      .select('qty, amount, date')
+      .gte('date', startDateStr)
+      .lte('date', endDateStr);
+    
+    if (error) {
+      console.error('[Billboard] Error fetching delivery tickets:', error);
+      // Return zeros instead of throwing on query error
+      return {
+        totalTickets: 0,
+        totalGallons: 0,
+        revenue: 0,
+      };
+    }
+    
+    let totalTickets = 0;
+    let totalGallons = 0;
+    let revenue = 0;
+    
+    (data || []).forEach(ticket => {
+      totalTickets += 1;
+      totalGallons += parseFloat(ticket.qty) || 0;
+      revenue += parseFloat(ticket.amount) || 0;
+    });
+    
+    return {
+      totalTickets,
+      totalGallons,
+      revenue,
+    };
+  } catch (err) {
+    console.error('[Billboard] Exception fetching delivery tickets:', err);
+    // Return zeros on any exception
+    return {
+      totalTickets: 0,
+      totalGallons: 0,
+      revenue: 0,
+    };
   }
-  
-  let totalTickets = 0;
-  let totalGallons = 0;
-  let revenue = 0;
-  
-  (data || []).forEach(ticket => {
-    totalTickets += 1;
-    totalGallons += parseFloat(ticket.qty) || 0;
-    revenue += parseFloat(ticket.amount) || 0;
-  });
-  
-  return {
-    totalTickets,
-    totalGallons,
-    revenue,
-  };
 }
 
 /**
@@ -304,9 +359,30 @@ export default async function handler(req, res) {
     res.status(200).json(data);
   } catch (error) {
     console.error('[Billboard] Error fetching summary:', error);
-    res.status(500).json({
-      error: 'Failed to fetch billboard summary',
-      message: error.message,
-    });
+    
+    // Return safe zero defaults instead of 500 error
+    // This ensures the UI always displays numbers (zeros) instead of error states
+    const safeDefaults = {
+      serviceTracking: {
+        completed: 0,
+        scheduled: 0,
+        deferred: 0,
+        completedRevenue: 0,
+        pipelineRevenue: 0,
+      },
+      deliveryTickets: {
+        totalTickets: 0,
+        totalGallons: 0,
+        revenue: 0,
+      },
+      weekCompare: {
+        thisWeekTotalRevenue: 0,
+        lastWeekTotalRevenue: 0,
+        percentChange: 0,
+      },
+      lastUpdated: new Date().toISOString(),
+    };
+    
+    res.status(200).json(safeDefaults);
   }
 }
