@@ -128,6 +128,7 @@ export async function getBillboardSummary() {
     
     const response = await fetch(apiUrl, {
       signal: controller.signal,
+      cache: 'no-store', // Disable caching to always get fresh data
     });
     
     clearTimeout(timeoutId);
