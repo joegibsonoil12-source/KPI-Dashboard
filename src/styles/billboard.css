@@ -1,647 +1,153 @@
-/**
- * Billboard Component Styles
- * 
- * Dark theme optimized for TV displays
- * 60fps animations with hardware acceleration
- * Responsive typography using clamp()
- * Accessible contrast ratios (WCAG AA+)
- */
+/* src/styles/billboard.css - updated palette and layout tweaks */
 
-/* ============================================================================
-   Billboard Page Container
-   ============================================================================ */
-
-.billboard-page {
-  min-height: 100vh;
-  max-height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  background: linear-gradient(135deg, #1a2a3a 0%, var(--brand-navy, #0f2136) 100%);
-  color: #f8fafc;
-  padding: 1.5rem;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  box-sizing: border-box;
+:root{
+  --bb-bg: #0b1b26; /* deep navy */
+  --bb-panel: #0f2a36; /* slightly lighter panel */
+  --bb-card: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  --bb-accent: #b7bf7f; /* olive accent for headings */
+  --bb-accent-2: #20c997; /* teal accent for highlights */
+  --bb-text: #e6eef6;
+  --bb-muted: rgba(230,238,246,0.7);
 }
 
-.billboard-page.tv-mode {
-  padding: 0.75rem;
-  max-height: 100vh;
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+}
+
+.billboard-page {
+  width: 100vw;
+  height: 100vh;
+  background: var(--bb-bg);
+  color: var(--bb-text);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
-/* ============================================================================
-   Header
-   ============================================================================ */
-
-.billboard-header {
+.billboard-topbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+  gap: 12px;
+  padding: 18px 24px;
+  background: linear-gradient(90deg, #06202a 0%, #0b2b36 100%);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  flex-shrink: 0;
 }
 
 .billboard-title {
-  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-size: 34px;
   font-weight: 700;
-  margin: 0;
-  background: linear-gradient(90deg, var(--brand-olive, #b7bf7f) 0%, var(--brand-cream, #f6f7ef) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--bb-accent);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.6);
 }
 
-.billboard-actions {
+.billboard-controls {
+  margin-left: auto;
   display: flex;
-  gap: 1rem;
+  gap: 8px;
+  align-items: center;
 }
 
-.billboard-tv-button,
-.billboard-refresh-button {
-  padding: 0.75rem 1.5rem;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.1);
-  color: #f8fafc;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(10px);
-}
-
-.billboard-tv-button:hover,
-.billboard-refresh-button:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.4);
-  transform: translateY(-2px);
-}
-
-/* ============================================================================
-   Ticker (Marquee)
-   ============================================================================ */
-
-.billboard-ticker-container {
-  background: rgba(0, 0, 0, 0.3);
-  border-top: 2px solid var(--brand-olive, #b7bf7f);
-  border-bottom: 2px solid var(--brand-olive, #b7bf7f);
-  overflow: hidden;
-  margin-bottom: 1rem;
-  padding: 0.75rem 0;
-}
-
-.billboard-ticker {
-  display: flex;
-  white-space: nowrap;
-  animation: ticker-scroll linear infinite;
-  will-change: transform;
-}
-
-@keyframes ticker-scroll {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-.billboard-ticker-item {
+.btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0 2rem;
-  font-size: 1.125rem;
-  font-weight: 500;
-  border-right: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.billboard-ticker-label {
-  color: #94a3b8;
-  font-weight: 400;
-}
-
-.billboard-ticker-value {
-  color: #f8fafc;
-  font-weight: 700;
-  font-size: 1.25rem;
-}
-
-.billboard-ticker-change {
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
   font-weight: 600;
 }
 
-.billboard-ticker-change.positive {
-  background: rgba(16, 185, 129, 0.2);
-  color: #10b981;
+.btn.primary {
+  background: var(--bb-accent-2);
+  color: #042022;
+  box-shadow: 0 6px 18px rgba(32,201,151,0.12);
 }
 
-.billboard-ticker-change.negative {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+.btn.secondary {
+  background: rgba(255,255,255,0.04);
+  color: var(--bb-text);
+  border: 1px solid rgba(255,255,255,0.03);
 }
-
-/* ============================================================================
-   Main Content
-   ============================================================================ */
 
 .billboard-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  flex: 1;
-  min-height: 0;
-}
-
-/* ============================================================================
-   Metric Cards
-   ============================================================================ */
-
-.billboard-cards-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-}
-
-.billboard-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-top: 4px solid;
-  border-radius: 12px;
-  padding: 1.25rem;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-}
-
-.billboard-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
-}
-
-.billboard-card-label {
-  font-size: 0.875rem;
-  color: #94a3b8;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 0.75rem;
-}
-
-.billboard-card-value {
-  font-size: clamp(2rem, 4vw, 4rem);
-  font-weight: 700;
-  line-height: 1;
-  margin-bottom: 0.5rem;
-}
-
-.billboard-card-unit {
-  font-size: 0.875rem;
-  color: #64748b;
-  font-weight: 400;
-}
-
-/* ============================================================================
-   Week Compare Meter
-   ============================================================================ */
-
-.week-compare-meter {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 1.25rem;
-  backdrop-filter: blur(10px);
-}
-
-.week-compare-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.week-compare-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 0;
-  color: #f8fafc;
-}
-
-.week-compare-status {
-  padding: 0.5rem 1rem;
-  border-radius: 999px;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.week-compare-values {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.week-compare-value-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.week-compare-value-label {
-  font-size: 0.875rem;
-  color: #94a3b8;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.week-compare-value-amount {
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
-  font-weight: 700;
-  color: #f8fafc;
-}
-
-.week-compare-value-amount.positive {
-  color: #10b981;
-}
-
-.week-compare-value-amount.negative {
-  color: #ef4444;
-}
-
-.week-compare-bar-container {
-  position: relative;
-  height: 60px;
-  border-radius: 12px;
+  flex: 1 1 auto;
+  padding: 20px 28px;
+  min-height: 0; /* allow child scroll */
   overflow: hidden;
-  margin-bottom: 1rem;
 }
 
-.week-compare-bar {
-  height: 100%;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: width 0.6s ease;
-  position: relative;
-  min-width: 80px;
-}
-
-.week-compare-bar-label {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.week-compare-legend {
-  display: flex;
-  gap: 2rem;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.week-compare-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  color: #94a3b8;
-}
-
-.week-compare-legend-marker {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-}
-
-/* ============================================================================
-   Additional Details
-   ============================================================================ */
-
-.billboard-details {
+.billboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
-}
-
-.billboard-detail-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 1.5rem;
-  backdrop-filter: blur(10px);
-}
-
-.billboard-detail-card h3 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0 0 1rem 0;
-  color: #f8fafc;
-}
-
-.billboard-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 1rem;
-}
-
-.billboard-detail-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.billboard-detail-label {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.billboard-detail-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #f8fafc;
-}
-
-.billboard-detail-value.warning {
-  color: #f59e0b;
-}
-
-/* ============================================================================
-   Footer
-   ============================================================================ */
-
-.billboard-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 0.875rem;
-  color: #64748b;
-}
-
-.billboard-footer-text {
-  font-weight: 500;
-}
-
-/* Summary Row */
-.summary-row {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  flex-wrap: wrap;
-  font-size: 0.875rem;
-  color: #94a3b8;
-  margin-top: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.summary-row strong {
-  color: #f8fafc;
-  font-weight: 600;
-}
-
-/* ============================================================================
-   Loading & Error States
-   ============================================================================ */
-
-.billboard-loading,
-.billboard-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  text-align: center;
-  gap: 1rem;
-}
-
-.billboard-loading-spinner {
-  width: 60px;
-  height: 60px;
-  border: 4px solid rgba(255, 255, 255, 0.1);
-  border-top-color: var(--brand-olive, #b7bf7f);
-  border-radius: 50%;
-  animation: spinner 0.8s linear infinite;
-}
-
-@keyframes spinner {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.billboard-error h2 {
-  color: #ef4444;
-  font-size: 2rem;
-  margin: 0;
-}
-
-.billboard-error p {
-  color: #94a3b8;
-  font-size: 1.125rem;
-}
-
-.billboard-retry-button {
-  padding: 0.75rem 2rem;
-  border: 2px solid var(--brand-olive, #b7bf7f);
-  background: rgba(183, 191, 127, 0.2);
-  color: var(--brand-olive, #b7bf7f);
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.billboard-retry-button:hover {
-  background: rgba(183, 191, 127, 0.3);
-  transform: translateY(-2px);
-}
-
-/* ============================================================================
-   TV Mode Adjustments
-   ============================================================================ */
-
-.billboard-page.tv-mode .billboard-ticker-item {
-  font-size: 1.5rem;
-}
-
-.billboard-page.tv-mode .billboard-ticker-value {
-  font-size: 1.75rem;
-}
-
-.billboard-page.tv-mode .billboard-card-value {
-  font-size: clamp(3rem, 6vw, 6rem);
-}
-
-.billboard-page.tv-mode .week-compare-title {
-  font-size: 2rem;
-}
-
-.billboard-page.tv-mode .week-compare-value-amount {
-  font-size: clamp(2rem, 4vw, 3.5rem);
-}
-
-/* ============================================================================
-   Responsive Design
-   ============================================================================ */
-
-@media (max-width: 768px) {
-  .billboard-page {
-    padding: 1rem;
-  }
-
-  .billboard-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
-  }
-
-  .billboard-actions {
-    width: 100%;
-  }
-
-  .billboard-tv-button,
-  .billboard-refresh-button {
-    flex: 1;
-  }
-
-  .billboard-cards-container {
-    grid-template-columns: 1fr;
-  }
-
-  .billboard-week-compare-values {
-    grid-template-columns: 1fr;
-  }
-
-  .billboard-ticker-item {
-    font-size: 1rem;
-    padding: 0 1rem;
-  }
-
-  .billboard-ticker-value {
-    font-size: 1.125rem;
-  }
-}
-
-/* ============================================================================
-   Accessibility
-   ============================================================================ */
-
-@media (prefers-reduced-motion: reduce) {
-  .billboard-ticker {
-    animation: none;
-  }
-
-  .billboard-card:hover {
-    transform: none;
-  }
-
-  .billboard-loading-spinner {
-    animation: none;
-    border-top-color: transparent;
-  }
-}
-
-/* High contrast mode support */
-@media (prefers-contrast: high) {
-  .billboard-page {
-    background: #000;
-  }
-
-  .billboard-card,
-  .week-compare-meter,
-  .billboard-detail-card {
-    border-color: #fff;
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .billboard-ticker-container {
-    border-color: #fff;
-  }
-}
-
-/* ============================================================================
-   Fullscreen Mode Styles
-   ============================================================================ */
-
-/* Fullscreen container - make it fill viewport and prevent overflow */
-#billboard-root:fullscreen,
-#billboard-root:-webkit-full-screen,
-#billboard-root:-moz-full-screen,
-#billboard-root:-ms-fullscreen {
-  width: 100vw;
-  height: 100vh;
-  max-height: 100vh;
-  overflow: hidden;
-  padding: 1rem;
-  box-sizing: border-box;
-}
-
-/* Ensure billboard-page fills fullscreen container */
-#billboard-root:fullscreen .billboard-page,
-#billboard-root:-webkit-full-screen .billboard-page,
-#billboard-root:-moz-full-screen .billboard-page,
-#billboard-root:-ms-fullscreen .billboard-page {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-auto-rows: auto;
+  gap: 18px;
+  align-items: start;
   width: 100%;
   height: 100%;
-  max-height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: auto; /* internal scroll */
+  padding-bottom: 12px;
 }
 
-/* Adjust content layout in fullscreen for better fit */
+/* Card style */
+.bb-card, .billboard-card {
+  background: var(--bb-panel);
+  background-image: var(--bb-card);
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 4px 14px rgba(2,8,12,0.5);
+  border: 1px solid rgba(255,255,255,0.02);
+  color: var(--bb-text);
+  overflow: hidden;
+}
+
+/* Big number style */
+.bb-number {
+  font-size: 46px;
+  font-weight: 800;
+  color: var(--bb-accent-2);
+}
+
+/* Week compare bar */
+.week-compare {
+  background: rgba(255,255,255,0.03);
+  padding: 20px;
+  border-radius: 12px;
+}
+
+/* Fullscreen-specific rules (ensure root expands and hides overflow) */
+#billboard-root:fullscreen,
+#billboard-root:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  background: var(--bb-bg);
+}
+
 #billboard-root:fullscreen .billboard-content,
-#billboard-root:-webkit-full-screen .billboard-content,
-#billboard-root:-moz-full-screen .billboard-content,
-#billboard-root:-ms-fullscreen .billboard-content {
-  display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  gap: 1rem;
-  height: calc(100% - 200px); /* Account for header and ticker */
+#billboard-root:-webkit-full-screen .billboard-content {
+  height: calc(100vh - 72px);
+  overflow: auto;
 }
 
-/* Responsive grid in fullscreen */
-#billboard-root:fullscreen .billboard-cards-container,
-#billboard-root:-webkit-full-screen .billboard-cards-container,
-#billboard-root:-moz-full-screen .billboard-cards-container,
-#billboard-root:-ms-fullscreen .billboard-cards-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+/* Make sure long text wraps */
+.bb-card * {
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
-/* Hide scrollbars in fullscreen if desired (optional) */
-#billboard-root:fullscreen::-webkit-scrollbar,
-#billboard-root:-webkit-full-screen::-webkit-scrollbar {
-  width: 8px;
+/* Adjust ticker and small UI pieces */
+.billboard-ticker {
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  padding: 12px 0;
+  color: var(--bb-muted);
 }
 
-#billboard-root:fullscreen::-webkit-scrollbar-track,
-#billboard-root:-webkit-full-screen::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
-}
-
-#billboard-root:fullscreen::-webkit-scrollbar-thumb,
-#billboard-root:-webkit-full-screen::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-}
-
-#billboard-root:fullscreen::-webkit-scrollbar-thumb:hover,
-#billboard-root:-webkit-full-screen::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5);
+/* responsive tweaks */
+@media (max-width: 900px) {
+  .billboard-title { font-size: 24px; }
+  .bb-number { font-size: 32px; }
 }
