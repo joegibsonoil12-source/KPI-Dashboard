@@ -46,6 +46,21 @@ let cache = null;
 let cacheTimestamp = null;
 const CACHE_TTL_MS = 15000; // 15 seconds
 
+// Default empty data structures for safe fallback
+const EMPTY_SERVICE_TRACKING = {
+  completed: 0,
+  scheduled: 0,
+  deferred: 0,
+  completedRevenue: 0,
+  pipelineRevenue: 0,
+};
+
+const EMPTY_DELIVERY_TICKETS = {
+  totalTickets: 0,
+  totalGallons: 0,
+  revenue: 0,
+};
+
 /**
  * Create Supabase client with service role key
  * @returns {Object|null} - Supabase client instance or null if not configured
@@ -100,13 +115,7 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
   
   // Return empty data if Supabase is not configured
   if (!supabase) {
-    return {
-      completed: 0,
-      scheduled: 0,
-      deferred: 0,
-      completedRevenue: 0,
-      pipelineRevenue: 0,
-    };
+    return { ...EMPTY_SERVICE_TRACKING };
   }
   
   const startDateStr = startDate.toISOString().split('T')[0];
@@ -122,22 +131,10 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
     if (error) {
       console.error('[Billboard] Error fetching service jobs:', error);
       // Return zeros instead of throwing on query error
-      return {
-        completed: 0,
-        scheduled: 0,
-        deferred: 0,
-        completedRevenue: 0,
-        pipelineRevenue: 0,
-      };
+      return { ...EMPTY_SERVICE_TRACKING };
     }
     
-    const summary = {
-      completed: 0,
-      scheduled: 0,
-      deferred: 0,
-      completedRevenue: 0,
-      pipelineRevenue: 0,
-    };
+    const summary = { ...EMPTY_SERVICE_TRACKING };
     
     (data || []).forEach(job => {
       const amount = parseFloat(job.job_amount) || 0;
@@ -162,13 +159,7 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
   } catch (err) {
     console.error('[Billboard] Exception fetching service jobs:', err);
     // Return zeros on any exception
-    return {
-      completed: 0,
-      scheduled: 0,
-      deferred: 0,
-      completedRevenue: 0,
-      pipelineRevenue: 0,
-    };
+    return { ...EMPTY_SERVICE_TRACKING };
   }
 }
 
@@ -183,11 +174,7 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
   
   // Return empty data if Supabase is not configured
   if (!supabase) {
-    return {
-      totalTickets: 0,
-      totalGallons: 0,
-      revenue: 0,
-    };
+    return { ...EMPTY_DELIVERY_TICKETS };
   }
   
   const startDateStr = startDate.toISOString().split('T')[0];
@@ -203,11 +190,7 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
     if (error) {
       console.error('[Billboard] Error fetching delivery tickets:', error);
       // Return zeros instead of throwing on query error
-      return {
-        totalTickets: 0,
-        totalGallons: 0,
-        revenue: 0,
-      };
+      return { ...EMPTY_DELIVERY_TICKETS };
     }
     
     let totalTickets = 0;
@@ -228,11 +211,7 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
   } catch (err) {
     console.error('[Billboard] Exception fetching delivery tickets:', err);
     // Return zeros on any exception
-    return {
-      totalTickets: 0,
-      totalGallons: 0,
-      revenue: 0,
-    };
+    return { ...EMPTY_DELIVERY_TICKETS };
   }
 }
 
@@ -363,18 +342,8 @@ export default async function handler(req, res) {
     // Return safe zero defaults instead of 500 error
     // This ensures the UI always displays numbers (zeros) instead of error states
     const safeDefaults = {
-      serviceTracking: {
-        completed: 0,
-        scheduled: 0,
-        deferred: 0,
-        completedRevenue: 0,
-        pipelineRevenue: 0,
-      },
-      deliveryTickets: {
-        totalTickets: 0,
-        totalGallons: 0,
-        revenue: 0,
-      },
+      serviceTracking: { ...EMPTY_SERVICE_TRACKING },
+      deliveryTickets: { ...EMPTY_DELIVERY_TICKETS },
       weekCompare: {
         thisWeekTotalRevenue: 0,
         lastWeekTotalRevenue: 0,
