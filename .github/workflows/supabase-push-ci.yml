@@ -1,0 +1,278 @@
+name: Supabase DB Push CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_push:
+        description: 'Force push even if no changes detected'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/**'
+      - 'sql/**'
+      - 'db/migrations/**'
+      - '.github/workflows/supabase-push-ci.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Validate required secrets
+        id: validate
+        run: |
+          set -euo pipefail
+          
+          echo "🔍 Validating required secrets..."
+          
+          # Check SUPABASE_ACCESS_TOKEN
+          if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+            echo "::error::❌ SUPABASE_ACCESS_TOKEN secret is not set"
+            echo "::error::Please add it in repository Settings -> Secrets and Variables -> Actions"
+            echo "::error::Get your access token from: https://supabase.com/dashboard/account/tokens"
+            exit 1
+          fi
+          echo "✅ SUPABASE_ACCESS_TOKEN is set"
+          
+          # Check SUPABASE_PROJECT_REF
+          if [ -z "${SUPABASE_PROJECT_REF:-}" ]; then
+            echo "::error::❌ SUPABASE_PROJECT_REF secret is not set"
+            echo "::error::Please add it in repository Settings -> Secrets and Variables -> Actions"
+            echo "::error::Your project ref is the 20-character ID in your Supabase URL"
+            echo "::error::Example: if URL is https://abcdefghijklmnopqrst.supabase.co"
+            echo "::error::Then project ref is: abcdefghijklmnopqrst"
+            exit 1
+          fi
+          echo "✅ SUPABASE_PROJECT_REF is set"
+          
+          echo "✅ All required secrets validated"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+      - name: Install Supabase CLI
+        run: |
+          set -euo pipefail
+          echo "📦 Installing Supabase CLI..."
+          npx --yes supabase@latest --version
+          echo "✅ Supabase CLI installed successfully"
+
+      - name: Debug environment
+        run: |
+          set -euo pipefail
+          echo "🔍 Debug: Environment information"
+          echo "PWD: $(pwd)"
+          echo ""
+          echo "📁 Supabase directory structure:"
+          ls -la supabase/ || echo "No supabase/ directory"
+          echo ""
+          if [ -f "supabase/config.toml" ]; then
+            echo "📄 supabase/config.toml contents:"
+            cat supabase/config.toml
+          else
+            echo "⚠️  supabase/config.toml not found"
+          fi
+          echo ""
+          if [ -d "supabase/migrations" ]; then
+            echo "📂 Supabase migrations:"
+            ls -la supabase/migrations/
+          else
+            echo "⚠️  No supabase/migrations directory"
+          fi
+
+      - name: Authenticate with Supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "🔐 Authenticating with Supabase..."
+          mkdir -p supabase
+          npx --yes supabase@latest login --token "$SUPABASE_ACCESS_TOKEN"
+          echo "✅ Authentication successful"
+
+      - name: Link to Supabase project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          
+          # Check if already linked
+          if [ -f "supabase/.supabase/project" ]; then
+            echo "✅ Project already linked"
+            echo "📄 Link file contents:"
+            cat supabase/.supabase/project || true
+            
+            # Extract linked project ref
+            LINKED_REF=$(grep -E 'project_id|ref' supabase/.supabase/project | head -1 | cut -d'=' -f2 | tr -d ' "' || echo "unknown")
+            echo "Linked project ref: $LINKED_REF"
+          else
+            echo "🔗 Linking to Supabase project..."
+            
+            # Clean and validate project ref
+            CLEANED_REF=$(echo "$SUPABASE_PROJECT_REF" | \
+              sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//' | \
+              sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+            
+            # Validate format: 20 lowercase alphanumeric characters
+            if ! echo "$CLEANED_REF" | grep -qE '^[a-z0-9]{20}$'; then
+              echo "::error::❌ SUPABASE_PROJECT_REF has invalid format"
+              echo "::error::Expected: 20 lowercase alphanumeric characters"
+              echo "::error::Example: 'abcdefghijklmnopqrst'"
+              echo "::error::Please check the repository secret configuration"
+              exit 1
+            fi
+            
+            echo "✅ Project ref format validated"
+            echo "🔗 Linking to project (ref not shown for security)..."
+            
+            cd supabase
+            npx --yes supabase@latest link --project-ref "$CLEANED_REF" --debug
+            cd ..
+            
+            if [ -f "supabase/.supabase/project" ]; then
+              echo "✅ Link successful"
+              echo "📄 Link file contents:"
+              cat supabase/.supabase/project || true
+            else
+              echo "::error::❌ Link failed - project file not created"
+              exit 1
+            fi
+          fi
+
+      - name: Check for migration changes
+        id: check_changes
+        run: |
+          set -euo pipefail
+          
+          echo "🔍 Checking for migration changes..."
+          
+          # Check if force push is requested
+          if [ "${{ github.event.inputs.force_push }}" = "true" ]; then
+            echo "⚡ Force push requested - skipping change detection"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check if supabase/migrations directory exists and has files
+          if [ ! -d "supabase/migrations" ] || [ -z "$(ls -A supabase/migrations/*.sql 2>/dev/null)" ]; then
+            echo "⚠️  No migrations found in supabase/migrations/"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Always push migrations on main branch push
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "✅ Push to main detected - will apply migrations"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # For workflow_dispatch without force, check for changes
+          echo "📊 Migrations found:"
+          ls -lh supabase/migrations/
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+
+      - name: Push migrations to Supabase
+        if: steps.check_changes.outputs.has_changes == 'true'
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        working-directory: supabase
+        run: |
+          set -euo pipefail
+          
+          # Verify link file exists
+          if [ ! -f ".supabase/project" ]; then
+            echo "::error::❌ Not linked to Supabase project"
+            echo "::error::Link file missing: supabase/.supabase/project"
+            exit 1
+          fi
+          
+          echo "🚀 Pushing migrations to Supabase..."
+          echo "📊 Migrations to be applied:"
+          ls -lh migrations/ || echo "No migrations found"
+          echo ""
+          
+          # Clean project ref
+          CLEANED_REF=$(echo "$SUPABASE_PROJECT_REF" | \
+            sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//' | \
+            sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          
+          echo "🔄 Running db push..."
+          # Try db push with different flag options for compatibility
+          if npx --yes supabase@latest db push --project-ref "$CLEANED_REF" --confirm --debug 2>&1; then
+            echo "✅ Migrations pushed successfully with --confirm flag"
+          elif npx --yes supabase@latest db push --project-ref "$CLEANED_REF" --yes --debug 2>&1; then
+            echo "✅ Migrations pushed successfully with --yes flag"
+          elif npx --yes supabase@latest db push --project-ref "$CLEANED_REF" --debug 2>&1; then
+            echo "✅ Migrations pushed successfully"
+          else
+            echo "::error::❌ Failed to push migrations"
+            echo "::error::Please check the logs above for details"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ Database migrations applied successfully"
+          echo "🎉 Your Supabase database is now up to date!"
+
+      - name: Summary
+        if: always()
+        run: |
+          set -euo pipefail
+          
+          echo "## 📊 Supabase DB Push Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.validate.outcome }}" = "success" ]; then
+            echo "✅ **Secrets validated**: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Secrets validation failed**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Required secrets:" >> $GITHUB_STEP_SUMMARY
+            echo "- \`SUPABASE_ACCESS_TOKEN\`: Get from https://supabase.com/dashboard/account/tokens" >> $GITHUB_STEP_SUMMARY
+            echo "- \`SUPABASE_PROJECT_REF\`: 20-character project ID from your Supabase URL" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.check_changes.outputs.has_changes }}" = "true" ]; then
+            echo "✅ **Migrations applied**: Database updated successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **No migrations applied**: No changes detected" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📁 Migration Files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          ls -lh supabase/migrations/ 2>/dev/null || echo "No migrations found" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Useful Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [Supabase Dashboard](https://supabase.com/dashboard/project/jskajkwulaaakhaolzdu)" >> $GITHUB_STEP_SUMMARY
+          echo "- [SQL Editor](https://supabase.com/dashboard/project/jskajkwulaaakhaolzdu/sql)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Documentation](../blob/main/docs/CI_SUPABASE.md)" >> $GITHUB_STEP_SUMMARY

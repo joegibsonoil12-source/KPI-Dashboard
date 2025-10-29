@@ -10,10 +10,37 @@ This application is designed to run on GitHub Pages with client-side Supabase in
 
 Set these secrets in your GitHub repository settings (`Settings > Secrets and variables > Actions`):
 
-- `VITE_SUPABASE_URL`: Your Supabase project URL (e.g., `https://xxxxx.supabase.co`)
+#### For GitHub Pages Deployment:
+- `VITE_SUPABASE_URL`: Your Supabase project URL (e.g., `https://jskajkwulaaakhaolzdu.supabase.co`)
 - `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous/public key
 
-These secrets are automatically injected during the GitHub Actions build process.
+#### For CI/CD Database Migrations:
+- `SUPABASE_ACCESS_TOKEN`: Personal access token for Supabase CLI ([Get it here](https://supabase.com/dashboard/account/tokens))
+- `SUPABASE_PROJECT_REF`: Your project reference ID (20-char ID from your Supabase URL, e.g., `jskajkwulaaakhaolzdu`)
+- `SUPABASE_DB_URL`: PostgreSQL connection string (optional, for psql-based migrations)
+
+**📚 For detailed setup instructions, see [docs/CI_SUPABASE.md](docs/CI_SUPABASE.md)**
+
+These secrets are automatically injected during the GitHub Actions build and deployment process.
+
+### Security & Network Configuration
+
+⚠️ **Important**: Supabase database connections from GitHub Actions require network allowlist configuration.
+
+**Option 1: Allow GitHub Actions IPs (Recommended)**
+1. Go to [Supabase Dashboard → Database → Network Restrictions](https://supabase.com/dashboard/project/_/settings/database)
+2. Add `0.0.0.0/0` to allow all IPs (or specific GitHub Actions IP ranges)
+
+**Option 2: Self-Hosted Runner**
+- Use a self-hosted runner with static IP
+- Add the static IP to Supabase allowlist
+- More secure for enterprise deployments
+
+**Auth Schema Migrations**:
+- Migrations that modify the `auth` schema (e.g., `auth.users`, `auth.identities`) **must** be run manually via Supabase SQL Editor
+- These require superuser privileges and cannot run via CI workflows
+- Store such migrations in `sql/ADMIN_ONLY/` directory
+- See [QUICKSTART_AUTH_RESTORE.md](QUICKSTART_AUTH_RESTORE.md) for auth setup instructions
 
 ### Database Setup
 
