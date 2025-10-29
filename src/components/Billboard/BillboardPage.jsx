@@ -191,34 +191,6 @@ export default function BillboardPage() {
   };
 
   /**
-   * Primary behavior: request fullscreen on the billboard container.
-   * Fallback: open a new window at the TV URL.
-   */
-  const openTVMode = () => {
-    try {
-      // Prefer targeting the billboard container so only the billboard is fullscreen
-      const el = document.querySelector('.billboard-page') || document.documentElement;
-
-      if (el && el.requestFullscreen) {
-        el.requestFullscreen().catch(err => {
-          console.warn('Fullscreen request failed, falling back to popout window:', err);
-          const tvUrl = getTVUrl();
-          window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
-        });
-      } else {
-        // no fullscreen API support — fallback to popout window
-        const tvUrl = getTVUrl();
-        window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('openTVMode error:', err);
-      const tvUrl = getTVUrl();
-      window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
-    }
-  };
-
-  /**
    * Copy TV URL to clipboard
    */
   const copyTVUrl = async () => {
