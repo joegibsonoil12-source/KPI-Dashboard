@@ -573,3 +573,71 @@
     border-color: #fff;
   }
 }
+
+/* ============================================================================
+   Fullscreen Mode Styles
+   ============================================================================ */
+
+/* Fullscreen container - make it fill viewport and prevent overflow */
+#billboard-root:fullscreen,
+#billboard-root:-webkit-full-screen,
+#billboard-root:-moz-full-screen,
+#billboard-root:-ms-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+/* Ensure billboard-page fills fullscreen container */
+#billboard-root:fullscreen .billboard-page,
+#billboard-root:-webkit-full-screen .billboard-page,
+#billboard-root:-moz-full-screen .billboard-page,
+#billboard-root:-ms-fullscreen .billboard-page {
+  width: 100%;
+  height: 100%;
+  max-height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Adjust content layout in fullscreen for better fit */
+#billboard-root:fullscreen .billboard-content,
+#billboard-root:-webkit-full-screen .billboard-content {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 1rem;
+  height: calc(100% - 200px); /* Account for header and ticker */
+}
+
+/* Responsive grid in fullscreen */
+#billboard-root:fullscreen .billboard-cards-container,
+#billboard-root:-webkit-full-screen .billboard-cards-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+/* Hide scrollbars in fullscreen if desired (optional) */
+#billboard-root:fullscreen::-webkit-scrollbar,
+#billboard-root:-webkit-full-screen::-webkit-scrollbar {
+  width: 8px;
+}
+
+#billboard-root:fullscreen::-webkit-scrollbar-track,
+#billboard-root:-webkit-full-screen::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+#billboard-root:fullscreen::-webkit-scrollbar-thumb,
+#billboard-root:-webkit-full-screen::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+#billboard-root:fullscreen::-webkit-scrollbar-thumb:hover,
+#billboard-root:-webkit-full-screen::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
