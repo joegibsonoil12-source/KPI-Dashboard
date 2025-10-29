@@ -32,8 +32,13 @@ jobs:
               echo "::error::No SQL migration files found in sql/ directory"
               exit 1
             fi
-            ls -1 sql/*.sql > /tmp/migs.txt
-            echo "Selected migrations:"
+            # List all SQL files, excluding ADMIN_ONLY directory (auth schema migrations)
+            find sql -maxdepth 1 -name "*.sql" -type f > /tmp/migs.txt
+            if [ ! -s /tmp/migs.txt ]; then
+              echo "::error::No SQL migration files found in sql/ directory (excluding ADMIN_ONLY)"
+              exit 1
+            fi
+            echo "Selected migrations (excluding sql/ADMIN_ONLY/):"
             cat /tmp/migs.txt
             echo "files=$(paste -sd ' ' /tmp/migs.txt)" >> $GITHUB_OUTPUT
           fi

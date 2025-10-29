@@ -18,18 +18,30 @@ Your Supabase project is experiencing 500 errors because the `auth.identities` t
    - Click **"RUN"** button
    - Wait for success message: `status: ok, identities_count: 0`
 
-### Method B: Via GitHub Actions Workflow
+### Method B: Via GitHub Actions Workflow ❌ NOT RECOMMENDED
 
-1. **Go to GitHub Actions**
-   - Navigate to: https://github.com/joegibsonoil12-source/KPI-Dashboard/actions/workflows/apply-supabase-migrations.yml
+**⚠️ IMPORTANT: This method will FAIL with "permission denied for schema auth" error!**
 
-2. **Run the Workflow**
+The `apply-supabase-migrations.yml` workflow uses regular database credentials (SUPABASE_DB_URL) which **do not have permission** to modify the `auth` schema. This migration requires superuser/service_role privileges.
+
+**Why it fails**:
+- The migration creates/modifies tables in the `auth` schema
+- Only Supabase superuser/service_role can modify `auth` schema
+- CI workflows use limited-privilege database connection strings
+- ERROR: `42501: permission denied for schema auth`
+
+**Use Method A instead** (Supabase Dashboard SQL Editor) which runs with service_role privileges automatically.
+
+~~1. **Go to GitHub Actions**
+   - Navigate to: https://github.com/joegibsonoil12-source/KPI-Dashboard/actions/workflows/apply-supabase-migrations.yml~~
+
+~~2. **Run the Workflow**
    - Click "Run workflow" dropdown
    - In the "migration_file" input, enter: `sql/2025-10-29_restore_auth_identities.sql`
    - Click "Run workflow" button
-   - Wait for the workflow to complete (green checkmark)
+   - Wait for the workflow to complete (green checkmark)~~
 
-**Note:** This method requires the `SUPABASE_DB_URL` secret to be configured in your repository settings.
+~~**Note:** This method requires the `SUPABASE_DB_URL` secret to be configured in your repository settings.~~
 
 ### Method C: Via Supabase CLI (If you have CLI installed)
 
