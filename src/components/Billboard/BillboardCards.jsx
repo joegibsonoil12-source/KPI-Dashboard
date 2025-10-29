@@ -10,14 +10,25 @@ import React from 'react';
 import '../../styles/billboard.css';
 
 /**
- * Format a number value
+ * Format a number value with explicit zero fallback
  * @param {*} value - Value to format
  * @param {string} type - Format type
- * @returns {string} - Formatted value or "—"
+ * @returns {string} - Formatted value or "0" for numeric types
  */
 function formatMetricValue(value, type = 'number') {
-  if (value === null || value === undefined) {
-    return '—';
+  // Handle null/undefined by showing zero for numeric types
+  if (value === null || value === undefined || value === '') {
+    switch (type) {
+      case 'currency':
+        return '$0.00';
+      case 'gallons':
+        return '0.0';
+      case 'percent':
+        return '0.0%';
+      case 'number':
+      default:
+        return '0';
+    }
   }
 
   switch (type) {

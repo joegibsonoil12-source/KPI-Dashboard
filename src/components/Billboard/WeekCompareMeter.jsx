@@ -57,9 +57,9 @@ export default function WeekCompareMeter({ thisWeek = 0, lastWeek = 0, percentCh
   // Cap the bar width at 150% for visual purposes
   const barWidth = Math.min(percentOfLastWeek, 150);
 
-  // Format currency
+  // Format currency with explicit zero fallback
   const formatCurrency = (value) => {
-    if (value === null || value === undefined) return '—';
+    if (value === null || value === undefined || value === '') return '$0.00';
     return `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
