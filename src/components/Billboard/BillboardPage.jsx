@@ -23,6 +23,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import BillboardTicker from './BillboardTicker';
 import BillboardCards from './BillboardCards';
 import WeekCompareMeter from './WeekCompareMeter';
+import FullscreenButton from '../FullscreenButton';
 import { getBillboardSummary } from '../../lib/fetchMetricsClient';
 import '../../styles/billboard.css';
 import '../../styles/brand.css'; // ensure brand variables and button classes are available
@@ -190,34 +191,6 @@ export default function BillboardPage() {
   };
 
   /**
-   * Primary behavior: request fullscreen on the billboard container.
-   * Fallback: open a new window at the TV URL.
-   */
-  const openTVMode = () => {
-    try {
-      // Prefer targeting the billboard container so only the billboard is fullscreen
-      const el = document.querySelector('.billboard-page') || document.documentElement;
-
-      if (el && el.requestFullscreen) {
-        el.requestFullscreen().catch(err => {
-          console.warn('Fullscreen request failed, falling back to popout window:', err);
-          const tvUrl = getTVUrl();
-          window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
-        });
-      } else {
-        // no fullscreen API support — fallback to popout window
-        const tvUrl = getTVUrl();
-        window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
-      }
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('openTVMode error:', err);
-      const tvUrl = getTVUrl();
-      window.open(tvUrl, 'BillboardTV', 'width=1920,height=1080,toolbar=0,location=0,menubar=0,status=0');
-    }
-  };
-
-  /**
    * Copy TV URL to clipboard
    */
   const copyTVUrl = async () => {
@@ -295,7 +268,7 @@ export default function BillboardPage() {
   // Loading state
   if (loading) {
     return (
-      <div className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
+      <div id="billboard-root" className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
         <div className="billboard-loading">
           <div className="billboard-loading-spinner" />
           <p>Loading Billboard data...</p>
@@ -307,7 +280,7 @@ export default function BillboardPage() {
   // Error state
   if (error) {
     return (
-      <div className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
+      <div id="billboard-root" className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
         <div className="billboard-error">
           <h2>Error Loading Billboard</h2>
           <p>{error}</p>
@@ -322,16 +295,14 @@ export default function BillboardPage() {
   const tickerItems = getTickerItems();
 
   return (
-    <div className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
+    <div id="billboard-root" className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
       {/* Header - hidden in TV mode */}
       {!isTVMode && (
         <div className="billboard-header">
           <h1 className="billboard-title">Operations Billboard</h1>
           <div className="billboard-actions">
             {/* Primary action: full screen the billboard */}
-            <button onClick={openTVMode} className="btn olive popout-button" title="Full screen billboard">
-              📺 Full screen
-            </button>
+            <FullscreenButton targetId="billboard-root" className="btn olive" />
 
             {/* Secondary actions */}
             <button onClick={copyTVUrl} className="btn secondary">📋 Copy TV URL</button>
