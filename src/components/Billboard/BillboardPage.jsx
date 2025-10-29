@@ -23,6 +23,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import BillboardTicker from './BillboardTicker';
 import BillboardCards from './BillboardCards';
 import WeekCompareMeter from './WeekCompareMeter';
+import FullscreenButton from '../FullscreenButton';
 import { getBillboardSummary } from '../../lib/fetchMetricsClient';
 import '../../styles/billboard.css';
 import '../../styles/brand.css'; // ensure brand variables and button classes are available
@@ -295,7 +296,7 @@ export default function BillboardPage() {
   // Loading state
   if (loading) {
     return (
-      <div className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
+      <div id="billboard-root" className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
         <div className="billboard-loading">
           <div className="billboard-loading-spinner" />
           <p>Loading Billboard data...</p>
@@ -307,7 +308,7 @@ export default function BillboardPage() {
   // Error state
   if (error) {
     return (
-      <div className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
+      <div id="billboard-root" className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
         <div className="billboard-error">
           <h2>Error Loading Billboard</h2>
           <p>{error}</p>
@@ -322,16 +323,14 @@ export default function BillboardPage() {
   const tickerItems = getTickerItems();
 
   return (
-    <div className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
+    <div id="billboard-root" className={`billboard-page ${isTVMode ? 'tv-mode' : ''}`}>
       {/* Header - hidden in TV mode */}
       {!isTVMode && (
         <div className="billboard-header">
           <h1 className="billboard-title">Operations Billboard</h1>
           <div className="billboard-actions">
             {/* Primary action: full screen the billboard */}
-            <button onClick={openTVMode} className="btn olive popout-button" title="Full screen billboard">
-              📺 Full screen
-            </button>
+            <FullscreenButton targetId="billboard-root" className="btn olive" />
 
             {/* Secondary actions */}
             <button onClick={copyTVUrl} className="btn secondary">📋 Copy TV URL</button>
