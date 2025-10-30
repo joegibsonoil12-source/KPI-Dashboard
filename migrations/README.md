@@ -52,6 +52,33 @@ The migrations in this directory are designed to be **idempotent** and **safe to
 
 ---
 
+### 002_add_ticket_imports.sql
+
+**Purpose**: Creates the `ticket_imports` table for storing scanned ticket imports during OCR processing and review.
+
+**What It Creates**:
+- Table: `ticket_imports`
+  - Stores uploaded files, OCR text, parsed data, and processing status
+  - Columns: `id`, `src`, `src_email`, `attached_files` (jsonb), `ocr_text`, `parsed` (jsonb), `confidence`, `status`, `meta` (jsonb), `created_at`, `processed_at`
+- RLS policies for service role and authenticated users
+- SELECT policies for anon role on service_jobs and delivery_tickets (enables view access)
+- Performance indexes on status, created_at, and src
+
+**How to Run**:
+1. Open Supabase SQL Editor
+2. Copy the entire contents of `migrations/002_add_ticket_imports.sql`
+3. Paste into SQL Editor and click **Run**
+4. Verify success with no errors
+
+**Storage Bucket Setup** (Required):
+After running this migration, create the storage bucket:
+1. Go to Supabase Dashboard → Storage
+2. Create a new bucket named `ticket-scans`
+3. Set it as **private** (not public)
+4. Add policies as needed for service role access
+
+---
+
 ### 002_populate_job_amounts_from_raw.sql
 
 **Purpose**: Safely populates missing `job_amount` values from raw JSON data, only when parsed amounts are > 0, and logs all changes.
@@ -102,8 +129,9 @@ Before running this migration, **preview** the changes by running the SELECT que
 
 Run migrations in this order:
 1. `001_create_metrics_views.sql` (required for optimal performance)
-2. `002_job_amount_update_log.sql` (required before running populate script)
-3. `002_populate_job_amounts_from_raw.sql` (only if needed to fix missing amounts)
+2. `002_add_ticket_imports.sql` (required for scan-to-ticket functionality)
+3. `002_job_amount_update_log.sql` (required before running populate script)
+4. `002_populate_job_amounts_from_raw.sql` (only if needed to fix missing amounts)
 
 ---
 
