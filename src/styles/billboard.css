@@ -679,3 +679,70 @@ html, body, #root {
   font-weight: 600;
   letter-spacing: 0.05em;
 }
+
+/* Delivery Tickets visibility & spacing - UI only */
+.delivery-top-bar {
+  height: 72px;                      /* bigger bar */
+  min-height: 72px;
+  background: linear-gradient(90deg,#071827,#072a3a);
+  color: #ffffff;
+  display:flex;
+  align-items:center;
+  padding: 10px 20px;
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+/* Input preview panel */
+.delivery-input-preview {
+  background: rgba(255,255,255,0.03);
+  color: #e6f0ff;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  display:flex;
+  gap: 24px;
+  align-items:center;
+  justify-content:flex-start;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+/* table spacing so numbers are never cut off */
+.delivery-table-container {
+  overflow: auto; /* internal scroll so outer layout won't overflow */
+  max-height: calc(100vh - 320px); /* keep inside viewport on fullscreen */
+}
+
+.delivery-table th, .delivery-table td {
+  padding: 12px 16px !important;     /* more breathing room */
+  vertical-align: middle;
+  white-space: nowrap;               /* keep numeric cells readable */
+}
+
+.delivery-table td input,
+.delivery-table td .cell-input {
+  min-width: 80px;                   /* ensure inputs are wide enough */
+  padding: 8px 10px;
+  font-size: 15px;
+}
+
+/* make each row taller so text is not clipped */
+.delivery-table tr {
+  height: 64px;
+}
+
+/* full header words */
+.delivery-table th.qty { min-width: 88px; }   /* Quantity */
+.delivery-table th.gal { min-width: 88px; }   /* Gallons */
+.delivery-table th.amt { min-width: 110px; }  /* Amount */
+
+/* fullscreen adjustments so not clipped */
+.billboard-page.is-fullscreen .delivery-top-bar {
+  height: 84px;
+  font-size: 20px;
+}
+.billboard-page.is-fullscreen .delivery-input-preview { font-size: 18px; gap: 28px; }
