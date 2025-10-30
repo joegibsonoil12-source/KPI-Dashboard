@@ -253,6 +253,64 @@ export default function DeliveryTickets() {
     return () => { mounted = false; };
   }, [page, pageSize]);
 
+  // Setup delivery preview listeners (UI-only)
+  useEffect(() => {
+    const container = document.querySelector('.delivery-table-container');
+    if (!container) return;
+
+    // Helper to update preview display
+    const updatePreview = (row) => {
+      if (!row) return;
+
+      // Find values by column data attributes
+      const gallonsInput = row.querySelector('[data-col="gallons"] input');
+      const qtyInput = row.querySelector('[data-col="qty"] input');
+      const priceInput = row.querySelector('[data-col="price"] input');
+      const accountInput = row.querySelector('[data-col="account"] input');
+
+      const gallons = gallonsInput?.value || '—';
+      const qty = qtyInput?.value || '—';
+      const price = priceInput?.value || '—';
+      const account = accountInput?.value || '—';
+
+      // Update preview elements safely
+      const previewGallons = document.getElementById('preview-gallons');
+      const previewQty = document.getElementById('preview-qty');
+      const previewPrice = document.getElementById('preview-price');
+      const previewAccount = document.getElementById('preview-account');
+
+      if (previewGallons) previewGallons.textContent = gallons !== '—' ? gallons : '—';
+      if (previewQty) previewQty.textContent = qty !== '—' ? qty : '—';
+      if (previewPrice) {
+        const priceNum = parseFloat(price);
+        previewPrice.textContent = price !== '—' && !isNaN(priceNum) ? `$${priceNum.toFixed(2)}` : '—';
+      }
+      if (previewAccount) previewAccount.textContent = account !== '—' ? account : '—';
+    };
+
+    // Delegate input events from any input inside the table
+    const handleInput = (e) => {
+      const input = e.target;
+      const row = input.closest('tr');
+      updatePreview(row);
+    };
+
+    // When focus moves between rows, update preview with the focused row's values
+    const handleFocusIn = (e) => {
+      const input = e.target;
+      const row = input.closest('tr');
+      updatePreview(row);
+    };
+
+    container.addEventListener('input', handleInput);
+    container.addEventListener('focusin', handleFocusIn);
+
+    return () => {
+      container.removeEventListener('input', handleInput);
+      container.removeEventListener('focusin', handleFocusIn);
+    };
+  }, []);
+
   async function addBlank() {
     const userId = await currentUserId();
     // Calculate yesterday's date
@@ -791,39 +849,24 @@ export default function DeliveryTickets() {
         </div>
       )}
 
-      {/* Sticky Toolbar above table */}
-      <div style={{
-        position: "sticky",
-        top: "60px",
-        zIndex: 10,
-        backgroundColor: "#f8fafc",
-        borderBottom: "1px solid #e2e8f0",
-        padding: "12px 16px",
-        marginLeft: "-24px",
-        marginRight: "-24px",
-        marginBottom: "16px"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <button 
-              className="rounded-lg border px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700" 
-              onClick={addBlank}
-              style={{ fontWeight: 500 }}
-            >
-              + Add Ticket
-            </button>
-            <span className="text-sm text-slate-600">
-              {filteredTickets.length} tickets on this page
-            </span>
-          </div>
-          <div className="text-sm text-slate-600">
-            Page {page} of {Math.max(1, Math.ceil(totalCount / pageSize))} • Total: {totalCount}
-          </div>
-        </div>
+      {/* DELIVERY TOP BAR */}
+      <div className="delivery-top-bar" role="region" aria-label="Delivery header">
+        <div>Delivery Tickets</div>
+        <div style={{marginLeft: 'auto', fontSize:'14px', opacity:0.85}}>{filteredTickets.length} tickets on this page</div>
       </div>
 
-      <div className="dt-table-wrap rounded-xl border" onBlurCapture={handleInputBlur}>
-        <table className="dt-table w-full text-sm">
+      {/* INPUT PREVIEW — shows live values for the focused row */}
+      <div id="delivery-input-preview" className="delivery-input-preview" aria-live="polite">
+        <div><strong>Gallons:</strong> <span id="preview-gallons">—</span></div>
+        <div><strong>Quantity:</strong> <span id="preview-qty">—</span></div>
+        <div><strong>Price:</strong> <span id="preview-price">—</span></div>
+        <div><strong>Account:</strong> <span id="preview-account">—</span></div>
+      </div>
+
+      {/* Wrap the table so it scrolls internally */}
+      <div className="delivery-table-container">
+        <div className="dt-table-wrap rounded-xl border" onBlurCapture={handleInputBlur}>
+        <table className="delivery-table dt-table w-full text-sm">
           <thead className="bg-slate-50 text-left">
             <tr>
               <th className="dt-th px-2 py-2 text-xs">Date</th>
@@ -831,18 +874,18 @@ export default function DeliveryTickets() {
               <th className="dt-th px-2 py-2 text-xs hidden md:table-cell">Driver</th>
               <th className="dt-th px-2 py-2 text-xs hidden lg:table-cell">TicketID</th>
               <th className="dt-th px-2 py-2 text-xs">Customer</th>
-              <th className="dt-th px-2 py-2 text-xs">Gallons</th>
+              <th className="dt-th px-2 py-2 text-xs gal">Gallons</th>
               <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Arrival</th>
               <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Odo Start</th>
               <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Odo End</th>
               <th className="dt-th px-2 py-2 text-xs hidden 2xl:table-cell">Miles</th>
               <th className="dt-th px-2 py-2 text-xs hidden xl:table-cell">On-Time</th>
               <th className="dt-th px-2 py-2 text-xs hidden md:table-cell">Account</th>
-              <th className="dt-th px-2 py-2 text-xs">Qty</th>
+              <th className="dt-th px-2 py-2 text-xs qty">Quantity</th>
               <th className="dt-th px-2 py-2 text-xs">Price</th>
               <th className="dt-th px-2 py-2 text-xs hidden md:table-cell">Tax</th>
               <th className="dt-th px-2 py-2 text-xs hidden md:table-cell">Hazmat</th>
-              <th className="dt-th px-2 py-2 text-xs">Amount</th>
+              <th className="dt-th px-2 py-2 text-xs amt">Amount</th>
               <th className="dt-th px-2 py-2 text-xs hidden lg:table-cell">Status</th>
               <th className="dt-th px-2 py-2 text-xs hidden xl:table-cell">Files</th>
               <th className="dt-th px-2 py-2 text-xs"></th>
@@ -856,7 +899,7 @@ export default function DeliveryTickets() {
                 <td className="dt-td px-2 py-2 hidden md:table-cell"><input value={t.driver || ""} onChange={e => update(t.id, "driver", e.target.value)} className="input text-xs w-20" /></td>
                 <td className="dt-td px-2 py-2 hidden lg:table-cell"><input value={t.ticket_id || ""} onChange={e => update(t.id, "ticket_id", e.target.value)} className="input text-xs w-20" placeholder="ID" /></td>
                 <td className="dt-td px-2 py-2"><input value={t.customerName || ""} onChange={e => update(t.id, "customerName", e.target.value)} className="input text-xs w-24" /></td>
-                <td className="dt-td px-2 py-2"><input value={t.gallons_delivered ?? ""} type="number" step="0.1" onChange={e => update(t.id, "gallons_delivered", e.target.value)} className="input text-xs w-16 tabular-nums" /></td>
+                <td className="dt-td px-2 py-2" data-col="gallons"><input value={t.gallons_delivered ?? ""} type="number" step="0.1" onChange={e => update(t.id, "gallons_delivered", e.target.value)} className="input text-xs w-16 tabular-nums" /></td>
                 <td className="dt-td px-2 py-2 hidden 2xl:table-cell whitespace-nowrap"><input type="datetime-local" value={toLocalDateTimeInputValue(t.arrival_time)} onChange={e => update(t.id, "arrival_time", fromLocalDateTimeInputValue(e.target.value))} className="input text-xs w-36" /></td>
                 <td className="dt-td px-2 py-2 hidden 2xl:table-cell"><input value={t.odometer_start ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_start", e.target.value)} className="input text-xs w-20 tabular-nums" placeholder="Start" /></td>
                 <td className="dt-td px-2 py-2 hidden 2xl:table-cell"><input value={t.odometer_end ?? ""} type="number" step="0.1" onChange={e => update(t.id, "odometer_end", e.target.value)} className="input text-xs w-20 tabular-nums" placeholder="End" /></td>
@@ -866,9 +909,9 @@ export default function DeliveryTickets() {
                   {t.on_time_flag === 0 && <span title="Late">⏱️</span>}
                   {t.on_time_flag == null && <span className="text-slate-400">-</span>}
                 </td>
-                <td className="dt-td px-2 py-2 hidden md:table-cell"><input value={t.account || ""} onChange={e => update(t.id, "account", e.target.value)} className="input text-xs w-20" /></td>
-                <td className="dt-td px-2 py-2"><input value={t.qty ?? ""} type="number" step="1" onChange={e => update(t.id, "qty", e.target.value)} className="input text-xs w-14 tabular-nums" /></td>
-                <td className="dt-td px-2 py-2"><input value={t.price ?? ""} type="number" step="0.01" onChange={e => update(t.id, "price", e.target.value)} className="input text-xs w-16 tabular-nums" /></td>
+                <td className="dt-td px-2 py-2 hidden md:table-cell" data-col="account"><input value={t.account || ""} onChange={e => update(t.id, "account", e.target.value)} className="input text-xs w-20" /></td>
+                <td className="dt-td px-2 py-2" data-col="qty"><input value={t.qty ?? ""} type="number" step="1" onChange={e => update(t.id, "qty", e.target.value)} className="input text-xs w-14 tabular-nums" /></td>
+                <td className="dt-td px-2 py-2" data-col="price"><input value={t.price ?? ""} type="number" step="0.01" onChange={e => update(t.id, "price", e.target.value)} className="input text-xs w-16 tabular-nums" /></td>
                 <td className="dt-td px-2 py-2 hidden md:table-cell"><input value={t.tax ?? ""} type="number" step="0.01" onChange={e => update(t.id, "tax", e.target.value)} className="input text-xs w-14 tabular-nums" /></td>
                 <td className="dt-td px-2 py-2 hidden md:table-cell"><input value={t.hazmat_fee ?? ""} type="number" step="0.01" onChange={e => update(t.id, "hazmat_fee", e.target.value)} className="input text-xs w-14 tabular-nums" /></td>
                 <td className="dt-td px-2 py-2 whitespace-nowrap"><span className="text-xs font-mono tabular-nums">${(t.amount || 0).toFixed(2)}</span></td>
@@ -896,6 +939,7 @@ export default function DeliveryTickets() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Pagination Controls */}
