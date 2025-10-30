@@ -27,8 +27,10 @@ export function readRefreshSec(defaultSeconds = 30) {
       }
     }
 
-    // Priority 3: process.env fallback (other bundlers)
-    if (typeof process !== 'undefined' && process.env?.VITE_BILLBOARD_REFRESH_SEC) {
+    // Priority 3: process.env fallback (other bundlers/SSR contexts)
+    // Note: In browser contexts, process is typically undefined. This is only
+    // for server-side rendering or other build environments that expose process.env
+    if (typeof process !== 'undefined' && typeof process.env !== 'undefined' && process.env?.VITE_BILLBOARD_REFRESH_SEC) {
       const processValue = parseInt(process.env.VITE_BILLBOARD_REFRESH_SEC, 10);
       if (isFinite(processValue) && processValue > 0) {
         return processValue;

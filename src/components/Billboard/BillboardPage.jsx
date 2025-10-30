@@ -50,7 +50,7 @@ export default function BillboardPage(props) {
     } catch (err) {
       console.error('[BillboardPage] Error fetching week compare data:', err);
     }
-  }, []);
+  }, [mounted]);
 
   useEffect(() => {
     mounted.current = true;
@@ -78,7 +78,7 @@ export default function BillboardPage(props) {
         window.removeEventListener('billboard-refresh', handleBillboardRefresh);
       }
     };
-  }, [fetchWeekCompareData, weekBarRefreshInterval]);
+  }, [fetchWeekCompareData, weekBarRefreshInterval, mounted]);
 
   const handleRefresh = () => {
     fetchWeekCompareData();

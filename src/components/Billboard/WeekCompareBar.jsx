@@ -10,8 +10,16 @@
  * Clean, accessible design matching the site aesthetic
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import '../../styles/billboard.css';
+
+// Reusable currency formatter (created once, reused across renders)
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 /**
  * WeekCompareBar component
@@ -31,16 +39,16 @@ export default function WeekCompareBar({
     ? (thisWeekTotalRevenue / lastWeekTotalRevenue) * 100 
     : (thisWeekTotalRevenue > 0 ? 100 : 0);
 
-  // Determine color scheme based on performance
-  const getColorScheme = (percent) => {
-    if (percent > 110) {
+  // Determine color scheme based on performance (memoized)
+  const colorScheme = useMemo(() => {
+    if (percentOfLastWeek > 110) {
       return {
         bg: '#dcfce7',
         bar: '#10b981',
         text: '#166534',
         label: 'Strong Growth',
       };
-    } else if (percent >= 90) {
+    } else if (percentOfLastWeek >= 90) {
       return {
         bg: '#fef3c7',
         bar: '#f59e0b',
@@ -55,22 +63,15 @@ export default function WeekCompareBar({
         label: 'Needs Attention',
       };
     }
-  };
-
-  const colorScheme = getColorScheme(percentOfLastWeek);
+  }, [percentOfLastWeek]);
 
   // Cap the bar width at 150% for visual purposes
   const barWidth = Math.min(percentOfLastWeek, 150);
 
-  // Format currency
+  // Format currency (reuses singleton formatter)
   const formatCurrency = (value) => {
     if (value === null || value === undefined || value === '') return '$0.00';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
+    return currencyFormatter.format(value);
   };
 
   return (

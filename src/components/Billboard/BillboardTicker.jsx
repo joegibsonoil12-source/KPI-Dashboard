@@ -86,7 +86,7 @@ export default function BillboardTicker({ pollInterval = null }) {
       console.error('[BillboardTicker] fetch error', err);
       if (mounted.current) setItems(['(ticker error)']);
     }
-  }, []);
+  }, [mounted]);
 
   function updateTickerFromData(data) {
     const delivery = data.deliveryTickets || {};
@@ -191,7 +191,7 @@ export default function BillboardTicker({ pollInterval = null }) {
         window.removeEventListener('billboard-refresh', handleBillboardRefresh);
       }
     };
-  }, [refreshInterval, fetchTicker]);
+  }, [refreshInterval, fetchTicker, mounted]);
 
   const content = items.join('   •   ');
 
