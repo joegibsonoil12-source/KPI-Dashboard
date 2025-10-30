@@ -140,6 +140,8 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
     deferred: 0,
     completedRevenue: 0,
     pipelineRevenue: 0,
+    scheduledJobs: 0,
+    scheduledRevenue: 0,
   };
   
   (data || []).forEach(job => {
@@ -153,6 +155,15 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
     } else if (status === 'scheduled') {
       summary.scheduled += 1;
       summary.pipelineRevenue += amount;
+      // Track scheduled jobs separately as requested
+      summary.scheduledJobs += 1;
+      summary.scheduledRevenue += amount;
+    } else if (status === 'assigned' || status === 'confirmed') {
+      // Include 'assigned' and 'confirmed' as scheduled per requirements
+      summary.scheduled += 1;
+      summary.pipelineRevenue += amount;
+      summary.scheduledJobs += 1;
+      summary.scheduledRevenue += amount;
     } else if (status === 'deferred') {
       summary.deferred += 1;
       summary.pipelineRevenue += amount;
@@ -161,6 +172,13 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
       summary.scheduled += 1;
       summary.pipelineRevenue += amount;
     }
+  });
+  
+  console.debug('[Billboard] Service summary for date range:', {
+    startDate: startDateStr,
+    endDate: endDateStr,
+    scheduledJobs: summary.scheduledJobs,
+    scheduledRevenue: summary.scheduledRevenue,
   });
   
   return summary;
@@ -273,6 +291,10 @@ async function aggregateBillboardData() {
       thisWeekTotalRevenue,
       lastWeekTotalRevenue,
       percentChange: parseFloat(percentChange.toFixed(1)),
+      scheduledJobs: thisWeekService.scheduledJobs,
+      scheduledRevenue: thisWeekService.scheduledRevenue,
+      lastWeekScheduledJobs: lastWeekService.scheduledJobs,
+      lastWeekScheduledRevenue: lastWeekService.scheduledRevenue,
     },
     lastUpdated: new Date().toISOString(),
   };

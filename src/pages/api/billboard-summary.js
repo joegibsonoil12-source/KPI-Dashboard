@@ -30,6 +30,8 @@ const EMPTY_DATA = {
     deferred: 0,
     completedRevenue: 0,
     pipelineRevenue: 0,
+    scheduledJobs: 0,
+    scheduledRevenue: 0,
   },
   deliveryTickets: {
     totalTickets: 0,
@@ -40,6 +42,10 @@ const EMPTY_DATA = {
     thisWeekTotalRevenue: 0,
     lastWeekTotalRevenue: 0,
     percentChange: 0,
+    scheduledJobs: 0,
+    scheduledRevenue: 0,
+    lastWeekScheduledJobs: 0,
+    lastWeekScheduledRevenue: 0,
   },
   lastUpdated: new Date().toISOString(),
 };
@@ -93,6 +99,8 @@ function normalizeApiResponse(data) {
       deferred: ensureNumber(data.serviceTracking?.deferred),
       completedRevenue: ensureNumber(data.serviceTracking?.completedRevenue),
       pipelineRevenue: ensureNumber(data.serviceTracking?.pipelineRevenue),
+      scheduledJobs: ensureNumber(data.serviceTracking?.scheduledJobs),
+      scheduledRevenue: ensureNumber(data.serviceTracking?.scheduledRevenue),
     },
     deliveryTickets: {
       totalTickets: ensureNumber(data.deliveryTickets?.totalTickets),
@@ -103,6 +111,10 @@ function normalizeApiResponse(data) {
       thisWeekTotalRevenue: ensureNumber(data.weekCompare?.thisWeekTotalRevenue),
       lastWeekTotalRevenue: ensureNumber(data.weekCompare?.lastWeekTotalRevenue),
       percentChange: ensureNumber(data.weekCompare?.percentChange),
+      scheduledJobs: ensureNumber(data.weekCompare?.scheduledJobs),
+      scheduledRevenue: ensureNumber(data.weekCompare?.scheduledRevenue),
+      lastWeekScheduledJobs: ensureNumber(data.weekCompare?.lastWeekScheduledJobs),
+      lastWeekScheduledRevenue: ensureNumber(data.weekCompare?.lastWeekScheduledRevenue),
     },
     lastUpdated: data.lastUpdated || new Date().toISOString(),
   };

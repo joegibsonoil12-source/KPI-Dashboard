@@ -32,8 +32,16 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 export default function WeekCompareBar({ 
   thisWeekTotalRevenue = 0, 
   lastWeekTotalRevenue = 0, 
-  percentChange = 0 
+  percentChange = 0,
+  scheduledJobs = 0,
+  scheduledRevenue = 0,
 }) {
+  // Log scheduled metrics for debugging
+  console.debug('[WeekCompareBar] Scheduled metrics:', {
+    scheduledJobs,
+    scheduledRevenue,
+  });
+
   // Calculate percentage relative to last week (100% = matching last week)
   const percentOfLastWeek = lastWeekTotalRevenue > 0 
     ? (thisWeekTotalRevenue / lastWeekTotalRevenue) * 100 
@@ -119,6 +127,25 @@ export default function WeekCompareBar({
             aria-label={`Change: ${percentChange >= 0 ? '+' : ''}${percentChange.toFixed(1)}%`}
           >
             {percentChange >= 0 ? '+' : ''}{percentChange.toFixed(1)}%
+          </span>
+        </div>
+        <div className="week-compare-value-item">
+          <span className="week-compare-value-label">Scheduled Jobs</span>
+          <span 
+            className="week-compare-value-amount"
+            aria-label={`Scheduled jobs: ${scheduledJobs}`}
+          >
+            {scheduledJobs}
+          </span>
+        </div>
+        <div className="week-compare-value-item">
+          <span className="week-compare-value-label">Scheduled Revenue</span>
+          <span 
+            className="week-compare-value-amount"
+            style={{ color: '#8b5cf6' }}
+            aria-label={`Scheduled revenue: ${formatCurrency(scheduledRevenue)}`}
+          >
+            {formatCurrency(scheduledRevenue)}
           </span>
         </div>
       </div>

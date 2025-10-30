@@ -302,6 +302,14 @@ export default function MetricsGrid() {
   const deliveryRevenue = delivery.revenue || 0;
   const serviceRevenue = service.completedRevenue || 0;
   const pipelineRevenue = service.pipelineRevenue || 0;
+  const scheduledJobs = week.scheduledJobs || 0;
+  const scheduledRevenue = week.scheduledRevenue || 0;
+
+  // Log scheduled metrics for debugging
+  console.debug('[MetricsGrid] Scheduled metrics:', {
+    scheduledJobs,
+    scheduledRevenue,
+  });
 
   // Generate status ticks
   const statusTicks = [
@@ -374,6 +382,14 @@ export default function MetricsGrid() {
           sub={`Scheduled & deferred`}
           status="neutral"
           ariaLabel={`Pipeline revenue: ${formatCurrency(pipelineRevenue)}`}
+        />
+
+        <KpiCard
+          title="Scheduled Jobs"
+          value={formatNumber(scheduledJobs)}
+          sub={`Revenue: ${formatCurrency(scheduledRevenue)}`}
+          status={getStatus(scheduledJobs, THRESHOLDS.jobs)}
+          ariaLabel={`Scheduled jobs: ${scheduledJobs}, Revenue: ${formatCurrency(scheduledRevenue)}`}
         />
       </div>
 
