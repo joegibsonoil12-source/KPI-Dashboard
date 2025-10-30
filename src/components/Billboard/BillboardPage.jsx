@@ -34,15 +34,9 @@ export default function BillboardPage(props) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('tv') === '1') setIsTVMode(true);
-    // Check if we're in popout or TV mode on initial load
-    if (params.get('popout') === '1' || params.get('tv') === '1') {
-      setIsFullscreen(true);
-    }
-  }, []);
 
-  // Listen for fullscreen change events to update state
-  useEffect(() => {
-    const handleFullscreenChange = () => {
+    // Helper to check actual fullscreen state
+    const checkFullscreenState = () => {
       const isCurrentlyFullscreen = Boolean(
         document.fullscreenElement ||
         document.webkitFullscreenElement ||
@@ -50,6 +44,18 @@ export default function BillboardPage(props) {
         document.msFullscreenElement
       );
       setIsFullscreen(isCurrentlyFullscreen);
+      // If URL params indicate popout/tv mode but not actually fullscreen, still apply the class
+      if (!isCurrentlyFullscreen && (params.get('popout') === '1' || params.get('tv') === '1')) {
+        setIsFullscreen(true);
+      }
+    };
+
+    // Check initial state
+    checkFullscreenState();
+
+    // Listen for fullscreen change events
+    const handleFullscreenChange = () => {
+      checkFullscreenState();
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
