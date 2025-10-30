@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import FullscreenButton from '../../components/FullscreenButton';
 import '../../styles/billboard.css';
-import BillboardTopTicker from './BillboardTopTicker';
+// import BillboardTopTicker from './BillboardTopTicker'; // Moved to footer
 // import BillboardTicker from './BillboardTicker'; // Removed duplicate ticker
 import WeekCompareBar from './WeekCompareBar';
 import MetricsGrid from './MetricsGrid';
@@ -124,8 +124,7 @@ export default function BillboardPage(props) {
 
   return (
     <div id="billboard-root" className={`billboard-page ${isFullscreen ? 'is-fullscreen' : ''}`}>
-      {/* NASDAQ-style top ticker */}
-      <BillboardTopTicker />
+      {/* NASDAQ-style top ticker - moved to footer */}
       
       {!isTVMode && (
         <header className="billboard-header">
