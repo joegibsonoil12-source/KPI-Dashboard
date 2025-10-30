@@ -2,12 +2,14 @@
 import React, { useEffect, useState } from 'react';
 import FullscreenButton from '../../components/FullscreenButton';
 import '../../styles/billboard.css';
+import BillboardTopTicker from './BillboardTopTicker';
 import BillboardTicker from './BillboardTicker';
 
 /**
  * Restored BillboardPage:
  * - id="billboard-root" ensures fullscreen target
- * - Renders the ticker at the top
+ * - Renders the NASDAQ-style top ticker above the header
+ * - Renders the existing ticker below the header
  * - Adds Refresh and Fullscreen controls
  * - Keeps placeholders for existing card components to render into
  */
@@ -21,6 +23,9 @@ export default function BillboardPage(props) {
 
   return (
     <div id="billboard-root" className="billboard-page">
+      {/* NASDAQ-style top ticker */}
+      <BillboardTopTicker pollInterval={30000} />
+      
       {!isTVMode && (
         <header className="billboard-header">
           <h1>Operations Billboard</h1>
