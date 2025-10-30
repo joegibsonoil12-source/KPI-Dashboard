@@ -22,6 +22,8 @@ const MOCK_BILLBOARD_DATA = {
     deferred: 3,
     completedRevenue: 125000.00,
     pipelineRevenue: 45000.00,
+    scheduledJobs: 18,
+    scheduledRevenue: 45000.00,
   },
   deliveryTickets: {
     totalTickets: 156,
@@ -32,6 +34,10 @@ const MOCK_BILLBOARD_DATA = {
     thisWeekTotalRevenue: 214450.75,
     lastWeekTotalRevenue: 198320.50,
     percentChange: 8.1,
+    scheduledJobs: 18,
+    scheduledRevenue: 45000.00,
+    lastWeekScheduledJobs: 15,
+    lastWeekScheduledRevenue: 38000.00,
   },
   lastUpdated: new Date().toISOString(),
 };
@@ -94,6 +100,8 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
     deferred: 0,
     completedRevenue: 0,
     pipelineRevenue: 0,
+    scheduledJobs: 0,
+    scheduledRevenue: 0,
   };
 
   (data || []).forEach(job => {
@@ -106,6 +114,15 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
     } else if (status === 'scheduled') {
       summary.scheduled += 1;
       summary.pipelineRevenue += amount;
+      // Track scheduled jobs separately as requested
+      summary.scheduledJobs += 1;
+      summary.scheduledRevenue += amount;
+    } else if (status === 'assigned' || status === 'confirmed') {
+      // Include 'assigned' and 'confirmed' as scheduled per requirements
+      summary.scheduled += 1;
+      summary.pipelineRevenue += amount;
+      summary.scheduledJobs += 1;
+      summary.scheduledRevenue += amount;
     } else if (status === 'deferred') {
       summary.deferred += 1;
       summary.pipelineRevenue += amount;
@@ -113,6 +130,13 @@ async function fetchServiceTrackingSummary(startDate, endDate) {
       summary.scheduled += 1;
       summary.pipelineRevenue += amount;
     }
+  });
+
+  console.debug('[fetchMetricsClient] Service summary:', {
+    startDate: startDateStr,
+    endDate: endDateStr,
+    scheduledJobs: summary.scheduledJobs,
+    scheduledRevenue: summary.scheduledRevenue,
   });
 
   return summary;
@@ -281,10 +305,19 @@ export async function getBillboardSummary() {
             thisWeekTotalRevenue,
             lastWeekTotalRevenue,
             percentChange: parseFloat(percentChange.toFixed(1)),
+            scheduledJobs: thisWeekService.scheduledJobs || 0,
+            scheduledRevenue: thisWeekService.scheduledRevenue || 0,
+            lastWeekScheduledJobs: lastWeekService.scheduledJobs || 0,
+            lastWeekScheduledRevenue: lastWeekService.scheduledRevenue || 0,
           },
           lastUpdated: new Date().toISOString(),
           debug: { usedView: true, viewRange: { start: thisWeekStart, end: thisWeekEnd } },
         };
+
+        console.debug('[fetchMetricsClient] Billboard summary (view path):', {
+          scheduledJobs: data.weekCompare.scheduledJobs,
+          scheduledRevenue: data.weekCompare.scheduledRevenue,
+        });
 
         return { data, error: null };
       }
@@ -335,10 +368,19 @@ export async function getBillboardSummary() {
         thisWeekTotalRevenue,
         lastWeekTotalRevenue,
         percentChange: parseFloat(percentChange.toFixed(1)),
+        scheduledJobs: thisWeekService.scheduledJobs || 0,
+        scheduledRevenue: thisWeekService.scheduledRevenue || 0,
+        lastWeekScheduledJobs: lastWeekService.scheduledJobs || 0,
+        lastWeekScheduledRevenue: lastWeekService.scheduledRevenue || 0,
       },
       lastUpdated: new Date().toISOString(),
       debug: { usedView: false, reason: 'fallback to per-table aggregators' },
     };
+
+    console.debug('[fetchMetricsClient] Billboard summary (fallback path):', {
+      scheduledJobs: data.weekCompare.scheduledJobs,
+      scheduledRevenue: data.weekCompare.scheduledRevenue,
+    });
 
     return { data, error: null };
   } catch (error) {

@@ -24,6 +24,8 @@ export default function BillboardPage(props) {
     thisWeekTotalRevenue: 0,
     lastWeekTotalRevenue: 0,
     percentChange: 0,
+    scheduledJobs: 0,
+    scheduledRevenue: 0,
   });
   const mounted = useRef(true);
 
@@ -74,12 +76,25 @@ export default function BillboardPage(props) {
     try {
       const result = await getBillboardSummary();
       if (result.data && result.data.weekCompare) {
-        const { thisWeekTotalRevenue, lastWeekTotalRevenue, percentChange } = result.data.weekCompare;
+        const { 
+          thisWeekTotalRevenue, 
+          lastWeekTotalRevenue, 
+          percentChange,
+          scheduledJobs,
+          scheduledRevenue,
+        } = result.data.weekCompare;
         if (mounted.current) {
           setWeekCompareData({
             thisWeekTotalRevenue: thisWeekTotalRevenue || 0,
             lastWeekTotalRevenue: lastWeekTotalRevenue || 0,
             percentChange: percentChange || 0,
+            scheduledJobs: scheduledJobs || 0,
+            scheduledRevenue: scheduledRevenue || 0,
+          });
+          
+          console.debug('[BillboardPage] Week compare data updated with scheduled metrics:', {
+            scheduledJobs: scheduledJobs || 0,
+            scheduledRevenue: scheduledRevenue || 0,
           });
         }
       }
@@ -148,6 +163,8 @@ export default function BillboardPage(props) {
           thisWeekTotalRevenue={weekCompareData.thisWeekTotalRevenue}
           lastWeekTotalRevenue={weekCompareData.lastWeekTotalRevenue}
           percentChange={weekCompareData.percentChange}
+          scheduledJobs={weekCompareData.scheduledJobs}
+          scheduledRevenue={weekCompareData.scheduledRevenue}
         />
       </div>
 
