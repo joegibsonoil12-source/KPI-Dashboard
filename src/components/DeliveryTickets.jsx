@@ -281,7 +281,10 @@ export default function DeliveryTickets() {
 
       if (previewGallons) previewGallons.textContent = gallons !== '—' ? gallons : '—';
       if (previewQty) previewQty.textContent = qty !== '—' ? qty : '—';
-      if (previewPrice) previewPrice.textContent = price !== '—' ? `$${Number(price).toFixed(2)}` : '—';
+      if (previewPrice) {
+        const priceNum = parseFloat(price);
+        previewPrice.textContent = price !== '—' && !isNaN(priceNum) ? `$${priceNum.toFixed(2)}` : '—';
+      }
       if (previewAccount) previewAccount.textContent = account !== '—' ? account : '—';
     };
 
