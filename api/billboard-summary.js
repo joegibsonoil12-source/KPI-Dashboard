@@ -1,357 +1,108 @@
-/**
- * Vercel Serverless Function: Billboard Summary API
- * 
- * GET /api/billboard-summary
- * 
- * Aggregates Service Tracking and Delivery Tickets metrics
- * Returns JSON with This Week vs Last Week comparison
- * 
- * Features:
- * - 15-second in-memory cache (serverless edge cache)
- * - Optional token-based access control for TV mode
- * - Same response schema as Netlify function
- * 
- * Environment Variables:
- * - SUPABASE_URL: Supabase project URL
- * - SUPABASE_SERVICE_ROLE_KEY: Service role key for elevated permissions
- * - BILLBOARD_TV_TOKEN (optional): Secret token for TV mode access control
- * 
- * Response Schema:
- * {
- *   serviceTracking: {
- *     completed: number,
- *     scheduled: number,
- *     deferred: number,
- *     completedRevenue: number,
- *     pipelineRevenue: number
- *   },
- *   deliveryTickets: {
- *     totalTickets: number,
- *     totalGallons: number,
- *     revenue: number
- *   },
- *   weekCompare: {
- *     thisWeekTotalRevenue: number,
- *     lastWeekTotalRevenue: number,
- *     percentChange: number
- *   },
- *   lastUpdated: string (ISO timestamp)
- * }
- */
-
+// api/billboard-summary.js
 import { createClient } from '@supabase/supabase-js';
 
-// In-memory cache with 15-second TTL
-let cache = null;
-let cacheTimestamp = null;
-const CACHE_TTL_MS = 15000; // 15 seconds
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Default empty data structures for safe fallback
-const EMPTY_SERVICE_TRACKING = {
-  completed: 0,
-  scheduled: 0,
-  deferred: 0,
-  completedRevenue: 0,
-  pipelineRevenue: 0,
-};
-
-const EMPTY_DELIVERY_TICKETS = {
-  totalTickets: 0,
-  totalGallons: 0,
-  revenue: 0,
-};
-
-/**
- * Create Supabase client with service role key
- * @returns {Object|null} - Supabase client instance or null if not configured
- */
-function createSupabaseClient() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!supabaseUrl || !supabaseServiceKey) {
-    console.warn('[Billboard] Supabase not configured. Using zero defaults.');
-    return null;
-  }
-  
-  return createClient(supabaseUrl, supabaseServiceKey);
+function safeNum(v, decimals = 0) {
+  const n = Number(v);
+  if (!isFinite(n)) return decimals === 0 ? 0 : Number(0).toFixed(decimals);
+  return decimals === 0 ? Math.round(n) : Number(n).toFixed(decimals);
 }
 
-/**
- * Get start of week (Monday) for a given date
- * @param {Date} date - Reference date
- * @returns {Date} - Start of week (Monday at 00:00:00)
- */
-function getWeekStart(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
-  const weekStart = new Date(d.setDate(diff));
-  weekStart.setHours(0, 0, 0, 0);
-  return weekStart;
-}
-
-/**
- * Get end of week (Sunday) for a given date
- * @param {Date} date - Reference date
- * @returns {Date} - End of week (Sunday at 23:59:59.999)
- */
-function getWeekEnd(date) {
-  const weekStart = getWeekStart(date);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
-  return weekEnd;
-}
-
-/**
- * Fetch service tracking summary for a date range from Supabase
- * @param {Date} startDate - Filter start
- * @param {Date} endDate - Filter end
- * @returns {Promise<Object>} - Service tracking metrics
- */
-async function fetchServiceTrackingSummary(startDate, endDate) {
-  const supabase = createSupabaseClient();
-  
-  // Return empty data if Supabase is not configured
-  if (!supabase) {
-    return { ...EMPTY_SERVICE_TRACKING };
-  }
-  
-  const startDateStr = startDate.toISOString().split('T')[0];
-  const endDateStr = endDate.toISOString().split('T')[0];
-  
-  try {
-    const { data, error } = await supabase
-      .from('service_jobs')
-      .select('status, job_amount, job_date')
-      .gte('job_date', startDateStr)
-      .lte('job_date', endDateStr);
-    
-    if (error) {
-      console.error('[Billboard] Error fetching service jobs:', error);
-      // Return zeros instead of throwing on query error
-      return { ...EMPTY_SERVICE_TRACKING };
-    }
-    
-    const summary = { ...EMPTY_SERVICE_TRACKING };
-    
-    (data || []).forEach(job => {
-      const amount = parseFloat(job.job_amount) || 0;
-      const status = (job.status || '').toLowerCase();
-      
-      if (status === 'completed') {
-        summary.completed += 1;
-        summary.completedRevenue += amount;
-      } else if (status === 'scheduled') {
-        summary.scheduled += 1;
-        summary.pipelineRevenue += amount;
-      } else if (status === 'deferred') {
-        summary.deferred += 1;
-        summary.pipelineRevenue += amount;
-      } else if (status === 'unscheduled' || status === 'in_progress') {
-        summary.scheduled += 1;
-        summary.pipelineRevenue += amount;
-      }
-    });
-    
-    return summary;
-  } catch (err) {
-    console.error('[Billboard] Exception fetching service jobs:', err);
-    // Return zeros on any exception
-    return { ...EMPTY_SERVICE_TRACKING };
-  }
-}
-
-/**
- * Fetch delivery tickets summary for a date range from Supabase
- * @param {Date} startDate - Filter start
- * @param {Date} endDate - Filter end
- * @returns {Promise<Object>} - Delivery tickets metrics
- */
-async function fetchDeliveryTicketsSummary(startDate, endDate) {
-  const supabase = createSupabaseClient();
-  
-  // Return empty data if Supabase is not configured
-  if (!supabase) {
-    return { ...EMPTY_DELIVERY_TICKETS };
-  }
-  
-  const startDateStr = startDate.toISOString().split('T')[0];
-  const endDateStr = endDate.toISOString().split('T')[0];
-  
-  try {
-    const { data, error } = await supabase
-      .from('delivery_tickets')
-      .select('qty, amount, date')
-      .gte('date', startDateStr)
-      .lte('date', endDateStr);
-    
-    if (error) {
-      console.error('[Billboard] Error fetching delivery tickets:', error);
-      // Return zeros instead of throwing on query error
-      return { ...EMPTY_DELIVERY_TICKETS };
-    }
-    
-    let totalTickets = 0;
-    let totalGallons = 0;
-    let revenue = 0;
-    
-    (data || []).forEach(ticket => {
-      totalTickets += 1;
-      totalGallons += parseFloat(ticket.qty) || 0;
-      revenue += parseFloat(ticket.amount) || 0;
-    });
-    
-    return {
-      totalTickets,
-      totalGallons,
-      revenue,
-    };
-  } catch (err) {
-    console.error('[Billboard] Exception fetching delivery tickets:', err);
-    // Return zeros on any exception
-    return { ...EMPTY_DELIVERY_TICKETS };
-  }
-}
-
-/**
- * Aggregate billboard data from all sources
- * @returns {Promise<Object>} - Complete billboard summary
- */
-async function aggregateBillboardData() {
-  const now = new Date();
-
-  const thisWeekStart = getWeekStart(now);
-  const thisWeekEnd = getWeekEnd(now);
-
-  const lastWeekStart = new Date(thisWeekStart);
-  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-  const lastWeekEnd = new Date(thisWeekEnd);
-  lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
-
-  const [
-    thisWeekService,
-    lastWeekService,
-    thisWeekDelivery,
-    lastWeekDelivery,
-  ] = await Promise.all([
-    fetchServiceTrackingSummary(thisWeekStart, thisWeekEnd),
-    fetchServiceTrackingSummary(lastWeekStart, lastWeekEnd),
-    fetchDeliveryTicketsSummary(thisWeekStart, thisWeekEnd),
-    fetchDeliveryTicketsSummary(lastWeekStart, lastWeekEnd),
-  ]);
-
-  const thisWeekTotalRevenue = thisWeekService.completedRevenue + thisWeekDelivery.revenue;
-  const lastWeekTotalRevenue = lastWeekService.completedRevenue + lastWeekDelivery.revenue;
-
-  let percentChange = 0;
-  if (lastWeekTotalRevenue === 0) {
-    percentChange = thisWeekTotalRevenue > 0 ? 100 : 0;
-  } else {
-    percentChange = ((thisWeekTotalRevenue - lastWeekTotalRevenue) / lastWeekTotalRevenue) * 100;
-  }
-
-  return {
-    serviceTracking: thisWeekService,
-    deliveryTickets: thisWeekDelivery,
-    weekCompare: {
-      thisWeekTotalRevenue,
-      lastWeekTotalRevenue,
-      percentChange: parseFloat(percentChange.toFixed(1)),
-    },
-    lastUpdated: new Date().toISOString(),
-  };
-}
-
-/**
- * Verify token for TV mode access control
- * @param {string} token - Token from query params
- * @returns {boolean} - Whether token is valid
- */
-function verifyToken(token) {
-  const requiredToken = process.env.BILLBOARD_TV_TOKEN;
-  
-  if (!requiredToken) {
-    return true;
-  }
-  
-  return token === requiredToken;
-}
-
-/**
- * Vercel Serverless Handler
- * @param {Object} req - HTTP request object
- * @param {Object} res - HTTP response object
- */
 export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  // Only allow GET requests
-  if (req.method !== 'GET') {
-    res.status(405).json({
-      error: 'Method not allowed',
-      message: 'Only GET requests are supported',
+  if (!supabaseUrl || !supabaseServiceRole) {
+    return res.status(200).json({
+      deliveryTickets: { totalTickets: 0, totalGallons: 0, revenue: 0 },
+      serviceTracking: { completed: 0, completedRevenue: 0, pipelineRevenue: 0 },
+      weekCompare: { percentChange: 0 }
     });
-    return;
   }
 
   try {
-    // Optional: Check token for TV mode access
-    const tv = req.query.tv;
-    const token = req.query.token;
-    const isTVMode = tv === '1';
-    
-    if (isTVMode && !verifyToken(token)) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'Invalid access token',
-      });
-      return;
+    const supabase = createClient(supabaseUrl, supabaseServiceRole, { auth: { persistSession: false } });
+
+    const deliverySql = `
+      SELECT
+        COUNT(*)::int as totalTickets,
+        COALESCE(SUM(gallons),0) as totalGallons,
+        COALESCE(SUM(amount),0) as revenue
+      FROM delivery_tickets
+      WHERE DATE_TRUNC('week', created_at) = DATE_TRUNC('week', CURRENT_DATE)
+    `;
+
+    const { data: deliveryData, error: dErr } = await supabase.rpc('sql', { q: deliverySql }).catch(e => ({ data: null, error: e }));
+
+    let delivery = { totalTickets: 0, totalGallons: 0, revenue: 0 };
+    if (!dErr && deliveryData && deliveryData.length) {
+      const row = deliveryData[0];
+      delivery.totalTickets = Number(row.totaltickets || 0);
+      delivery.totalGallons = Number(row.totalgallons || 0);
+      delivery.revenue = Number(row.revenue || 0);
     }
 
-    // Check cache validity
-    const now = Date.now();
-    if (cache && cacheTimestamp && (now - cacheTimestamp) < CACHE_TTL_MS) {
-      console.log('[Billboard] Returning cached data');
-      res.status(200).json(cache);
-      return;
+    const serviceSql = `
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'completed')::int as completed,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN amount ELSE 0 END),0) as completedRevenue,
+        COALESCE(SUM(CASE WHEN status = 'pipeline' THEN amount ELSE 0 END),0) as pipelineRevenue
+      FROM service_tickets
+      WHERE DATE_TRUNC('week', created_at) = DATE_TRUNC('week', CURRENT_DATE)
+    `;
+
+    const { data: serviceData, error: sErr } = await supabase.rpc('sql', { q: serviceSql }).catch(e => ({ data: null, error: e }));
+    let service = { completed: 0, completedRevenue: 0, pipelineRevenue: 0 };
+    if (!sErr && serviceData && serviceData.length) {
+      const row = serviceData[0];
+      service.completed = Number(row.completed || 0);
+      service.completedRevenue = Number(row.completedrevenue || 0);
+      service.pipelineRevenue = Number(row.pipelinerrevenue || row.pipelinedrevenue || 0);
     }
 
-    // Fetch fresh data
-    console.log('[Billboard] Fetching fresh data');
-    const data = await aggregateBillboardData();
+    const weekSql = `
+      SELECT
+        COALESCE(SUM(CASE WHEN DATE_TRUNC('week', created_at) = DATE_TRUNC('week', CURRENT_DATE) THEN amount ELSE 0 END),0) as this_week,
+        COALESCE(SUM(CASE WHEN DATE_TRUNC('week', created_at) = DATE_TRUNC('week', CURRENT_DATE - interval '7 days') THEN amount ELSE 0 END),0) as last_week
+      FROM (
+        SELECT amount, created_at FROM delivery_tickets
+        UNION ALL
+        SELECT amount, created_at FROM service_tickets
+      ) as unioned
+    `;
 
-    // Update cache
-    cache = data;
-    cacheTimestamp = now;
+    const { data: weekData, error: wErr } = await supabase.rpc('sql', { q: weekSql }).catch(e => ({ data: null, error: e }));
+    let weekCompare = { percentChange: 0 };
+    if (!wErr && weekData && weekData.length) {
+      const r = weekData[0];
+      const thisWeek = Number(r.this_week || 0);
+      const lastWeek = Number(r.last_week || 0);
+      const pct = lastWeek === 0 ? (thisWeek === 0 ? 0 : 100) : ((thisWeek - lastWeek) / lastWeek) * 100;
+      weekCompare.percentChange = Number(pct.toFixed(1));
+    }
 
-    res.status(200).json(data);
-  } catch (error) {
-    console.error('[Billboard] Error fetching summary:', error);
-    
-    // Return safe zero defaults instead of 500 error
-    // This ensures the UI always displays numbers (zeros) instead of error states
-    const safeDefaults = {
-      serviceTracking: { ...EMPTY_SERVICE_TRACKING },
-      deliveryTickets: { ...EMPTY_DELIVERY_TICKETS },
-      weekCompare: {
-        thisWeekTotalRevenue: 0,
-        lastWeekTotalRevenue: 0,
-        percentChange: 0,
+    const response = {
+      deliveryTickets: {
+        totalTickets: safeNum(delivery.totalTickets || 0, 0),
+        totalGallons: typeof delivery.totalGallons === 'number' ? Number(delivery.totalGallons.toFixed ? delivery.totalGallons.toFixed(1) : Number(delivery.totalGallons).toFixed(1)) : Number(safeNum(delivery.totalGallons || 0, 1)),
+        revenue: typeof delivery.revenue === 'number' ? Number(delivery.revenue.toFixed ? delivery.revenue.toFixed(2) : Number(delivery.revenue).toFixed(2)) : Number(safeNum(delivery.revenue || 0, 2))
       },
-      lastUpdated: new Date().toISOString(),
+      serviceTracking: {
+        completed: safeNum(service.completed || 0, 0),
+        completedRevenue: typeof service.completedRevenue === 'number' ? Number(service.completedRevenue.toFixed ? service.completedRevenue.toFixed(2) : Number(service.completedRevenue).toFixed(2)) : Number(safeNum(service.completedRevenue || 0, 2)),
+        pipelineRevenue: typeof service.pipelineRevenue === 'number' ? Number(service.pipelineRevenue.toFixed ? service.pipelineRevenue.toFixed(2) : Number(service.pipelineRevenue).toFixed(2)) : Number(safeNum(service.pipelineRevenue || 0, 2))
+      },
+      weekCompare: { percentChange: Number(weekCompare.percentChange || 0) }
     };
-    
-    res.status(200).json(safeDefaults);
+
+    return res.status(200).json(response);
+  } catch (err) {
+    console.error('billboard-summary error', err);
+    return res.status(200).json({
+      deliveryTickets: { totalTickets: 0, totalGallons: 0, revenue: 0 },
+      serviceTracking: { completed: 0, completedRevenue: 0, pipelineRevenue: 0 },
+      weekCompare: { percentChange: 0 }
+    });
   }
 }
