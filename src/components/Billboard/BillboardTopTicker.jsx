@@ -112,10 +112,10 @@ export default function BillboardTopTicker({ pollInterval = null }) {
   return (
     <div className="billboard-top-ticker-container">
       <Marquee 
-        speed={60}
+        speed={40}
         gradient={false} 
-        pauseOnHover={false}
-        pauseOnClick={false}
+        pauseOnHover={true}
+        pauseOnClick={true}
         delay={0}
         play={true}
         direction="left"

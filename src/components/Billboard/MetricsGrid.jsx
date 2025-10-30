@@ -5,7 +5,6 @@ import { supabase } from '../../lib/supabaseClient';
 import { readRefreshSec, secondsToMs } from '../../lib/readRefreshSec';
 import KpiCard from './KpiCard';
 import StatusTicks from './StatusTicks';
-import BillboardTopTicker from './BillboardTopTicker';
 import { LineChart, Line, ResponsiveContainer, Tooltip } from 'recharts';
 
 // Threshold constants for status determination
@@ -481,11 +480,6 @@ export default function MetricsGrid() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* NASDAQ-style ticker moved to footer area */}
-      <div style={{ marginTop: '24px' }}>
-        <BillboardTopTicker />
       </div>
     </div>
   );
