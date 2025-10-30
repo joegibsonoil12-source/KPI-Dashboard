@@ -4,95 +4,90 @@ import Marquee from 'react-fast-marquee';
 
 /**
  * BillboardTopTicker - NASDAQ-style scrolling ticker
- * Prefers server API via VITE_BILLBOARD_API_BASE or window.__ENV.BILLBOARD_API_BASE
- * Falls back to client getBillboardSummary() if no API endpoint available
+ * Client-first approach: calls clientGetBillboardSummary() as primary source
+ * Maps delivery and service fields to chips with formatting
+ * Falls back to SAMPLE_CHIPS if no data available
+ * Supports runtime API base via window.__ENV.BILLBOARD_API_BASE if configured
  */
 
-// Helper to get billboard data from client-side Supabase
-async function getBillboardSummary() {
+// Sample chips for fallback when no data is available
+const SAMPLE_CHIPS = [
+  { label: 'SERVICE REVENUE', value: '$125,000', change: '+8.1%', positive: true },
+  { label: 'DELIVERY REVENUE', value: '$89,451', change: '+5.2%', positive: true },
+  { label: 'TOTAL TICKETS', value: '156', change: null, positive: null },
+  { label: 'GALLONS', value: '45,231', change: '+12.3%', positive: true },
+  { label: 'COMPLETED JOBS', value: '42', change: null, positive: null },
+];
+
+/**
+ * Client-side Supabase function to fetch billboard summary
+ * Uses fetchMetricsClient.getBillboardSummary() which queries service_jobs and delivery_tickets
+ */
+async function clientGetBillboardSummary() {
   try {
-    const { supabase } = await import('../../lib/supabaseClient.js');
+    const { getBillboardSummary } = await import('../../lib/fetchMetricsClient.js');
+    const result = await getBillboardSummary();
     
-    // Fetch current week data
-    const { data: currentWeek, error: currentError } = await supabase
-      .from('billboard_metrics')
-      .select('*')
-      .order('week_start', { ascending: false })
-      .limit(1)
-      .single();
+    if (result.error) {
+      console.warn('[BillboardTopTicker] Error from getBillboardSummary:', result.error);
+    }
     
-    if (currentError) throw currentError;
-    
-    // Fetch previous week for comparison
-    const { data: previousWeek } = await supabase
-      .from('billboard_metrics')
-      .select('*')
-      .order('week_start', { ascending: false })
-      .limit(1)
-      .range(1, 1)
-      .single();
-    
-    return {
-      revenue: currentWeek?.revenue || 0,
-      gallons: currentWeek?.gallons || 0,
-      deliveries: currentWeek?.deliveries || 0,
-      margin: currentWeek?.margin || 0,
-      revenueChange: previousWeek 
-        ? ((currentWeek.revenue - previousWeek.revenue) / previousWeek.revenue * 100).toFixed(1)
-        : 0,
-      gallonsChange: previousWeek
-        ? ((currentWeek.gallons - previousWeek.gallons) / previousWeek.gallons * 100).toFixed(1)
-        : 0,
-    };
+    return result.data || null;
   } catch (err) {
-    console.error('[BillboardTopTicker] Error fetching from Supabase:', err);
+    console.error('[BillboardTopTicker] Error calling clientGetBillboardSummary:', err);
     return null;
   }
 }
 
 export default function BillboardTopTicker({ pollInterval = 30000 }) {
-  const [data, setData] = useState(null);
+  const [chips, setChips] = useState(SAMPLE_CHIPS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Determine API base URL from runtime config or env vars
-  const getApiBase = () => {
-    // Priority 1: window.__ENV (runtime injection for GitHub Pages / static hosting)
+  // Helper: read runtime API base if available (for backward compatibility)
+  const readRuntimeApiBase = () => {
     if (typeof window !== 'undefined' && window.__ENV?.BILLBOARD_API_BASE) {
       return window.__ENV.BILLBOARD_API_BASE;
     }
-    // Priority 2: Vite env var
     if (import.meta.env.VITE_BILLBOARD_API_BASE) {
       return import.meta.env.VITE_BILLBOARD_API_BASE;
     }
-    // Priority 3: No API, use client-side fallback
     return null;
   };
 
   const fetchData = async () => {
     try {
-      const apiBase = getApiBase();
+      // Primary: Use client-side Supabase
+      const summary = await clientGetBillboardSummary();
       
-      if (apiBase) {
-        // Use server API
-        const response = await fetch(`${apiBase}/api/billboard-summary`);
-        if (!response.ok) throw new Error(`API error: ${response.status}`);
-        const json = await response.json();
-        setData(json);
+      if (summary) {
+        // Map delivery and service fields to chips
+        const mappedChips = mapSummaryToChips(summary);
+        setChips(mappedChips);
         setError(null);
       } else {
-        // Fallback to client-side Supabase query
-        const summary = await getBillboardSummary();
-        if (summary) {
-          setData(summary);
-          setError(null);
+        // If client-side fails, try runtime API base as fallback
+        const apiBase = readRuntimeApiBase();
+        if (apiBase) {
+          const response = await fetch(`${apiBase}/api/billboard-summary`);
+          if (response.ok) {
+            const json = await response.json();
+            const mappedChips = mapSummaryToChips(json);
+            setChips(mappedChips);
+            setError(null);
+          } else {
+            throw new Error('API unavailable');
+          }
         } else {
-          throw new Error('No data available');
+          // No data from client or API, use SAMPLE_CHIPS (already set)
+          console.warn('[BillboardTopTicker] No data available, using sample chips');
+          setError('No data');
         }
       }
     } catch (err) {
       console.error('[BillboardTopTicker] Fetch error:', err);
       setError(err.message);
+      // Keep SAMPLE_CHIPS as fallback
     } finally {
       setLoading(false);
     }
@@ -112,13 +107,31 @@ export default function BillboardTopTicker({ pollInterval = 30000 }) {
     );
   }
 
-  if (error || !data) {
-    return (
-      <div className="billboard-top-ticker-error">
-        <span>Unable to load ticker data</span>
-      </div>
-    );
-  }
+  return (
+    <div className="billboard-top-ticker-container">
+      <Marquee speed={40} gradient={false} pauseOnHover={false}>
+        {chips.map((chip, idx) => (
+          <div key={idx} className="billboard-top-ticker-item">
+            <span className="billboard-top-ticker-label">{chip.label}</span>
+            <span className="billboard-top-ticker-value">{chip.value}</span>
+            {chip.change && (
+              <span className={`billboard-top-ticker-chip ${chip.positive ? 'chip-positive' : 'chip-negative'}`}>
+                {chip.change}
+              </span>
+            )}
+          </div>
+        ))}
+      </Marquee>
+    </div>
+  );
+}
+
+/**
+ * Map summary data from getBillboardSummary() to chip format
+ * Extracts delivery and service fields with proper formatting
+ */
+function mapSummaryToChips(summary) {
+  if (!summary) return SAMPLE_CHIPS;
 
   const formatCurrency = (val) => {
     return new Intl.NumberFormat('en-US', {
@@ -126,54 +139,70 @@ export default function BillboardTopTicker({ pollInterval = 30000 }) {
       currency: 'USD',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-    }).format(val);
+    }).format(val || 0);
   };
 
   const formatNumber = (val) => {
-    return new Intl.NumberFormat('en-US').format(val);
+    return new Intl.NumberFormat('en-US').format(val || 0);
   };
 
-  const formatChange = (change) => {
-    const num = parseFloat(change);
-    const isPositive = num >= 0;
-    return {
-      value: `${isPositive ? '+' : ''}${num.toFixed(1)}%`,
-      className: isPositive ? 'positive' : 'negative',
-    };
+  const formatPercent = (change) => {
+    const num = parseFloat(change) || 0;
+    return `${num >= 0 ? '+' : ''}${num.toFixed(1)}%`;
   };
 
-  const revenueChange = formatChange(data.revenueChange || 0);
-  const gallonsChange = formatChange(data.gallonsChange || 0);
+  // Extract fields from summary
+  const serviceRevenue = summary.serviceTracking?.completedRevenue || 0;
+  const deliveryRevenue = summary.deliveryTickets?.revenue || 0;
+  const totalTickets = summary.deliveryTickets?.totalTickets || 0;
+  const totalGallons = summary.deliveryTickets?.totalGallons || 0;
+  const completedJobs = summary.serviceTracking?.completed || 0;
+  const scheduledJobs = summary.serviceTracking?.scheduled || 0;
+  const totalRevenue = summary.weekCompare?.thisWeekTotalRevenue || 0;
+  const percentChange = summary.weekCompare?.percentChange || 0;
 
-  return (
-    <div className="billboard-top-ticker-container">
-      <Marquee speed={50} gradient={false}>
-        <div className="billboard-top-ticker-item">
-          <span className="billboard-top-ticker-label">Revenue</span>
-          <span className="billboard-top-ticker-value">{formatCurrency(data.revenue)}</span>
-          <span className={`billboard-top-ticker-change ${revenueChange.className}`}>
-            {revenueChange.value}
-          </span>
-        </div>
-        
-        <div className="billboard-top-ticker-item">
-          <span className="billboard-top-ticker-label">Gallons</span>
-          <span className="billboard-top-ticker-value">{formatNumber(data.gallons)}</span>
-          <span className={`billboard-top-ticker-change ${gallonsChange.className}`}>
-            {gallonsChange.value}
-          </span>
-        </div>
-        
-        <div className="billboard-top-ticker-item">
-          <span className="billboard-top-ticker-label">Deliveries</span>
-          <span className="billboard-top-ticker-value">{formatNumber(data.deliveries)}</span>
-        </div>
-        
-        <div className="billboard-top-ticker-item">
-          <span className="billboard-top-ticker-label">Margin</span>
-          <span className="billboard-top-ticker-value">{data.margin.toFixed(2)}%</span>
-        </div>
-      </Marquee>
-    </div>
-  );
+  return [
+    {
+      label: 'TOTAL REVENUE',
+      value: formatCurrency(totalRevenue),
+      change: formatPercent(percentChange),
+      positive: percentChange >= 0,
+    },
+    {
+      label: 'SERVICE REVENUE',
+      value: formatCurrency(serviceRevenue),
+      change: null,
+      positive: null,
+    },
+    {
+      label: 'DELIVERY REVENUE',
+      value: formatCurrency(deliveryRevenue),
+      change: null,
+      positive: null,
+    },
+    {
+      label: 'DELIVERY TICKETS',
+      value: formatNumber(totalTickets),
+      change: null,
+      positive: null,
+    },
+    {
+      label: 'GALLONS',
+      value: formatNumber(totalGallons),
+      change: null,
+      positive: null,
+    },
+    {
+      label: 'COMPLETED JOBS',
+      value: formatNumber(completedJobs),
+      change: null,
+      positive: null,
+    },
+    {
+      label: 'SCHEDULED JOBS',
+      value: formatNumber(scheduledJobs),
+      change: null,
+      positive: null,
+    },
+  ];
 }
