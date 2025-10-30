@@ -3,8 +3,9 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import FullscreenButton from '../../components/FullscreenButton';
 import '../../styles/billboard.css';
 import BillboardTopTicker from './BillboardTopTicker';
-import BillboardTicker from './BillboardTicker';
+// import BillboardTicker from './BillboardTicker'; // Removed duplicate ticker
 import WeekCompareBar from './WeekCompareBar';
+import MetricsGrid from './MetricsGrid';
 import { getBillboardSummary } from '../../lib/fetchMetricsClient';
 import { readRefreshSec, secondsToMs } from '../../lib/readRefreshSec';
 
@@ -100,9 +101,7 @@ export default function BillboardPage(props) {
         </header>
       )}
 
-      <div className="billboard-ticker-wrapper">
-        <BillboardTicker />
-      </div>
+      {/* Removed duplicate BillboardTicker - keeping only BillboardTopTicker at top */}
 
       {/* Week Compare Bar - placed under the marquee */}
       <div className="billboard-week-compare-wrapper" style={{ padding: '12px 16px' }}>
@@ -113,9 +112,8 @@ export default function BillboardPage(props) {
         />
       </div>
 
-      <div className="billboard-cards-placeholder">
-        {/* Existing BillboardCards component will render here if imported */}
-      </div>
+      {/* Live Metrics Grid with KPI cards, sparklines, and status ticks */}
+      <MetricsGrid />
     </div>
   );
 }
