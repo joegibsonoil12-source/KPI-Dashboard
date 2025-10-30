@@ -1,5 +1,6 @@
 // src/components/LayoutShell.jsx
 import React from "react";
+import "../styles/site-theme.css";
 
 const BRAND = {
   primary: "#21253F",
@@ -46,24 +47,20 @@ export default function LayoutShell({
 
       {/* Body with left nav + content */}
       <div className="mx-auto flex max-w-7xl">
-        {/* Left nav */}
-        <aside className="w-56 border-r bg-white">
-          <div className="p-3">
-            <div className="mb-2 text-xs font-semibold text-slate-500">
+        {/* Dark Nasdaq-like Left nav */}
+        <aside className="left-nav-dark">
+          <div className="left-nav-inner">
+            <div className="left-nav-header">
               Navigation
             </div>
-            <nav className="flex flex-col gap-1">
+            <nav className="left-nav-menu">
               {tabs.map((t) => {
                 const active = currentTab === t.id;
                 return (
                   <button
                     key={t.id}
                     onClick={() => setCurrentTab(t.id)}
-                    className={`w-full rounded-lg px-3 py-2 text-left text-sm ${
-                      active
-                        ? "bg-slate-100 font-semibold text-slate-900"
-                        : "text-slate-700 hover:bg-slate-50"
-                    }`}
+                    className={`left-nav-item ${active ? 'active' : ''}`}
                   >
                     {t.label}
                   </button>

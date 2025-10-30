@@ -571,3 +571,73 @@ html, body, #root {
     text-align: center;
   }
 }
+
+/* NASDAQ-style Top Ticker Styles */
+.billboard-top-ticker-container {
+  background: linear-gradient(90deg, #000000 0%, #1a1a1a 100%);
+  border-bottom: 3px solid #00ff88;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  padding: 12px 0;
+}
+
+.billboard-top-ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 32px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.billboard-top-ticker-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.billboard-top-ticker-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #00ff88;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.02em;
+}
+
+.billboard-top-ticker-change {
+  font-size: 14px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+}
+
+.billboard-top-ticker-change.positive {
+  color: #00ff88;
+  background: rgba(0, 255, 136, 0.15);
+}
+
+.billboard-top-ticker-change.negative {
+  color: #ff4444;
+  background: rgba(255, 68, 68, 0.15);
+}
+
+.billboard-top-ticker-loading,
+.billboard-top-ticker-error {
+  background: linear-gradient(90deg, #000000 0%, #1a1a1a 100%);
+  border-bottom: 3px solid #00ff88;
+  padding: 12px 24px;
+  text-align: center;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 600;
+}
+
+.billboard-top-ticker-error {
+  border-bottom-color: #ff4444;
+  color: #ff4444;
+}

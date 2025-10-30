@@ -2,20 +2,32 @@
 import { createClient } from "@supabase/supabase-js";
 
 // Support both Vite (import.meta.env) and Next/CRA (process.env) environments.
-// Prefer VITE_ variables for Vite projects, fallback to NEXT_PUBLIC_/REACT_APP_/SUPABASE_ for compatibility.
+// Priority order:
+// 1. Runtime window.__ENV (for GitHub Pages / static hosting with runtime config injection)
+// 2. Vite import.meta.env
+// 3. process.env (Next.js / CRA)
+// 4. localStorage fallback
+
 const url =
-  // Vite (import.meta.env)
+  // Priority 1: Runtime window.__ENV
+  (typeof window !== 'undefined' && window.__ENV?.VITE_SUPABASE_URL) ||
+  // Priority 2: Vite (import.meta.env)
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) ||
-  // Next.js / Create React App / other envs
+  // Priority 3: Next.js / Create React App / other envs
   (typeof process !== 'undefined' && (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.VITE_SUPABASE_URL)) ||
-  // Server env fallback (useful in some server-side contexts)
+  // Priority 4: Server env fallback (useful in some server-side contexts)
   (typeof process !== 'undefined' && process.env.SUPABASE_URL) ||
   "";
 
 // Client anon/public key (safe for browser only if RLS/policies are configured)
 const anon =
+  // Priority 1: Runtime window.__ENV
+  (typeof window !== 'undefined' && window.__ENV?.VITE_SUPABASE_ANON_KEY) ||
+  // Priority 2: Vite import.meta.env
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) ||
+  // Priority 3: Next.js / CRA / other envs
   (typeof process !== 'undefined' && (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)) ||
+  // Priority 4: Server env fallback
   (typeof process !== 'undefined' && process.env.SUPABASE_ANON_KEY) ||
   "";
 
@@ -25,7 +37,7 @@ const anon =
 const urlLS = typeof window !== 'undefined' ? (localStorage.getItem('SUPABASE_URL') || '') : '';
 const anonLS = typeof window !== 'undefined' ? (localStorage.getItem('SUPABASE_ANON_KEY') || '') : '';
 
-// Final values: env vars take precedence, fall back to localStorage
+// Final values: runtime/env vars take precedence, fall back to localStorage
 const urlFinal = url || urlLS;
 const anonFinal = anon || anonLS;
 
