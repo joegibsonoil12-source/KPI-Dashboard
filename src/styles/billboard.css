@@ -264,8 +264,9 @@ html, body, #root {
   letter-spacing: 0.05em;
 }
 
-/* Week Compare Meter */
-.week-compare-meter {
+/* Week Compare Meter and Week Compare Bar */
+.week-compare-meter,
+.week-compare-bar {
   background: var(--bb-panel);
   background-image: var(--bb-card);
   border-radius: 8px;
@@ -340,7 +341,7 @@ html, body, #root {
   position: relative;
 }
 
-.week-compare-bar {
+.week-compare-bar-fill {
   height: 100%;
   transition: width 0.6s ease;
   display: flex;
