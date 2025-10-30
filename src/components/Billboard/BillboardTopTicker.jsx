@@ -1,6 +1,7 @@
 // src/components/Billboard/BillboardTopTicker.jsx
 import React, { useEffect, useState } from 'react';
 import Marquee from 'react-fast-marquee';
+import { readRefreshSec, secondsToMs } from '../../lib/readRefreshSec';
 
 /**
  * BillboardTopTicker - NASDAQ-style scrolling ticker
@@ -39,11 +40,14 @@ async function clientGetBillboardSummary() {
   }
 }
 
-export default function BillboardTopTicker({ pollInterval = 30000 }) {
+export default function BillboardTopTicker({ pollInterval = null }) {
   const [chips, setChips] = useState(SAMPLE_CHIPS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dataSource, setDataSource] = useState('loading');
+
+  // Read refresh interval from runtime or build env, default to 30 seconds
+  const refreshInterval = pollInterval || secondsToMs(readRefreshSec(30));
 
   const fetchData = async () => {
     try {
@@ -77,9 +81,25 @@ export default function BillboardTopTicker({ pollInterval = 30000 }) {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, pollInterval);
-    return () => clearInterval(interval);
-  }, [pollInterval]);
+    const interval = setInterval(fetchData, refreshInterval);
+
+    // Listen for forced refresh events (e.g., after markCustomerCompleted)
+    const handleBillboardRefresh = (event) => {
+      console.log('[BillboardTopTicker] Forced refresh triggered:', event.detail);
+      fetchData();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('billboard-refresh', handleBillboardRefresh);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('billboard-refresh', handleBillboardRefresh);
+      }
+    };
+  }, [refreshInterval]);
 
   if (loading) {
     return (

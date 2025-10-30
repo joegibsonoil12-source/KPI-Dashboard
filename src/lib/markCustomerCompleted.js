@@ -7,6 +7,9 @@ import { supabase } from "./supabaseClient";
  * In a full server setup, this would POST to /api/markCustomerCompleted
  * Since this is a static Vite SPA, we directly call the Supabase RPC
  * 
+ * After successful completion, triggers a billboard refresh by dispatching
+ * a custom event that Billboard components can listen to.
+ * 
  * @param {string} serviceId - The UUID of the service to mark as completed
  * @returns {Promise<{updatedService: object, deferredCount: number}>}
  */
@@ -48,6 +51,15 @@ export async function markCustomerCompleted(serviceId) {
     if (countError) {
       console.error("Failed to get deferred count:", countError);
       // Don't fail the whole operation if count fails
+    }
+
+    // Trigger immediate billboard refresh
+    // Dispatch a custom event that Billboard components can listen to
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('billboard-refresh', {
+        detail: { source: 'markCustomerCompleted', serviceId }
+      }));
+      console.log('[markCustomerCompleted] Triggered billboard refresh event');
     }
 
     return {

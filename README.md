@@ -420,3 +420,123 @@ In your Vercel project settings, add the following environment variables:
 4. Deploy: `vercel --prod`
 
 Alternatively, connect your GitHub repository to Vercel for automatic deployments on push.
+
+## Billboard Runtime Notes
+
+The Billboard feature (`/billboard`) is designed to work on both static hosting (GitHub Pages) and server-side deployments (Vercel). It provides real-time KPI updates through multiple mechanisms.
+
+### Required Migrations
+
+Before using the Billboard feature, run the following migration in your Supabase SQL Editor:
+
+```sql
+-- Create aggregated views for fast billboard queries
+-- File: migrations/001_create_metrics_views.sql
+```
+
+This creates daily, weekly, and monthly aggregation views (`service_jobs_daily`, `delivery_tickets_daily`, etc.) that power the Billboard feature. The application includes automatic fallback to base table aggregation if these views are missing, but the views provide significantly better performance.
+
+### Row-Level Security (RLS)
+
+The Billboard requires anonymous (unauthenticated) read access to the aggregated views. Add these policies in Supabase SQL Editor:
+
+```sql
+-- Enable RLS on aggregated views
+ALTER TABLE public.service_jobs_daily ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.delivery_tickets_daily ENABLE ROW LEVEL SECURITY;
+
+-- Allow anonymous read access
+CREATE POLICY "Allow anon to read service_jobs_daily" 
+  ON public.service_jobs_daily 
+  FOR SELECT 
+  TO anon 
+  USING (true);
+
+CREATE POLICY "Allow anon to read delivery_tickets_daily" 
+  ON public.delivery_tickets_daily 
+  FOR SELECT 
+  TO anon 
+  USING (true);
+```
+
+Repeat for weekly and monthly views if you're using those aggregation levels.
+
+### Runtime Configuration
+
+The Billboard uses a runtime-aware configuration system that prefers `window.__ENV` values (loaded from `public/runtime-config.js`) over build-time environment variables. This enables post-build configuration for static deployments.
+
+#### GitHub Pages Deployment
+
+For GitHub Pages, the build process generates `public/runtime-config.js` with your environment variables:
+
+```bash
+npm run build:with-runtime
+```
+
+This script reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from your environment and generates the runtime config file that gets deployed with your static site.
+
+**Required GitHub Secrets:**
+- `VITE_SUPABASE_URL` - Your Supabase project URL
+- `VITE_SUPABASE_ANON_KEY` - Your Supabase anonymous/public key
+
+The `index.html` automatically loads `/runtime-config.js` at startup, making these values available to the application via `window.__ENV`.
+
+#### Vercel Deployment (Optional)
+
+If you want server-side features (TV token authentication, QuickBooks integration, service role operations), deploy to Vercel with these additional environment variables:
+
+- `SUPABASE_SERVICE_ROLE_KEY` - Server-side operations (bypasses RLS)
+- `BILLBOARD_TV_TOKEN` - Optional TV mode access control
+- `QUICKBOOKS_*` - QuickBooks integration credentials
+
+The Billboard will prefer the server API (`/api/billboard-summary`) if available, but always falls back to client-side Supabase queries.
+
+### Billboard Refresh Configuration
+
+Configure the Billboard refresh intervals via environment variables:
+
+```bash
+# Refresh interval in seconds (default: 30)
+VITE_BILLBOARD_REFRESH_SEC=30
+```
+
+The Billboard components read this value at runtime from `window.__ENV.VITE_BILLBOARD_REFRESH_SEC` or fall back to build-time `import.meta.env.VITE_BILLBOARD_REFRESH_SEC`.
+
+### Real-time Updates
+
+The Billboard includes Supabase Realtime subscriptions that listen for `INSERT` and `UPDATE` events on:
+- `delivery_tickets` table
+- `service_jobs` table
+
+When changes occur, the Billboard automatically refreshes to show the latest data. If Realtime is unavailable or fails, the application continues using polling as a fallback.
+
+**Note:** Realtime requires the Supabase Realtime feature to be enabled in your project settings. If it's disabled, the Billboard will still work via polling.
+
+### Forced Refresh After RPC Calls
+
+After any RPC operation that modifies service or delivery data (e.g., `markCustomerCompleted`), the application dispatches a `billboard-refresh` custom event that triggers an immediate refresh of all Billboard components. This ensures data is always up-to-date after user actions.
+
+### Testing the Billboard
+
+1. **With Supabase configured** (via runtime-config or build-time env):
+   - Open `/billboard` in your browser
+   - Add a delivery ticket or mark a service job completed
+   - Verify the top scroller, marquee ticker, and week comparison bar update automatically
+
+2. **Without server API** (GitHub Pages):
+   - The UI should show live numbers from Supabase client-side queries
+   - No blank areas or zeros should appear if data exists in your database
+
+3. **Real-time updates**:
+   - Insert a delivery ticket in Supabase SQL Editor
+   - The Billboard should update within seconds (or immediately via Realtime)
+
+### Console Logging
+
+The Billboard components log their data source and fetch behavior to the console:
+- `[BillboardTicker] Fetched from server API` - Server API was used
+- `[BillboardTicker] Fetched from client aggregator` - Client-side Supabase was used
+- `[BillboardTicker] Realtime subscription active` - Realtime is working
+- `[BillboardTicker] Realtime subscription failed, continuing with polling` - Fallback to polling
+
+Check your browser console for these messages when debugging Billboard behavior.
