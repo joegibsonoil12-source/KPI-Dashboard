@@ -8,7 +8,7 @@
  * - Configurable API base URL via VITE_BILLBOARD_API_BASE env variable
  * - Falls back to mock data if API is unreachable (for GitHub Pages)
  * - Supports both local dev and serverless deployment
- * - Includes scheduled jobs count and revenue in weekCompare
+ * - Includes scheduled jobs count and revenue in serviceTracking and weekCompare
  * 
  * Response shape:
  * {
