@@ -7,13 +7,18 @@
  * Handles direct upload of scanned ticket files (PDF/JPG)
  * Creates ticket_imports record and stores files in Supabase Storage
  * 
+ * Note: For simplicity, this accepts base64-encoded file data in JSON format
+ * For production, consider using a client-side direct upload to Supabase Storage
+ * 
  * Environment Variables:
  * - SUPABASE_URL
  * - SUPABASE_SERVICE_ROLE_KEY
  * 
- * Request Body (multipart/form-data):
- * - files: File(s) to upload
- * - meta: Optional JSON metadata (e.g., { importType: 'service' })
+ * Request Body (JSON):
+ * {
+ *   files: Array<{ filename: string, data: string (base64), mimeType: string }>,
+ *   meta: Optional object (e.g., { importType: 'service' })
+ * }
  * 
  * Response:
  * {
@@ -25,7 +30,6 @@
  */
 
 const { createClient } = require('@supabase/supabase-js');
-const busboy = require('busboy');
 
 /**
  * Create Supabase client with service role key
@@ -43,57 +47,19 @@ function createSupabaseClient() {
 }
 
 /**
- * Parse multipart form data
- * @param {Object} event - Netlify event object
- * @returns {Promise<Object>} - { files, fields }
+ * Validate supported file type
+ * @param {string} mimeType - MIME type of file
+ * @returns {boolean} - Whether file type is supported
  */
-function parseMultipartForm(event) {
-  return new Promise((resolve, reject) => {
-    const files = [];
-    const fields = {};
-    
-    const bb = busboy({
-      headers: {
-        'content-type': event.headers['content-type'] || event.headers['Content-Type']
-      }
-    });
-    
-    bb.on('file', (fieldname, file, info) => {
-      const { filename, encoding, mimeType } = info;
-      const chunks = [];
-      
-      file.on('data', (data) => {
-        chunks.push(data);
-      });
-      
-      file.on('end', () => {
-        files.push({
-          fieldname,
-          filename,
-          encoding,
-          mimeType,
-          buffer: Buffer.concat(chunks)
-        });
-      });
-    });
-    
-    bb.on('field', (fieldname, value) => {
-      fields[fieldname] = value;
-    });
-    
-    bb.on('finish', () => {
-      resolve({ files, fields });
-    });
-    
-    bb.on('error', (error) => {
-      reject(error);
-    });
-    
-    // Parse the body (base64 encoded in Netlify)
-    const bodyBuffer = Buffer.from(event.body, event.isBase64Encoded ? 'base64' : 'utf8');
-    bb.write(bodyBuffer);
-    bb.end();
-  });
+function isSupportedFileType(mimeType) {
+  const supportedTypes = [
+    'application/pdf',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+  ];
+  return supportedTypes.some(type => mimeType.toLowerCase().includes(type));
 }
 
 /**
@@ -135,10 +101,25 @@ exports.handler = async (event, context) => {
   try {
     console.debug('[imports-upload] Starting upload process');
     
-    // Parse multipart form data
-    const { files, fields } = await parseMultipartForm(event);
+    // Parse JSON body
+    let body;
+    try {
+      body = JSON.parse(event.body);
+    } catch (e) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'Invalid JSON',
+          message: 'Request body must be valid JSON',
+        }),
+      };
+    }
     
-    if (!files || files.length === 0) {
+    const { files, meta = {} } = body;
+    
+    if (!files || !Array.isArray(files) || files.length === 0) {
       return {
         statusCode: 400,
         headers,
@@ -150,13 +131,30 @@ exports.handler = async (event, context) => {
       };
     }
     
-    // Parse metadata if provided
-    let meta = {};
-    if (fields.meta) {
-      try {
-        meta = JSON.parse(fields.meta);
-      } catch (e) {
-        console.warn('[imports-upload] Failed to parse meta field:', e);
+    // Validate files
+    for (const file of files) {
+      if (!file.filename || !file.data || !file.mimeType) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'Invalid file format',
+            message: 'Each file must have filename, data (base64), and mimeType',
+          }),
+        };
+      }
+      
+      if (!isSupportedFileType(file.mimeType)) {
+        return {
+          statusCode: 400,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'Unsupported file type',
+            message: 'Only PDF and image files (JPG, PNG, GIF) are supported',
+          }),
+        };
       }
     }
     
@@ -201,9 +199,12 @@ exports.handler = async (event, context) => {
     for (const file of files) {
       const storagePath = `${importId}/${timestamp}_${file.filename}`;
       
+      // Convert base64 to buffer
+      const fileBuffer = Buffer.from(file.data, 'base64');
+      
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('ticket-scans')
-        .upload(storagePath, file.buffer, {
+        .upload(storagePath, fileBuffer, {
           contentType: file.mimeType,
           upsert: false,
         });
@@ -218,7 +219,7 @@ exports.handler = async (event, context) => {
         filename: file.filename,
         path: storagePath,
         mimeType: file.mimeType,
-        size: file.buffer.length,
+        size: fileBuffer.length,
       });
       
       console.debug('[imports-upload] Uploaded file:', storagePath);
