@@ -2,8 +2,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import FullscreenButton from '../../components/FullscreenButton';
 import '../../styles/billboard.css';
-// import BillboardTopTicker from './BillboardTopTicker'; // Moved to footer
-// import BillboardTicker from './BillboardTicker'; // Removed duplicate ticker
+import BillboardTopTicker from './BillboardTopTicker';
 import WeekCompareBar from './WeekCompareBar';
 import MetricsGrid from './MetricsGrid';
 import { getBillboardSummary } from '../../lib/fetchMetricsClient';
@@ -136,7 +135,12 @@ export default function BillboardPage(props) {
         </header>
       )}
 
-      {/* Removed duplicate BillboardTicker - keeping only BillboardTopTicker at top */}
+      {/* CENTERED TICKER — visible in landscape fullscreen */}
+      <div className="billboard-center-ticker">
+        <div className="billboard-center-ticker-inner">
+          <BillboardTopTicker />
+        </div>
+      </div>
 
       {/* Week Compare Bar - placed under the marquee */}
       <div className="billboard-week-compare-wrapper" style={{ padding: '12px 16px' }}>

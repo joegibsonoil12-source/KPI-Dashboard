@@ -746,3 +746,89 @@ html, body, #root {
   font-size: 20px;
 }
 .billboard-page.is-fullscreen .delivery-input-preview { font-size: 18px; gap: 28px; }
+
+/* Centered Ticker Styles - Landscape Fullscreen Friendly */
+.billboard-center-ticker {
+  width: 100%;
+  padding: 24px 16px;
+  background: linear-gradient(90deg, #000000 0%, #0a0a0a 100%);
+  border-top: 2px solid rgba(0, 255, 136, 0.4);
+  border-bottom: 2px solid rgba(0, 255, 136, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 16px 0;
+}
+
+.billboard-center-ticker-inner {
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Center ticker items - larger and more readable */
+.billboard-center-ticker .billboard-top-ticker-container {
+  height: auto;
+  min-height: 48px;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  position: static;
+}
+
+.billboard-center-ticker .billboard-top-ticker-item {
+  height: auto;
+  padding: 0 32px;
+  gap: 14px;
+}
+
+.billboard-center-ticker .billboard-top-ticker-label {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+}
+
+.billboard-center-ticker .billboard-top-ticker-value {
+  font-size: 24px;
+  letter-spacing: 0.04em;
+}
+
+.billboard-center-ticker .billboard-top-ticker-chip {
+  font-size: 14px;
+  padding: 4px 10px;
+  border-radius: 4px;
+}
+
+/* Fullscreen adjustments for center ticker */
+.billboard-page.is-fullscreen .billboard-center-ticker {
+  padding: 32px 16px;
+}
+
+.billboard-page.is-fullscreen .billboard-center-ticker .billboard-top-ticker-label {
+  font-size: 15px;
+}
+
+.billboard-page.is-fullscreen .billboard-center-ticker .billboard-top-ticker-value {
+  font-size: 28px;
+}
+
+.billboard-page.is-fullscreen .billboard-center-ticker .billboard-top-ticker-chip {
+  font-size: 16px;
+  padding: 5px 12px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .billboard-center-ticker {
+    padding: 16px 12px;
+  }
+  
+  .billboard-center-ticker .billboard-top-ticker-value {
+    font-size: 20px;
+  }
+  
+  .billboard-center-ticker .billboard-top-ticker-label {
+    font-size: 11px;
+  }
+}
