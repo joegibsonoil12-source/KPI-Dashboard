@@ -20,6 +20,7 @@ import { readRefreshSec, secondsToMs } from '../../lib/readRefreshSec';
  */
 export default function BillboardPage(props) {
   const [isTVMode, setIsTVMode] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [weekCompareData, setWeekCompareData] = useState({
     thisWeekTotalRevenue: 0,
     lastWeekTotalRevenue: 0,
@@ -33,6 +34,35 @@ export default function BillboardPage(props) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('tv') === '1') setIsTVMode(true);
+    // Check if we're in popout or TV mode on initial load
+    if (params.get('popout') === '1' || params.get('tv') === '1') {
+      setIsFullscreen(true);
+    }
+  }, []);
+
+  // Listen for fullscreen change events to update state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = Boolean(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+      setIsFullscreen(isCurrentlyFullscreen);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
   }, []);
 
   const fetchWeekCompareData = useCallback(async () => {
@@ -87,13 +117,13 @@ export default function BillboardPage(props) {
   };
 
   return (
-    <div id="billboard-root" className="billboard-page">
+    <div id="billboard-root" className={`billboard-page ${isFullscreen ? 'is-fullscreen' : ''}`}>
       {/* NASDAQ-style top ticker */}
       <BillboardTopTicker />
       
       {!isTVMode && (
         <header className="billboard-header">
-          <h1>Operations Billboard</h1>
+          <div className="billboard-title-placeholder" aria-hidden="true"></div>
           <div className="billboard-controls">
             <button onClick={handleRefresh}>Refresh</button>
             <FullscreenButton targetId="billboard-root" />
