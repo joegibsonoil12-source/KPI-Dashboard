@@ -43,51 +43,33 @@ export default function BillboardTopTicker({ pollInterval = 30000 }) {
   const [chips, setChips] = useState(SAMPLE_CHIPS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Helper: read runtime API base if available (for backward compatibility)
-  const readRuntimeApiBase = () => {
-    if (typeof window !== 'undefined' && window.__ENV?.BILLBOARD_API_BASE) {
-      return window.__ENV.BILLBOARD_API_BASE;
-    }
-    if (import.meta.env.VITE_BILLBOARD_API_BASE) {
-      return import.meta.env.VITE_BILLBOARD_API_BASE;
-    }
-    return null;
-  };
+  const [dataSource, setDataSource] = useState('loading');
 
   const fetchData = async () => {
     try {
-      // Primary: Use client-side Supabase
+      // GitHub Pages: Use ONLY client-side Supabase (no server API)
+      console.log('[BillboardTopTicker] Fetching data from Supabase...');
       const summary = await clientGetBillboardSummary();
       
-      if (summary) {
+      if (summary && summary.serviceTracking && summary.deliveryTickets) {
         // Map delivery and service fields to chips
         const mappedChips = mapSummaryToChips(summary);
         setChips(mappedChips);
         setError(null);
+        setDataSource('supabase');
+        console.log('[BillboardTopTicker] Successfully loaded data from Supabase:', summary);
       } else {
-        // If client-side fails, try runtime API base as fallback
-        const apiBase = readRuntimeApiBase();
-        if (apiBase) {
-          const response = await fetch(`${apiBase}/api/billboard-summary`);
-          if (response.ok) {
-            const json = await response.json();
-            const mappedChips = mapSummaryToChips(json);
-            setChips(mappedChips);
-            setError(null);
-          } else {
-            throw new Error('API unavailable');
-          }
-        } else {
-          // No data from client or API, use SAMPLE_CHIPS (already set)
-          console.warn('[BillboardTopTicker] No data available, using sample chips');
-          setError('No data');
-        }
+        // No real data available, show sample
+        console.warn('[BillboardTopTicker] No data from Supabase, using sample data');
+        setChips(SAMPLE_CHIPS);
+        setError('Using sample data - configure Supabase credentials');
+        setDataSource('sample');
       }
     } catch (err) {
       console.error('[BillboardTopTicker] Fetch error:', err);
       setError(err.message);
-      // Keep SAMPLE_CHIPS as fallback
+      setChips(SAMPLE_CHIPS);
+      setDataSource('error');
     } finally {
       setLoading(false);
     }
@@ -109,7 +91,15 @@ export default function BillboardTopTicker({ pollInterval = 30000 }) {
 
   return (
     <div className="billboard-top-ticker-container">
-      <Marquee speed={40} gradient={false} pauseOnHover={false}>
+      <Marquee 
+        speed={60}
+        gradient={false} 
+        pauseOnHover={false}
+        pauseOnClick={false}
+        delay={0}
+        play={true}
+        direction="left"
+      >
         {chips.map((chip, idx) => (
           <div key={idx} className="billboard-top-ticker-item">
             <span className="billboard-top-ticker-label">{chip.label}</span>
@@ -122,6 +112,11 @@ export default function BillboardTopTicker({ pollInterval = 30000 }) {
           </div>
         ))}
       </Marquee>
+      {dataSource === 'sample' && (
+        <div className="billboard-data-warning">
+          ⚠️ Sample data - Configure Supabase in Settings
+        </div>
+      )}
     </div>
   );
 }
