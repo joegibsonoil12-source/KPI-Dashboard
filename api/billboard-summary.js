@@ -16,7 +16,7 @@ export default async function handler(req, res) {
   if (!supabaseUrl || !supabaseServiceRole) {
     return res.status(200).json({
       deliveryTickets: { totalTickets: 0, totalGallons: 0, revenue: 0 },
-      serviceTracking: { completed: 0, completedRevenue: 0, pipelineRevenue: 0 },
+      serviceTracking: { completed: 0, completedRevenue: 0, pipelineRevenue: 0, scheduledJobs: 0, scheduledRevenue: 0 },
       weekCompare: { percentChange: 0 }
     });
   }
@@ -46,20 +46,26 @@ export default async function handler(req, res) {
     const serviceSql = `
       SELECT
         COUNT(*) FILTER (WHERE status = 'completed')::int as completed,
-        COALESCE(SUM(CASE WHEN status = 'completed' THEN amount ELSE 0 END),0) as completedRevenue,
-        COALESCE(SUM(CASE WHEN status = 'pipeline' THEN amount ELSE 0 END),0) as pipelineRevenue
-      FROM service_tickets
-      WHERE DATE_TRUNC('week', created_at) = DATE_TRUNC('week', CURRENT_DATE)
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN job_amount ELSE 0 END),0) as completedRevenue,
+        COALESCE(SUM(CASE WHEN status = 'pipeline' THEN job_amount ELSE 0 END),0) as pipelineRevenue,
+        COUNT(*) FILTER (WHERE status IN ('scheduled','assigned','confirmed'))::int as scheduledJobs,
+        COALESCE(SUM(CASE WHEN status IN ('scheduled','assigned','confirmed') THEN job_amount ELSE 0 END),0) as scheduledRevenue
+      FROM service_jobs
+      WHERE DATE_TRUNC('week', job_date) = DATE_TRUNC('week', CURRENT_DATE)
     `;
 
     const { data: serviceData, error: sErr } = await supabase.rpc('sql', { q: serviceSql }).catch(e => ({ data: null, error: e }));
-    let service = { completed: 0, completedRevenue: 0, pipelineRevenue: 0 };
+    let service = { completed: 0, completedRevenue: 0, pipelineRevenue: 0, scheduledJobs: 0, scheduledRevenue: 0 };
     if (!sErr && serviceData && serviceData.length) {
       const row = serviceData[0];
       service.completed = Number(row.completed || 0);
       service.completedRevenue = Number(row.completedrevenue || 0);
-      service.pipelineRevenue = Number(row.pipelinerrevenue || row.pipelinedrevenue || 0);
+      service.pipelineRevenue = Number(row.pipelinerevenue || 0);
+      service.scheduledJobs = Number(row.scheduledjobs || 0);
+      service.scheduledRevenue = Number(row.scheduledrevenue || 0);
     }
+    
+    console.debug('[billboard-summary] Service data:', { scheduledJobs: service.scheduledJobs, scheduledRevenue: service.scheduledRevenue });
 
     const weekSql = `
       SELECT
@@ -68,7 +74,7 @@ export default async function handler(req, res) {
       FROM (
         SELECT amount, created_at FROM delivery_tickets
         UNION ALL
-        SELECT amount, created_at FROM service_tickets
+        SELECT job_amount as amount, created_at FROM service_jobs
       ) as unioned
     `;
 
@@ -91,17 +97,19 @@ export default async function handler(req, res) {
       serviceTracking: {
         completed: safeNum(service.completed || 0, 0),
         completedRevenue: typeof service.completedRevenue === 'number' ? Number(service.completedRevenue.toFixed ? service.completedRevenue.toFixed(2) : Number(service.completedRevenue).toFixed(2)) : Number(safeNum(service.completedRevenue || 0, 2)),
-        pipelineRevenue: typeof service.pipelineRevenue === 'number' ? Number(service.pipelineRevenue.toFixed ? service.pipelineRevenue.toFixed(2) : Number(service.pipelineRevenue).toFixed(2)) : Number(safeNum(service.pipelineRevenue || 0, 2))
+        pipelineRevenue: typeof service.pipelineRevenue === 'number' ? Number(service.pipelineRevenue.toFixed ? service.pipelineRevenue.toFixed(2) : Number(service.pipelineRevenue).toFixed(2)) : Number(safeNum(service.pipelineRevenue || 0, 2)),
+        scheduledJobs: safeNum(service.scheduledJobs || 0, 0),
+        scheduledRevenue: typeof service.scheduledRevenue === 'number' ? Number(service.scheduledRevenue.toFixed ? service.scheduledRevenue.toFixed(2) : Number(service.scheduledRevenue).toFixed(2)) : Number(safeNum(service.scheduledRevenue || 0, 2))
       },
       weekCompare: { percentChange: Number(weekCompare.percentChange || 0) }
     };
 
     return res.status(200).json(response);
   } catch (err) {
-    console.error('billboard-summary error', err);
+    console.error('[billboard-summary] error', err);
     return res.status(200).json({
       deliveryTickets: { totalTickets: 0, totalGallons: 0, revenue: 0 },
-      serviceTracking: { completed: 0, completedRevenue: 0, pipelineRevenue: 0 },
+      serviceTracking: { completed: 0, completedRevenue: 0, pipelineRevenue: 0, scheduledJobs: 0, scheduledRevenue: 0 },
       weekCompare: { percentChange: 0 }
     });
   }

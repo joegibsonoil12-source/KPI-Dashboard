@@ -9,6 +9,7 @@ import {
   deleteServiceJob,
   checkServiceJobsTableExists,
 } from "../lib/serviceHelpers";
+import ServiceUploadButton from "./Imports/ServiceUploadButton";
 
 /**
  * Get status badge color
@@ -295,6 +296,7 @@ export default function ServiceTracking() {
           >
             {isUploading ? "Processing..." : "Upload Report"}
           </button>
+          <ServiceUploadButton />
         </div>
         <input
           ref={fileInputRef}

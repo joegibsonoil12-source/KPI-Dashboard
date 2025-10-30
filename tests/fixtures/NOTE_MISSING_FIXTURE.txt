@@ -1,0 +1,35 @@
+REQUIRED: 0303_001.pdf
+
+This directory needs the test fixture file: 0303_001.pdf
+
+Description:
+- 7-page scanned delivery/sales report
+- Contains tabular data with scheduled jobs and revenue
+- Used for OCR parser tuning and integration testing
+
+Purpose:
+- Canonical test file for OCR parsing
+- Validates table detection, column mapping, and data extraction
+- Used to generate sample output for PR documentation (first 10 parsed rows)
+
+To provide this file:
+1. Place 0303_001.pdf in this directory (tests/fixtures/)
+2. Run integration test: npm test tests/ocrParser.test.js
+3. Review parser output
+4. Include first 10 parsed rows in PR description
+
+Expected Output Format:
+[
+  {
+    "jobNumber": "12345",
+    "customer": "Customer Name",
+    "date": "2024-03-03",
+    "status": "scheduled",
+    "amount": 150.00,
+    "page": 1,
+    "y": 120
+  },
+  ...
+]
+
+Note: Until this file is provided, the integration test will be skipped.

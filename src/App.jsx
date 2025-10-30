@@ -14,6 +14,7 @@ import ExecutiveDashboard from "./components/dashboard/ExecutiveDashboard";
 import Billboard from "./components/Billboard";
 import Budget from "./components/Budget";
 import GraphsPage from "./components/Graphs/GraphsPage";
+import ImportsReview from "./components/Imports/ImportsReview";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -875,6 +876,7 @@ const TABS = [
   { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,   Component: StoreInvoicing },
   { key: "tickets",      label: "Delivery Tickets", adminOnly: true,   Component: DeliveryTicketsEditor },
   { key: "service",      label: "Service Tracking", adminOnly: true,   Component: ServiceTracking },
+  { key: "imports",      label: "Imports Review",   adminOnly: true,   Component: ImportsReview },
 ];
 
 /* ========================================================================== */
