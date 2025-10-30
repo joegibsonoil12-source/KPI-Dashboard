@@ -41,23 +41,27 @@ const anonLS = typeof window !== 'undefined' ? (localStorage.getItem('SUPABASE_A
 const urlFinal = url || urlLS;
 const anonFinal = anon || anonLS;
 
+// Use placeholder values if credentials are missing to prevent errors
+const finalUrl = urlFinal || 'https://placeholder.supabase.co';
+const finalAnon = anonFinal || 'placeholder-anon-key';
+
 if (!urlFinal || !anonFinal) {
   // Keep message terse so it isn't noisy in production, but helpful in dev
   // (If you run in CI you'll normally set these at build time.)
   // DO NOT commit service role keys to source. Use environment variables or secrets.
   /* eslint-disable no-console */
   console.warn(
-    '[supabaseClient] Missing Supabase URL or anon key. Provide VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or NEXT_PUBLIC_/REACT_APP_ equivalents) via environment variables, or configure via Supabase Settings panel.'
+    '[supabaseClient] Missing Supabase URL or anon key. Provide VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (or NEXT_PUBLIC_/REACT_APP_ equivalents) via environment variables, or configure via Supabase Settings panel. Using placeholder values.'
   );
   /* eslint-enable no-console */
 }
 
-export const supabase = createClient(urlFinal, anonFinal, {
+export const supabase = createClient(finalUrl, finalAnon, {
   auth: { persistSession: true, autoRefreshToken: true },
 });
 
 // Export factory function for creating client instances (keeps existing API)
-export function createSupabaseClient(supabaseUrl = urlFinal, supabaseKey = anonFinal) {
+export function createSupabaseClient(supabaseUrl = finalUrl, supabaseKey = finalAnon) {
   return createClient(supabaseUrl, supabaseKey, {
     auth: { persistSession: true, autoRefreshToken: true },
   });
