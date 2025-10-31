@@ -276,6 +276,28 @@ exports.handler = async (event, context) => {
       scheduledRevenue: merged.summary.scheduledRevenue,
     });
     
+    // Run import type inference
+    const detection = ocrParser.inferImportType(merged.columnMap, merged.rows);
+    
+    console.debug('[imports-process] Detection result:', {
+      type: detection.type,
+      confidence: detection.confidence,
+      hits: detection.hits,
+    });
+    
+    // Update meta with import type if detected as delivery
+    const updatedMeta = importRecord.meta || {};
+    if (detection.type === 'delivery') {
+      updatedMeta.importType = 'delivery';
+    }
+    updatedMeta.detection = {
+      type: detection.type,
+      confidence: detection.confidence,
+      hits: detection.hits,
+      tokenCount: detection.tokenCount,
+      detectedAt: new Date().toISOString(),
+    };
+    
     // Update import record
     const { error: updateError } = await supabase
       .from('ticket_imports')
@@ -284,6 +306,7 @@ exports.handler = async (event, context) => {
         parsed: merged,
         confidence: merged.confidence,
         status: merged.status,
+        meta: updatedMeta,
         processed_at: new Date().toISOString(),
       })
       .eq('id', importId);

@@ -13,6 +13,7 @@ export default function ReviewPage() {
   const [imports, setImports] = useState([]);
   const [selectedImport, setSelectedImport] = useState(null);
   const [editedRows, setEditedRows] = useState([]);
+  const [includedRows, setIncludedRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [signedUrls, setSignedUrls] = useState({});
@@ -73,6 +74,8 @@ export default function ReviewPage() {
 
       setSelectedImport(data);
       setEditedRows(data.parsed?.rows || []);
+      // Initialize all rows as included by default
+      setIncludedRows(new Array(data.parsed?.rows?.length || 0).fill(true));
 
       // Generate signed URLs for attached files
       if (data.attached_files && data.attached_files.length > 0) {
@@ -109,18 +112,40 @@ export default function ReviewPage() {
   };
 
   /**
+   * Toggle row inclusion
+   */
+  const handleRowToggle = (index) => {
+    setIncludedRows(prev => {
+      const updated = [...prev];
+      updated[index] = !updated[index];
+      return updated;
+    });
+  };
+
+  /**
+   * Toggle all rows
+   */
+  const handleToggleAll = () => {
+    const allIncluded = includedRows.every(v => v);
+    setIncludedRows(new Array(includedRows.length).fill(!allIncluded));
+  };
+
+  /**
    * Save draft (update parsed data)
    */
   const handleSaveDraft = async () => {
     if (!selectedImport) return;
 
     try {
+      // Filter to only included rows
+      const rowsToSave = editedRows.filter((row, idx) => includedRows[idx]);
+      
       const { error } = await supabase
         .from('ticket_imports')
         .update({
           parsed: {
             ...selectedImport.parsed,
-            rows: editedRows,
+            rows: rowsToSave,
           },
         })
         .eq('id', selectedImport.id);
@@ -143,12 +168,19 @@ export default function ReviewPage() {
   const handleAccept = async () => {
     if (!selectedImport) return;
 
-    if (!confirm('Accept this import and create records?')) {
+    const includedCount = includedRows.filter(v => v).length;
+    
+    if (includedCount === 0) {
+      alert('No rows selected for import');
+      return;
+    }
+
+    if (!confirm(`Accept this import and create ${includedCount} record(s)?`)) {
       return;
     }
 
     try {
-      // First save any edits
+      // First save any edits (this filters to included rows)
       await handleSaveDraft();
 
       // Call accept API
@@ -168,7 +200,12 @@ export default function ReviewPage() {
         throw new Error(result.message || 'Accept failed');
       }
 
-      alert(`Successfully created ${editedRows.length} record(s)`);
+      let message = `Successfully created ${result.inserted || includedCount} record(s)`;
+      if (result.failed > 0) {
+        message += `\n${result.failed} row(s) failed validation`;
+      }
+      alert(message);
+      
       setSelectedImport(null);
       loadImports();
     } catch (err) {
@@ -303,6 +340,55 @@ export default function ReviewPage() {
               </div>
             </div>
 
+            {/* Detection Info */}
+            {selectedImport.meta?.detection && (
+              <div className={`p-4 rounded-lg border-2 ${
+                selectedImport.meta.detection.type === 'delivery'
+                  ? 'bg-blue-50 border-blue-300'
+                  : 'bg-green-50 border-green-300'
+              }`}>
+                <h3 className="text-lg font-semibold mb-2">
+                  Import Type Detection
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Detected Type:</span>{' '}
+                    <span className={`px-2 py-1 rounded font-bold ${
+                      selectedImport.meta.detection.type === 'delivery'
+                        ? 'bg-blue-200 text-blue-900'
+                        : 'bg-green-200 text-green-900'
+                    }`}>
+                      {selectedImport.meta.detection.type.toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Detection Confidence:</span>{' '}
+                    {(selectedImport.meta.detection.confidence * 100).toFixed(1)}%
+                  </div>
+                  <div className="col-span-2">
+                    <span className="font-medium">Matched Tokens:</span>{' '}
+                    {selectedImport.meta.detection.hits?.join(', ') || 'None'}
+                    {' '}({selectedImport.meta.detection.tokenCount || 0} matches)
+                  </div>
+                </div>
+                {selectedImport.meta.importType && (
+                  <div className="mt-2 text-sm">
+                    <span className="font-medium">Import Type Set:</span>{' '}
+                    <span className="text-blue-700 font-semibold">
+                      {selectedImport.meta.importType}
+                    </span>
+                  </div>
+                )}
+                {selectedImport.meta.reclassified_at && (
+                  <div className="mt-2 text-sm text-orange-700">
+                    <span className="font-medium">⚠ Reclassified:</span>{' '}
+                    {new Date(selectedImport.meta.reclassified_at).toLocaleString()}
+                    {' '}by {selectedImport.meta.reclassified_by || 'unknown'}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Attached Images */}
             {selectedImport.attached_files && selectedImport.attached_files.length > 0 && (
               <div>
@@ -337,11 +423,29 @@ export default function ReviewPage() {
             {/* Parsed Rows */}
             {editedRows.length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold mb-3">Parsed Data ({editedRows.length} rows)</h3>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold">
+                    Parsed Data ({editedRows.length} rows)
+                  </h3>
+                  <div className="text-sm">
+                    <span className="font-medium">Estimated Insert Count:</span>{' '}
+                    <span className="text-blue-600 font-bold text-lg">
+                      {includedRows.filter(v => v).length}
+                    </span>
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full border border-gray-300">
                     <thead className="bg-gray-100">
                       <tr>
+                        <th className="border px-2 py-2 text-center text-sm">
+                          <input
+                            type="checkbox"
+                            checked={includedRows.every(v => v)}
+                            onChange={handleToggleAll}
+                            title="Toggle All"
+                          />
+                        </th>
                         <th className="border px-3 py-2 text-left text-sm">Job #</th>
                         <th className="border px-3 py-2 text-left text-sm">Customer</th>
                         <th className="border px-3 py-2 text-left text-sm">Date</th>
@@ -351,7 +455,14 @@ export default function ReviewPage() {
                     </thead>
                     <tbody>
                       {editedRows.map((row, idx) => (
-                        <tr key={idx}>
+                        <tr key={idx} className={!includedRows[idx] ? 'bg-gray-100 opacity-50' : ''}>
+                          <td className="border px-2 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={includedRows[idx] || false}
+                              onChange={() => handleRowToggle(idx)}
+                            />
+                          </td>
                           <td className="border px-3 py-2">
                             <input
                               type="text"

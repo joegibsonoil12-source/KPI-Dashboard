@@ -446,6 +446,62 @@ function calculateSummary(rows) {
 }
 
 /**
+ * Infer import type from parsed data using delivery token detection
+ * @param {Object} columnMap - Column mapping from parsing
+ * @param {Array} rows - Parsed data rows
+ * @returns {Object} - Detection result with type and confidence
+ */
+function inferImportType(columnMap, rows) {
+  console.debug('[ocrParser] Running import type inference');
+  
+  // Delivery-specific tokens to detect
+  const deliveryTokens = [
+    'record', 'refer', 'account', 'customer', 
+    'driver', 'truck', 'gallons', 'qty', 
+    'amount', 'extension'
+  ];
+  
+  // Extract column values (field names) from columnMap
+  const columnValues = Object.values(columnMap || {}).map(v => 
+    (v || '').toLowerCase().trim()
+  );
+  
+  // Also check for delivery tokens in raw column headers
+  const allText = columnValues.join(' ');
+  
+  // Find matching delivery tokens
+  const hits = deliveryTokens.filter(token => {
+    // Check if token appears in any column value
+    return columnValues.some(col => col.includes(token)) || 
+           allText.includes(token);
+  });
+  
+  console.debug('[ocrParser] Delivery token hits:', hits);
+  
+  // Decision: if 4 or more hits => delivery, else service
+  const isDelivery = hits.length >= 4;
+  const type = isDelivery ? 'delivery' : 'service';
+  
+  // Calculate confidence: hits out of 8 possible tokens
+  // (using 8 as denominator per spec for normalized confidence)
+  const confidence = hits.length / 8;
+  
+  console.debug('[ocrParser] Import type inference result:', { 
+    type, 
+    confidence, 
+    hitsCount: hits.length,
+    hits 
+  });
+  
+  return {
+    type,
+    confidence,
+    hits,
+    tokenCount: hits.length,
+  };
+}
+
+/**
  * Main parse function
  * @param {Buffer} buffer - File buffer
  * @param {string} mimeType - File MIME type
@@ -511,4 +567,5 @@ module.exports = {
   detectColumnPositions,
   mapColumnHeaders,
   calculateSummary,
+  inferImportType,
 };

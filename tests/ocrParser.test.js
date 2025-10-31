@@ -162,6 +162,85 @@ describe('OCR Parser', () => {
       expect(rows[1].length).toBe(2); // C, D
     });
   });
+  
+  describe('inferImportType', () => {
+    it('should detect delivery type with 4+ delivery tokens', () => {
+      const columnMap = {
+        0: 'record',
+        1: 'customer',
+        2: 'driver',
+        3: 'truck',
+        4: 'gallons',
+      };
+      
+      const rows = [];
+      
+      const result = ocrParser.inferImportType(columnMap, rows);
+      
+      expect(result.type).toBe('delivery');
+      expect(result.hits.length).toBeGreaterThanOrEqual(4);
+      expect(result.confidence).toBeGreaterThan(0);
+    });
+    
+    it('should detect service type with < 4 delivery tokens', () => {
+      const columnMap = {
+        0: 'job',
+        1: 'customer',
+        2: 'technician',
+        3: 'service',
+      };
+      
+      const rows = [];
+      
+      const result = ocrParser.inferImportType(columnMap, rows);
+      
+      expect(result.type).toBe('service');
+      expect(result.hits.length).toBeLessThan(4);
+    });
+    
+    it('should detect delivery with mixed case tokens', () => {
+      const columnMap = {
+        0: 'Record',
+        1: 'CUSTOMER',
+        2: 'Driver',
+        3: 'TRUCK',
+        4: 'Gallons',
+        5: 'Amount',
+      };
+      
+      const rows = [];
+      
+      const result = ocrParser.inferImportType(columnMap, rows);
+      
+      expect(result.type).toBe('delivery');
+      expect(result.confidence).toBeGreaterThanOrEqual(0.5); // 6 hits / 8
+    });
+    
+    it('should calculate confidence correctly', () => {
+      const columnMap = {
+        0: 'gallons',
+        1: 'customer',
+        2: 'driver',
+        3: 'truck',
+      };
+      
+      const rows = [];
+      
+      const result = ocrParser.inferImportType(columnMap, rows);
+      
+      expect(result.type).toBe('delivery');
+      expect(result.confidence).toBe(0.5); // 4 hits / 8 tokens
+      expect(result.tokenCount).toBe(4);
+    });
+    
+    it('should handle empty column map', () => {
+      const result = ocrParser.inferImportType({}, []);
+      
+      expect(result.type).toBe('service');
+      expect(result.confidence).toBe(0);
+      expect(result.hits.length).toBe(0);
+    });
+  });
 });
 
 // Integration test with fixture file
