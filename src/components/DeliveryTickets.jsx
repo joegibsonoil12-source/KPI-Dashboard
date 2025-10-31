@@ -19,6 +19,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import * as XLSX from "xlsx";
 import { useAutosave } from "../lib/useAutosave";
 import SaveBar from "./SaveBar";
+import UploadServiceScanButton from "./UploadServiceScanButton";
 
 /*
 DeliveryTickets (Supabase-backed)
@@ -852,7 +853,10 @@ export default function DeliveryTickets() {
       {/* DELIVERY TOP BAR */}
       <div className="delivery-top-bar" role="region" aria-label="Delivery header">
         <div>Delivery Tickets</div>
-        <div style={{marginLeft: 'auto', fontSize:'14px', opacity:0.85}}>{filteredTickets.length} tickets on this page</div>
+        <div style={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px'}}>
+          <UploadServiceScanButton />
+          <div style={{fontSize:'14px', opacity:0.85}}>{filteredTickets.length} tickets on this page</div>
+        </div>
       </div>
 
       {/* INPUT PREVIEW — shows live values for the focused row */}
