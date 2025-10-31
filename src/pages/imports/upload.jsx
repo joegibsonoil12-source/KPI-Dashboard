@@ -12,7 +12,6 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState(null);
-  const [importType, setImportType] = useState('service');
   const fileInputRef = useRef(null);
 
   /**
@@ -97,9 +96,7 @@ export default function UploadPage() {
         },
         body: JSON.stringify({
           files: filesData,
-          meta: {
-            importType: importType,
-          },
+          meta: {},
         }),
       });
 
@@ -162,31 +159,11 @@ export default function UploadPage() {
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <h1 className="text-3xl font-bold mb-6">Upload Scanned Tickets</h1>
 
-      {/* Import Type Selection */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">Import Type</label>
-        <div className="flex gap-4">
-          <label className="flex items-center">
-            <input
-              type="radio"
-              value="service"
-              checked={importType === 'service'}
-              onChange={(e) => setImportType(e.target.value)}
-              className="mr-2"
-            />
-            Service Jobs
-          </label>
-          <label className="flex items-center">
-            <input
-              type="radio"
-              value="delivery"
-              checked={importType === 'delivery'}
-              onChange={(e) => setImportType(e.target.value)}
-              className="mr-2"
-            />
-            Delivery Tickets
-          </label>
-        </div>
+      <div className="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded">
+        <p className="text-sm">
+          <strong>Auto-Detection:</strong> Upload your scanned tickets (service or delivery). 
+          The system will automatically detect the type based on content.
+        </p>
       </div>
 
       {/* Drag/Drop Zone */}

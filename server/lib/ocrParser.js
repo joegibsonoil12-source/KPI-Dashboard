@@ -456,36 +456,19 @@ function inferImportType(columnMap, rows) {
   console.debug('[ocrParser] Running import type inference');
   
   // Delivery-specific tokens to detect
-  const deliveryTokens = [
-    'record', 'refer', 'account', 'customer', 
-    'driver', 'truck', 'gallons', 'qty', 
-    'amount', 'extension'
-  ];
+  const deliveryTokens = ['record', 'refer', 'account', 'customer', 'driver', 'truck', 'gallons', 'qty', 'amount', 'extension'];
   
-  // Extract column values (field names) from columnMap
-  const columnValues = Object.values(columnMap || {}).map(v => 
-    (v || '').toLowerCase().trim()
-  );
-  
-  // Also check for delivery tokens in raw column headers
-  const allText = columnValues.join(' ');
+  // Extract column values (field names) from columnMap and normalize
+  const tokens = Object.values(columnMap || {}).map(t => t && t.toLowerCase());
   
   // Find matching delivery tokens
-  const hits = deliveryTokens.filter(token => {
-    // Check if token appears in any column value
-    return columnValues.some(col => col.includes(token)) || 
-           allText.includes(token);
-  });
+  const hits = deliveryTokens.filter(t => tokens.includes(t));
   
-  console.debug('[ocrParser] Delivery token hits:', hits);
+  // Calculate confidence: cap at 1.0 using Math.min
+  const confidence = Math.min(1, hits.length / 8);
   
   // Decision: if 4 or more hits => delivery, else service
-  const isDelivery = hits.length >= 4;
-  const type = isDelivery ? 'delivery' : 'service';
-  
-  // Calculate confidence: hits out of total possible delivery tokens
-  // Using 8 as denominator per spec requirement for normalized confidence scoring
-  const confidence = hits.length / 8;
+  const type = hits.length >= 4 ? 'delivery' : 'service';
   
   console.debug('[ocrParser] Import type inference result:', { 
     type, 
