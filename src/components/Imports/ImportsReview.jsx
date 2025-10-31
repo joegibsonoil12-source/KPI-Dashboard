@@ -132,7 +132,7 @@ function EditableRow({ row, index, onUpdate, included, onIncludeChange, importTy
         </tr>
         {showRaw && row.rawColumns && (
           <tr className="bg-gray-50">
-            <td colSpan="9" className="px-4 py-2 text-xs text-gray-600">
+            <td colSpan={isDelivery ? 9 : 8} className="px-4 py-2 text-xs text-gray-600">
               <div className="font-medium mb-1">Raw Columns:</div>
               <div className="font-mono">{JSON.stringify(row.rawColumns)}</div>
             </td>
@@ -177,7 +177,10 @@ function EditableRow({ row, index, onUpdate, included, onIncludeChange, importTy
               type="number"
               step="0.01"
               value={editedRow.qty || editedRow.gallons || ''}
-              onChange={(e) => setEditedRow({ ...editedRow, qty: parseFloat(e.target.value) || 0, gallons: parseFloat(e.target.value) || 0 })}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value) || 0;
+                setEditedRow({ ...editedRow, qty: val });
+              }}
               className="w-full px-2 py-1 text-sm border rounded"
               placeholder="Qty/Gallons"
             />
@@ -558,7 +561,14 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       <input
                         type="checkbox"
-                        checked={includedRows.every(Boolean)}
+                        checked={includedRows.length > 0 && includedRows.every(Boolean)}
+                        ref={(el) => {
+                          if (el) {
+                            const someChecked = includedRows.some(Boolean);
+                            const allChecked = includedRows.every(Boolean);
+                            el.indeterminate = someChecked && !allChecked;
+                          }
+                        }}
                         onChange={(e) => setIncludedRows(rows.map(() => e.target.checked))}
                         className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                         title="Select/Deselect All"

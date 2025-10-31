@@ -301,8 +301,8 @@ describe('OCR Parser Integration', () => {
     const result = ocrParser.inferImportType(mockColumnMap, mockRows);
     
     expect(result.type).toBe('delivery');
-    expect(result.confidence).toBeGreaterThanOrEqual(0.5); // 8 tokens matched / 8 = 1.0
-    expect(result.hits.length).toBeGreaterThanOrEqual(4);
+    expect(result.confidence).toBe(1.0); // 8 tokens matched / 8 = 1.0
+    expect(result.hits.length).toBe(8);
     expect(result.hits).toContain('customer');
     expect(result.hits).toContain('driver');
     expect(result.hits).toContain('truck');
