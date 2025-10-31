@@ -13,6 +13,9 @@ export default function ReviewPage() {
   const [imports, setImports] = useState([]);
   const [selectedImport, setSelectedImport] = useState(null);
   const [editedRows, setEditedRows] = useState([]);
+  const [includedRows, setIncludedRows] = useState([]);
+  const [columnMap, setColumnMap] = useState({});
+  const [showColumnMapper, setShowColumnMapper] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [signedUrls, setSignedUrls] = useState({});
@@ -73,6 +76,10 @@ export default function ReviewPage() {
 
       setSelectedImport(data);
       setEditedRows(data.parsed?.rows || []);
+      // Initialize all rows as included by default
+      setIncludedRows(new Array(data.parsed?.rows?.length || 0).fill(true));
+      // Initialize column map
+      setColumnMap(data.parsed?.columnMap || {});
 
       // Generate signed URLs for attached files
       if (data.attached_files && data.attached_files.length > 0) {
@@ -109,18 +116,40 @@ export default function ReviewPage() {
   };
 
   /**
+   * Toggle row inclusion
+   */
+  const handleRowToggle = (index) => {
+    setIncludedRows(prev => {
+      const updated = [...prev];
+      updated[index] = !updated[index];
+      return updated;
+    });
+  };
+
+  /**
+   * Toggle all rows
+   */
+  const handleToggleAll = () => {
+    const allIncluded = includedRows.every(v => v);
+    setIncludedRows(new Array(includedRows.length).fill(!allIncluded));
+  };
+
+  /**
    * Save draft (update parsed data)
    */
   const handleSaveDraft = async () => {
     if (!selectedImport) return;
 
     try {
+      // Filter to only included rows
+      const rowsToSave = editedRows.filter((row, idx) => includedRows[idx]);
+      
       const { error } = await supabase
         .from('ticket_imports')
         .update({
           parsed: {
             ...selectedImport.parsed,
-            rows: editedRows,
+            rows: rowsToSave,
           },
         })
         .eq('id', selectedImport.id);
@@ -143,12 +172,19 @@ export default function ReviewPage() {
   const handleAccept = async () => {
     if (!selectedImport) return;
 
-    if (!confirm('Accept this import and create records?')) {
+    const includedCount = includedRows.filter(v => v).length;
+    
+    if (includedCount === 0) {
+      alert('No rows selected for import');
+      return;
+    }
+
+    if (!confirm(`Accept this import and create ${includedCount} record(s)?`)) {
       return;
     }
 
     try {
-      // First save any edits
+      // First save any edits (this filters to included rows)
       await handleSaveDraft();
 
       // Call accept API
@@ -168,7 +204,12 @@ export default function ReviewPage() {
         throw new Error(result.message || 'Accept failed');
       }
 
-      alert(`Successfully created ${editedRows.length} record(s)`);
+      let message = `Successfully created ${result.inserted || includedCount} record(s)`;
+      if (result.failed > 0) {
+        message += `\n${result.failed} row(s) failed validation`;
+      }
+      alert(message);
+      
       setSelectedImport(null);
       loadImports();
     } catch (err) {
@@ -303,6 +344,155 @@ export default function ReviewPage() {
               </div>
             </div>
 
+            {/* Detection Info */}
+            {selectedImport.meta?.detection && (
+              <div className={`p-4 rounded-lg border-2 ${
+                selectedImport.meta.detection.type === 'delivery'
+                  ? 'bg-blue-50 border-blue-300'
+                  : 'bg-green-50 border-green-300'
+              }`}>
+                <h3 className="text-lg font-semibold mb-2">
+                  Import Type Detection
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Detected Type:</span>{' '}
+                    <span className={`px-2 py-1 rounded font-bold ${
+                      selectedImport.meta.detection.type === 'delivery'
+                        ? 'bg-blue-200 text-blue-900'
+                        : 'bg-green-200 text-green-900'
+                    }`}>
+                      {selectedImport.meta.detection.type.toUpperCase()}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium">Detection Confidence:</span>{' '}
+                    {(selectedImport.meta.detection.confidence * 100).toFixed(1)}%
+                  </div>
+                  <div className="col-span-2">
+                    <span className="font-medium">Matched Tokens:</span>{' '}
+                    {selectedImport.meta.detection.hits?.join(', ') || 'None'}
+                    {' '}({selectedImport.meta.detection.tokenCount || 0} matches)
+                  </div>
+                </div>
+                {selectedImport.meta.importType && (
+                  <div className="mt-2 text-sm">
+                    <span className="font-medium">Import Type Set:</span>{' '}
+                    <span className="text-blue-700 font-semibold">
+                      {selectedImport.meta.importType}
+                    </span>
+                  </div>
+                )}
+                {selectedImport.meta.reclassified_at && (
+                  <div className="mt-2 text-sm text-orange-700">
+                    <span className="font-medium">⚠ Reclassified:</span>{' '}
+                    {new Date(selectedImport.meta.reclassified_at).toLocaleString()}
+                    {' '}by {selectedImport.meta.reclassified_by || 'unknown'}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Column Mapping */}
+            {selectedImport.parsed?.columnMap && (
+              <div className="border border-gray-300 rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold">Column Mapping</h3>
+                  <button
+                    onClick={() => setShowColumnMapper(!showColumnMapper)}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    {showColumnMapper ? 'Hide' : 'Show'} Mapper
+                  </button>
+                </div>
+                
+                {showColumnMapper && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-600 mb-3">
+                      Adjust how parsed columns map to database fields:
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Object.entries(columnMap).map(([colIdx, fieldName]) => (
+                        <div key={colIdx} className="flex items-center gap-2 text-sm">
+                          <label className="font-medium w-24">Column {colIdx}:</label>
+                          <select
+                            value={fieldName}
+                            onChange={(e) => setColumnMap(prev => ({
+                              ...prev,
+                              [colIdx]: e.target.value
+                            }))}
+                            className="flex-1 border rounded px-2 py-1"
+                          >
+                            <option value="jobNumber">Job Number</option>
+                            <option value="customer">Customer</option>
+                            <option value="address">Address</option>
+                            <option value="date">Date</option>
+                            <option value="status">Status</option>
+                            <option value="amount">Amount</option>
+                            <option value="gallons">Gallons</option>
+                            <option value="qty">Quantity</option>
+                            <option value="driver">Driver</option>
+                            <option value="truck">Truck</option>
+                            <option value="tech">Technician</option>
+                            <option value="description">Description</option>
+                            <option value={`column${colIdx}`}>Generic (column{colIdx})</option>
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        // Apply remapping to all rows using the updated columnMap
+                        const remapped = editedRows.map(row => {
+                          const newRow = { ...row }; // Keep existing fields
+                          
+                          // If row has rawColumns, remap them using new columnMap
+                          if (row.rawColumns && Array.isArray(row.rawColumns)) {
+                            row.rawColumns.forEach((value, idx) => {
+                              const fieldName = columnMap[idx];
+                              if (fieldName) {
+                                // Update the field with the raw value
+                                newRow[fieldName] = value;
+                              }
+                            });
+                          }
+                          
+                          return newRow;
+                        });
+                        setEditedRows(remapped);
+                        
+                        // Also update the import's parsed data
+                        setSelectedImport(prev => ({
+                          ...prev,
+                          parsed: {
+                            ...prev.parsed,
+                            columnMap: columnMap,
+                            rows: remapped,
+                          }
+                        }));
+                        
+                        alert('Column mapping applied. Click Save Draft to persist changes.');
+                      }}
+                      className="mt-3 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+                    >
+                      Apply Mapping
+                    </button>
+                  </div>
+                )}
+                
+                {!showColumnMapper && (
+                  <div className="text-sm text-gray-600">
+                    {Object.entries(columnMap).slice(0, 3).map(([idx, name]) => (
+                      <span key={idx} className="inline-block mr-3">
+                        Col {idx}: <strong>{name}</strong>
+                      </span>
+                    ))}
+                    {Object.keys(columnMap).length > 3 && '...'}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Attached Images */}
             {selectedImport.attached_files && selectedImport.attached_files.length > 0 && (
               <div>
@@ -337,11 +527,29 @@ export default function ReviewPage() {
             {/* Parsed Rows */}
             {editedRows.length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold mb-3">Parsed Data ({editedRows.length} rows)</h3>
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold">
+                    Parsed Data ({editedRows.length} rows)
+                  </h3>
+                  <div className="text-sm">
+                    <span className="font-medium">Estimated Insert Count:</span>{' '}
+                    <span className="text-blue-600 font-bold text-lg">
+                      {includedRows.filter(v => v).length}
+                    </span>
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="min-w-full border border-gray-300">
                     <thead className="bg-gray-100">
                       <tr>
+                        <th className="border px-2 py-2 text-center text-sm">
+                          <input
+                            type="checkbox"
+                            checked={includedRows.every(v => v)}
+                            onChange={handleToggleAll}
+                            title="Toggle All"
+                          />
+                        </th>
                         <th className="border px-3 py-2 text-left text-sm">Job #</th>
                         <th className="border px-3 py-2 text-left text-sm">Customer</th>
                         <th className="border px-3 py-2 text-left text-sm">Date</th>
@@ -351,7 +559,14 @@ export default function ReviewPage() {
                     </thead>
                     <tbody>
                       {editedRows.map((row, idx) => (
-                        <tr key={idx}>
+                        <tr key={idx} className={!includedRows[idx] ? 'bg-gray-100 opacity-50' : ''}>
+                          <td className="border px-2 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={includedRows[idx] || false}
+                              onChange={() => handleRowToggle(idx)}
+                            />
+                          </td>
                           <td className="border px-3 py-2">
                             <input
                               type="text"
@@ -398,6 +613,30 @@ export default function ReviewPage() {
                     </tbody>
                   </table>
                 </div>
+                
+                {/* Raw Columns Display */}
+                <details className="mt-4 border border-gray-300 rounded p-3">
+                  <summary className="cursor-pointer font-medium text-sm text-gray-700 hover:text-gray-900">
+                    Show Raw Column Values (for debugging)
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    {editedRows.slice(0, 5).map((row, idx) => (
+                      <div key={idx} className="text-xs bg-gray-50 p-2 rounded border">
+                        <span className="font-medium">Row {idx + 1}:</span>{' '}
+                        {row.rawColumns ? (
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(row.rawColumns, null, 2)}</pre>
+                        ) : (
+                          <span className="text-gray-500">No raw data available</span>
+                        )}
+                      </div>
+                    ))}
+                    {editedRows.length > 5 && (
+                      <p className="text-xs text-gray-500 italic">
+                        Showing first 5 rows only. Total: {editedRows.length} rows
+                      </p>
+                    )}
+                  </div>
+                </details>
               </div>
             )}
 

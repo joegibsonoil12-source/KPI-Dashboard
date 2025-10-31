@@ -400,6 +400,7 @@ function parseOCRText(text, metadata = {}) {
     const normalized = normalizeRow(rowObj, columnMap);
     normalized.page = metadata.page || 1;
     normalized.y = metadata.y || i;
+    normalized.rawColumns = values; // Store original column values
     
     rows.push(normalized);
   }
@@ -443,6 +444,62 @@ function calculateSummary(rows) {
   });
   
   return summary;
+}
+
+/**
+ * Infer import type from parsed data using delivery token detection
+ * @param {Object} columnMap - Column mapping from parsing
+ * @param {Array} rows - Parsed data rows
+ * @returns {Object} - Detection result with type and confidence
+ */
+function inferImportType(columnMap, rows) {
+  console.debug('[ocrParser] Running import type inference');
+  
+  // Delivery-specific tokens to detect
+  const deliveryTokens = [
+    'record', 'refer', 'account', 'customer', 
+    'driver', 'truck', 'gallons', 'qty', 
+    'amount', 'extension'
+  ];
+  
+  // Extract column values (field names) from columnMap
+  const columnValues = Object.values(columnMap || {}).map(v => 
+    (v || '').toLowerCase().trim()
+  );
+  
+  // Also check for delivery tokens in raw column headers
+  const allText = columnValues.join(' ');
+  
+  // Find matching delivery tokens
+  const hits = deliveryTokens.filter(token => {
+    // Check if token appears in any column value
+    return columnValues.some(col => col.includes(token)) || 
+           allText.includes(token);
+  });
+  
+  console.debug('[ocrParser] Delivery token hits:', hits);
+  
+  // Decision: if 4 or more hits => delivery, else service
+  const isDelivery = hits.length >= 4;
+  const type = isDelivery ? 'delivery' : 'service';
+  
+  // Calculate confidence: hits out of total possible delivery tokens
+  // Using 8 as denominator per spec requirement for normalized confidence scoring
+  const confidence = hits.length / 8;
+  
+  console.debug('[ocrParser] Import type inference result:', { 
+    type, 
+    confidence, 
+    hitsCount: hits.length,
+    hits 
+  });
+  
+  return {
+    type,
+    confidence,
+    hits,
+    tokenCount: hits.length,
+  };
 }
 
 /**
@@ -511,4 +568,5 @@ module.exports = {
   detectColumnPositions,
   mapColumnHeaders,
   calculateSummary,
+  inferImportType,
 };

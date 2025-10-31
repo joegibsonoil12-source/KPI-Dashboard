@@ -68,40 +68,201 @@ function determineImportType(importRecord) {
 }
 
 /**
+ * Query delivery_tickets table schema
+ * @param {Object} supabase - Supabase client
+ * @returns {Promise<Array>} - Array of column info objects
+ */
+async function getDeliveryTicketsSchema(supabase) {
+  console.debug('[imports-accept] Querying delivery_tickets schema');
+  
+  // Try to insert an empty test record to get column info (will fail but shows schema)
+  // Alternatively, use a well-known list of expected columns
+  // For safety, we'll use a predefined schema based on the migration
+  const knownSchema = [
+    { column_name: 'id', data_type: 'uuid' },
+    { column_name: 'date', data_type: 'date' },
+    { column_name: 'store', data_type: 'text' },
+    { column_name: 'product', data_type: 'text' },
+    { column_name: 'driver', data_type: 'text' },
+    { column_name: 'truck', data_type: 'text' },
+    { column_name: 'qty', data_type: 'numeric' },
+    { column_name: 'price', data_type: 'numeric' },
+    { column_name: 'tax', data_type: 'numeric' },
+    { column_name: 'amount', data_type: 'numeric' },
+    { column_name: 'status', data_type: 'text' },
+    { column_name: 'notes', data_type: 'text' },
+    { column_name: 'customerName', data_type: 'text' },
+    { column_name: 'account', data_type: 'text' },
+    { column_name: 'created_by', data_type: 'uuid' },
+    { column_name: 'created_at', data_type: 'timestamptz' },
+    { column_name: 'updated_at', data_type: 'timestamptz' },
+  ];
+  
+  // Verify table exists by attempting to select from it
+  const { error: testError } = await supabase
+    .from('delivery_tickets')
+    .select('id')
+    .limit(0);
+  
+  if (testError) {
+    console.error('[imports-accept] delivery_tickets table not accessible:', testError);
+    return null;
+  }
+  
+  console.debug('[imports-accept] Using known schema for delivery_tickets');
+  return knownSchema;
+}
+
+/**
+ * Validate and map row to delivery_tickets columns
+ * @param {Object} row - Parsed row data
+ * @param {Array} schemaColumns - Schema column names
+ * @param {number} importId - Import ID
+ * @returns {Object|null} - Mapped ticket object or null if invalid
+ */
+function mapRowToDeliveryTicket(row, schemaColumns, importId) {
+  // Check minimal requirements
+  const hasDate = row.date || row.delivery_date;
+  const hasTicketOrTruck = row.ticket || row.truck || row.driver;
+  const hasAmount = (row.amount && row.amount > 0) || (row.gallons && row.gallons > 0) || (row.qty && row.qty > 0);
+  
+  if (!hasDate || !hasTicketOrTruck || !hasAmount) {
+    console.debug('[imports-accept] Row validation failed:', { hasDate, hasTicketOrTruck, hasAmount });
+    return null;
+  }
+  
+  // Field mapping heuristics
+  const fieldMappings = {
+    // date fields
+    date: ['date', 'delivery_date', 'deliverydate'],
+    // customer fields
+    customerName: ['customer', 'customername', 'customer_name', 'account'],
+    // product fields
+    product: ['product', 'fuel', 'fuel_type'],
+    // driver fields
+    driver: ['driver', 'tech', 'technician'],
+    // truck fields
+    truck: ['truck', 'vehicle', 'truck_number'],
+    // quantity fields
+    qty: ['qty', 'gallons', 'quantity', 'gal'],
+    // price fields
+    price: ['price', 'unit_price', 'unitprice'],
+    // tax fields
+    tax: ['tax', 'sales_tax'],
+    // amount fields
+    amount: ['amount', 'total', 'extension', 'ext'],
+    // status fields
+    status: ['status', 'state'],
+    // notes fields
+    notes: ['notes', 'description', 'comments'],
+    // store fields
+    store: ['store', 'location', 'branch'],
+    // account fields
+    account: ['account', 'account_number', 'acct'],
+  };
+  
+  const ticket = {};
+  
+  // Map fields only if they exist in schema
+  for (const [dbColumn, possibleFields] of Object.entries(fieldMappings)) {
+    // Check if column exists in schema (case-insensitive)
+    const schemaColumn = schemaColumns.find(col => 
+      col.column_name?.toLowerCase() === dbColumn.toLowerCase()
+    );
+    
+    if (!schemaColumn) {
+      continue;
+    }
+    
+    // Try to find value in row using possible field names
+    let value = null;
+    for (const field of possibleFields) {
+      const rowKey = Object.keys(row).find(k => k.toLowerCase() === field);
+      if (rowKey && row[rowKey] !== undefined && row[rowKey] !== '') {
+        value = row[rowKey];
+        break;
+      }
+    }
+    
+    // Set value if found
+    if (value !== null) {
+      ticket[schemaColumn.column_name] = value;
+    }
+  }
+  
+  // Add metadata if meta column exists
+  const metaColumn = schemaColumns.find(col => 
+    col.column_name?.toLowerCase() === 'meta'
+  );
+  
+  if (metaColumn) {
+    ticket.meta = {
+      importId: importId,
+      importedAt: new Date().toISOString(),
+      page: row.page,
+      y: row.y,
+      rawColumns: row.rawColumns,
+    };
+  }
+  
+  return ticket;
+}
+
+/**
  * Create delivery tickets from parsed rows
  * @param {Object} supabase - Supabase client
  * @param {Array} rows - Parsed data rows
  * @param {number} importId - Import ID for reference
- * @returns {Promise<Array>} - Array of created ticket IDs
+ * @returns {Promise<Object>} - Result with created IDs and failed rows
  */
 async function createDeliveryTickets(supabase, rows, importId) {
-  const tickets = [];
+  console.debug('[imports-accept] Creating delivery tickets for', rows.length, 'rows');
   
-  for (const row of rows) {
-    const ticket = {
-      // Map parsed fields to delivery_tickets schema
-      customer: row.customer || '',
-      address: row.address || '',
-      date: row.date || new Date().toISOString().split('T')[0],
-      qty: row.gallons || row.qty || 0,
-      amount: row.amount || 0,
-      status: row.status || 'pending',
-      // Add reference to import
-      meta: {
-        importId: importId,
-        importedAt: new Date().toISOString(),
-        page: row.page,
-        y: row.y,
-      },
-    };
-    
-    tickets.push(ticket);
+  // Query schema
+  const schemaColumns = await getDeliveryTicketsSchema(supabase);
+  
+  if (!schemaColumns || schemaColumns.length === 0) {
+    console.error('[imports-accept] delivery_tickets table not found or has no columns');
+    throw new Error(
+      'STOP: delivery_tickets table not found or is not accessible. ' +
+      'Please verify the table exists with proper permissions and columns. ' +
+      'Refer to migration sql/2025-09-30_create_tickets_and_rls.sql for schema details.'
+    );
   }
+  
+  console.debug('[imports-accept] delivery_tickets schema columns:', 
+    schemaColumns.map(c => c.column_name).join(', ')
+  );
+  
+  // Map and validate rows
+  const tickets = [];
+  const failedRows = [];
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const ticket = mapRowToDeliveryTicket(row, schemaColumns, importId);
+    
+    if (ticket && Object.keys(ticket).length > 0) {
+      tickets.push(ticket);
+    } else {
+      failedRows.push({
+        index: i,
+        row: row,
+        reason: 'Missing required fields or validation failed',
+      });
+    }
+  }
+  
+  console.debug('[imports-accept] Mapped tickets:', tickets.length, 'failed:', failedRows.length);
   
   if (tickets.length === 0) {
-    return [];
+    return {
+      ids: [],
+      failed: failedRows,
+    };
   }
   
+  // Batch insert
   const { data, error } = await supabase
     .from('delivery_tickets')
     .insert(tickets)
@@ -112,7 +273,14 @@ async function createDeliveryTickets(supabase, rows, importId) {
     throw new Error(`Failed to create delivery tickets: ${error.message}`);
   }
   
-  return (data || []).map(t => t.id);
+  const ids = (data || []).map(t => t.id);
+  
+  console.debug('[imports-accept] Created delivery tickets:', ids.length);
+  
+  return {
+    ids,
+    failed: failedRows,
+  };
 }
 
 /**
@@ -291,12 +459,14 @@ exports.handler = async (event, context) => {
     console.debug('[imports-accept] Import type:', importType, 'rows:', rows.length);
     
     const created = {};
+    let failedRows = [];
     
     // Create records based on import type
     if (importType === 'delivery') {
-      const ticketIds = await createDeliveryTickets(supabase, rows, importId);
-      created.deliveryTickets = ticketIds;
-      console.debug('[imports-accept] Created delivery tickets:', ticketIds.length);
+      const result = await createDeliveryTickets(supabase, rows, importId);
+      created.deliveryTickets = result.ids;
+      failedRows = result.failed || [];
+      console.debug('[imports-accept] Created delivery tickets:', result.ids.length, 'failed:', failedRows.length);
     } else {
       const jobIds = await createServiceJobs(supabase, rows, importId);
       created.serviceJobs = jobIds;
@@ -304,10 +474,18 @@ exports.handler = async (event, context) => {
     }
     
     // Update import status to accepted
+    // Store parsed data with accepted IDs
+    const updatedParsed = {
+      ...importRecord.parsed,
+      acceptedIds: importType === 'delivery' ? created.deliveryTickets : created.serviceJobs,
+      failedRows: failedRows,
+    };
+    
     const { error: updateError } = await supabase
       .from('ticket_imports')
       .update({
         status: 'accepted',
+        parsed: updatedParsed,
         meta: {
           ...importRecord.meta,
           acceptedAt: new Date().toISOString(),
@@ -322,6 +500,10 @@ exports.handler = async (event, context) => {
       // Non-fatal, records were already created
     }
     
+    const successCount = importType === 'delivery' 
+      ? created.deliveryTickets?.length || 0
+      : created.serviceJobs?.length || 0;
+    
     return {
       statusCode: 200,
       headers,
@@ -329,7 +511,10 @@ exports.handler = async (event, context) => {
         success: true,
         importId: importId,
         created: created,
-        message: `Successfully created ${rows.length} record(s)`,
+        inserted: successCount,
+        failed: failedRows.length,
+        failedRows: failedRows,
+        message: `Successfully created ${successCount} record(s)${failedRows.length > 0 ? `, ${failedRows.length} failed` : ''}`,
       }),
     };
   } catch (error) {
