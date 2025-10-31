@@ -271,4 +271,69 @@ describe('OCR Parser Integration', () => {
     console.log('First 10 parsed rows:');
     console.log(JSON.stringify(result.parsed.rows.slice(0, 10), null, 2));
   });
+  
+  it('should detect delivery type from mock parsed data', () => {
+    // Mock a parsed delivery document
+    const mockColumnMap = {
+      0: 'record',
+      1: 'customer',
+      2: 'account',
+      3: 'driver',
+      4: 'truck',
+      5: 'gallons',
+      6: 'amount',
+      7: 'extension'
+    };
+    
+    const mockRows = [
+      {
+        record: '12345',
+        customer: 'ABC Company',
+        account: 'ACC001',
+        driver: 'John Doe',
+        truck: 'T-101',
+        gallons: 500,
+        amount: 1500,
+        extension: 'Ext 1'
+      }
+    ];
+    
+    const result = ocrParser.inferImportType(mockColumnMap, mockRows);
+    
+    expect(result.type).toBe('delivery');
+    expect(result.confidence).toBeGreaterThanOrEqual(0.5); // 8 tokens matched / 8 = 1.0
+    expect(result.hits.length).toBeGreaterThanOrEqual(4);
+    expect(result.hits).toContain('customer');
+    expect(result.hits).toContain('driver');
+    expect(result.hits).toContain('truck');
+    expect(result.hits).toContain('gallons');
+  });
+  
+  it('should detect service type from mock parsed data', () => {
+    // Mock a parsed service document
+    const mockColumnMap = {
+      0: 'job',
+      1: 'customer',
+      2: 'tech',
+      3: 'service',
+      4: 'date',
+      5: 'status'
+    };
+    
+    const mockRows = [
+      {
+        job: 'J12345',
+        customer: 'ABC Company',
+        tech: 'John Doe',
+        service: 'HVAC Repair',
+        date: '2025-01-15',
+        status: 'scheduled'
+      }
+    ];
+    
+    const result = ocrParser.inferImportType(mockColumnMap, mockRows);
+    
+    expect(result.type).toBe('service');
+    expect(result.hits.length).toBeLessThan(4);
+  });
 });

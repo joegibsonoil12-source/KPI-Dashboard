@@ -65,9 +65,10 @@ function StatusBadge({ status }) {
 /**
  * Import Row Component (Editable)
  */
-function EditableRow({ row, index, onUpdate }) {
+function EditableRow({ row, index, onUpdate, included, onIncludeChange, importType }) {
   const [editing, setEditing] = useState(false);
   const [editedRow, setEditedRow] = useState(row);
+  const [showRaw, setShowRaw] = useState(false);
   
   const handleSave = () => {
     onUpdate(index, editedRow);
@@ -79,24 +80,65 @@ function EditableRow({ row, index, onUpdate }) {
     setEditing(false);
   };
   
+  // Determine which fields to show based on import type
+  const isDelivery = importType === 'delivery';
+  
   if (!editing) {
     return (
-      <tr className="hover:bg-gray-50">
-        <td className="px-4 py-2 text-sm">{row.jobNumber || '-'}</td>
-        <td className="px-4 py-2 text-sm">{row.customer || '-'}</td>
-        <td className="px-4 py-2 text-sm">{row.date || '-'}</td>
-        <td className="px-4 py-2 text-sm">{row.status || '-'}</td>
-        <td className="px-4 py-2 text-sm">{formatCurrency(row.amount)}</td>
-        <td className="px-4 py-2 text-sm text-gray-500">{row.page}</td>
-        <td className="px-4 py-2 text-sm">
-          <button
-            onClick={() => setEditing(true)}
-            className="text-blue-600 hover:text-blue-800 font-medium"
-          >
-            Edit
-          </button>
-        </td>
-      </tr>
+      <>
+        <tr className={included ? "hover:bg-gray-50" : "bg-gray-100 text-gray-400 hover:bg-gray-100"}>
+          <td className="px-4 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={included}
+              onChange={(e) => onIncludeChange(index, e.target.checked)}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+            />
+          </td>
+          {isDelivery ? (
+            <>
+              <td className="px-4 py-2 text-sm">{row.customerName || row.customer || '-'}</td>
+              <td className="px-4 py-2 text-sm">{row.truck || row.driver || '-'}</td>
+              <td className="px-4 py-2 text-sm">{row.qty || row.gallons || '-'}</td>
+            </>
+          ) : (
+            <>
+              <td className="px-4 py-2 text-sm">{row.jobNumber || '-'}</td>
+              <td className="px-4 py-2 text-sm">{row.customer || '-'}</td>
+            </>
+          )}
+          <td className="px-4 py-2 text-sm">{row.date || '-'}</td>
+          <td className="px-4 py-2 text-sm">{row.status || '-'}</td>
+          <td className="px-4 py-2 text-sm">{formatCurrency(row.amount)}</td>
+          <td className="px-4 py-2 text-sm text-gray-500">{row.page}</td>
+          <td className="px-4 py-2 text-sm">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditing(true)}
+                className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+              >
+                Edit
+              </button>
+              {row.rawColumns && (
+                <button
+                  onClick={() => setShowRaw(!showRaw)}
+                  className="text-gray-600 hover:text-gray-800 font-medium text-xs"
+                >
+                  {showRaw ? 'Hide' : 'Raw'}
+                </button>
+              )}
+            </div>
+          </td>
+        </tr>
+        {showRaw && row.rawColumns && (
+          <tr className="bg-gray-50">
+            <td colSpan="9" className="px-4 py-2 text-xs text-gray-600">
+              <div className="font-medium mb-1">Raw Columns:</div>
+              <div className="font-mono">{JSON.stringify(row.rawColumns)}</div>
+            </td>
+          </tr>
+        )}
+      </>
     );
   }
   
@@ -104,26 +146,72 @@ function EditableRow({ row, index, onUpdate }) {
     <tr className="bg-blue-50">
       <td className="px-4 py-2">
         <input
-          type="text"
-          value={editedRow.jobNumber || ''}
-          onChange={(e) => setEditedRow({ ...editedRow, jobNumber: e.target.value })}
-          className="w-full px-2 py-1 text-sm border rounded"
+          type="checkbox"
+          checked={included}
+          onChange={(e) => onIncludeChange(index, e.target.checked)}
+          className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
         />
       </td>
-      <td className="px-4 py-2">
-        <input
-          type="text"
-          value={editedRow.customer || ''}
-          onChange={(e) => setEditedRow({ ...editedRow, customer: e.target.value })}
-          className="w-full px-2 py-1 text-sm border rounded"
-        />
-      </td>
+      {isDelivery ? (
+        <>
+          <td className="px-4 py-2">
+            <input
+              type="text"
+              value={editedRow.customerName || editedRow.customer || ''}
+              onChange={(e) => setEditedRow({ ...editedRow, customerName: e.target.value, customer: e.target.value })}
+              className="w-full px-2 py-1 text-sm border rounded"
+              placeholder="Customer"
+            />
+          </td>
+          <td className="px-4 py-2">
+            <input
+              type="text"
+              value={editedRow.truck || editedRow.driver || ''}
+              onChange={(e) => setEditedRow({ ...editedRow, truck: e.target.value })}
+              className="w-full px-2 py-1 text-sm border rounded"
+              placeholder="Truck/Driver"
+            />
+          </td>
+          <td className="px-4 py-2">
+            <input
+              type="number"
+              step="0.01"
+              value={editedRow.qty || editedRow.gallons || ''}
+              onChange={(e) => setEditedRow({ ...editedRow, qty: parseFloat(e.target.value) || 0, gallons: parseFloat(e.target.value) || 0 })}
+              className="w-full px-2 py-1 text-sm border rounded"
+              placeholder="Qty/Gallons"
+            />
+          </td>
+        </>
+      ) : (
+        <>
+          <td className="px-4 py-2">
+            <input
+              type="text"
+              value={editedRow.jobNumber || ''}
+              onChange={(e) => setEditedRow({ ...editedRow, jobNumber: e.target.value })}
+              className="w-full px-2 py-1 text-sm border rounded"
+              placeholder="Job #"
+            />
+          </td>
+          <td className="px-4 py-2">
+            <input
+              type="text"
+              value={editedRow.customer || ''}
+              onChange={(e) => setEditedRow({ ...editedRow, customer: e.target.value })}
+              className="w-full px-2 py-1 text-sm border rounded"
+              placeholder="Customer"
+            />
+          </td>
+        </>
+      )}
       <td className="px-4 py-2">
         <input
           type="text"
           value={editedRow.date || ''}
           onChange={(e) => setEditedRow({ ...editedRow, date: e.target.value })}
           className="w-full px-2 py-1 text-sm border rounded"
+          placeholder="Date"
         />
       </td>
       <td className="px-4 py-2">
@@ -146,6 +234,7 @@ function EditableRow({ row, index, onUpdate }) {
           value={editedRow.amount || ''}
           onChange={(e) => setEditedRow({ ...editedRow, amount: parseFloat(e.target.value) || 0 })}
           className="w-full px-2 py-1 text-sm border rounded"
+          placeholder="Amount"
         />
       </td>
       <td className="px-4 py-2 text-sm text-gray-500">{editedRow.page}</td>
@@ -153,13 +242,13 @@ function EditableRow({ row, index, onUpdate }) {
         <div className="flex gap-2">
           <button
             onClick={handleSave}
-            className="text-green-600 hover:text-green-800 font-medium"
+            className="text-green-600 hover:text-green-800 font-medium text-xs"
           >
             Save
           </button>
           <button
             onClick={handleCancel}
-            className="text-gray-600 hover:text-gray-800 font-medium"
+            className="text-gray-600 hover:text-gray-800 font-medium text-xs"
           >
             Cancel
           </button>
@@ -174,17 +263,23 @@ function EditableRow({ row, index, onUpdate }) {
  */
 function ImportDetail({ importRecord, onClose, onStatusChange }) {
   const [rows, setRows] = useState([]);
+  const [includedRows, setIncludedRows] = useState([]);
   const [images, setImages] = useState([]);
   const [ocrText, setOcrText] = useState('');
   const [summary, setSummary] = useState({});
+  const [detection, setDetection] = useState(null);
   const [saving, setSaving] = useState(false);
   
   useEffect(() => {
     if (importRecord) {
       const parsed = importRecord.parsed || {};
-      setRows(parsed.rows || []);
+      const parsedRows = parsed.rows || [];
+      setRows(parsedRows);
+      // Initialize all rows as included
+      setIncludedRows(parsedRows.map(() => true));
       setSummary(parsed.summary || {});
       setOcrText(importRecord.ocr_text || '');
+      setDetection(importRecord.meta?.detection || null);
       
       // Load images
       loadImages();
@@ -222,6 +317,16 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
     setRows(newRows);
   };
   
+  const handleIncludeChange = (index, included) => {
+    const newIncludedRows = [...includedRows];
+    newIncludedRows[index] = included;
+    setIncludedRows(newIncludedRows);
+  };
+  
+  const getIncludedRowsCount = () => {
+    return includedRows.filter(Boolean).length;
+  };
+  
   const handleSaveDraft = async () => {
     setSaving(true);
     
@@ -250,30 +355,43 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
   };
   
   const handleAccept = async () => {
-    if (!confirm('Accept this import and create tickets/jobs?')) return;
+    const includedCount = getIncludedRowsCount();
+    if (includedCount === 0) {
+      alert('No rows selected. Please select at least one row to import.');
+      return;
+    }
+    
+    if (!confirm(`Accept this import and create ${includedCount} ticket(s)/job(s)?`)) return;
     
     setSaving(true);
     
     try {
-      // Determine import type
-      const importType = importRecord.meta?.importType || 'delivery';
+      // Filter to only included rows
+      const rowsToImport = rows.filter((_, idx) => includedRows[idx]);
       
-      // Create tickets or jobs based on import type
-      if (importType === 'service') {
-        await createServiceJobs(rows);
-      } else {
-        await createDeliveryTickets(rows);
+      // Call the netlify function
+      const response = await fetch('/.netlify/functions/imports-accept', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          importId: importRecord.id,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to accept import');
       }
       
-      // Update import status
-      const { error } = await supabase
-        .from('ticket_imports')
-        .update({ status: 'accepted' })
-        .eq('id', importRecord.id);
+      const result = await response.json();
       
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to accept import');
+      }
       
-      alert('Import accepted and tickets/jobs created');
+      alert(`Import accepted successfully!\n\nCreated: ${result.inserted || 0} record(s)\nFailed: ${result.failed || 0} record(s)`);
       onStatusChange();
       onClose();
     } catch (error) {
@@ -333,32 +451,6 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
     };
   };
   
-  const createServiceJobs = async (rows) => {
-    // Use service role client for server-side operations
-    // This is a simplified version - in production, use an API endpoint
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    const jobs = rows.map(row => ({
-      job_number: row.jobNumber || `IMPORT-${Date.now()}`,
-      customer_name: row.customer,
-      job_date: row.date,
-      status: row.status || 'scheduled',
-      job_amount: row.amount,
-      created_by: user?.id,
-      meta: { importId: importRecord.id },
-    }));
-    
-    // This would need to use service role or RPC function
-    console.log('[ImportsReview] Would create service jobs:', jobs);
-    // In production: call an API endpoint that uses service role to insert
-  };
-  
-  const createDeliveryTickets = async (rows) => {
-    // Similar to service jobs
-    console.log('[ImportsReview] Would create delivery tickets:', rows);
-    // In production: call an API endpoint
-  };
-  
   if (!importRecord) return null;
   
   return (
@@ -374,6 +466,26 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
                 <span>Created: {formatDate(importRecord.created_at)}</span>
                 <StatusBadge status={importRecord.status} />
               </div>
+              {detection && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className={`text-xs font-medium px-2 py-1 rounded ${
+                    detection.type === 'delivery' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {detection.type?.toUpperCase()}
+                  </span>
+                  <span className="text-xs text-gray-600">
+                    Confidence: {((detection.confidence || 0) * 100).toFixed(0)}%
+                  </span>
+                  <span className="text-xs text-gray-600">
+                    ({detection.hits?.length || 0} tokens matched)
+                  </span>
+                  {detection.hits && detection.hits.length > 0 && (
+                    <span className="text-xs text-gray-500">
+                      [{detection.hits.join(', ')}]
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -384,12 +496,16 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
           </div>
           
           {/* Summary */}
-          <div className="grid grid-cols-4 gap-4 mt-4">
+          <div className="grid grid-cols-5 gap-4 mt-4">
             <div className="bg-gray-50 rounded p-3">
               <div className="text-xs text-gray-500">Total Rows</div>
               <div className="text-xl font-bold">{summary.totalRows || 0}</div>
             </div>
             <div className="bg-blue-50 rounded p-3">
+              <div className="text-xs text-gray-500">Selected to Import</div>
+              <div className="text-xl font-bold text-blue-600">{getIncludedRowsCount()}</div>
+            </div>
+            <div className="bg-green-50 rounded p-3">
               <div className="text-xs text-gray-500">Scheduled Jobs</div>
               <div className="text-xl font-bold">{summary.scheduledJobs || 0}</div>
             </div>
@@ -398,7 +514,7 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
               <div className="text-xl font-bold">{formatCurrency(summary.scheduledRevenue || 0)}</div>
             </div>
             <div className="bg-purple-50 rounded p-3">
-              <div className="text-xs text-gray-500">Confidence</div>
+              <div className="text-xs text-gray-500">OCR Confidence</div>
               <div className="text-xl font-bold">{((importRecord.confidence || 0) * 100).toFixed(1)}%</div>
             </div>
           </div>
@@ -429,13 +545,37 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
           
           {/* Parsed Rows */}
           <div className="mb-6">
-            <h3 className="text-lg font-bold mb-3">Parsed Data</h3>
+            <h3 className="text-lg font-bold mb-3">
+              Parsed Data 
+              <span className="ml-2 text-sm font-normal text-gray-600">
+                (Type: {importRecord.meta?.importType || 'service'})
+              </span>
+            </h3>
             <div className="border rounded overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job #</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      <input
+                        type="checkbox"
+                        checked={includedRows.every(Boolean)}
+                        onChange={(e) => setIncludedRows(rows.map(() => e.target.checked))}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                        title="Select/Deselect All"
+                      />
+                    </th>
+                    {importRecord.meta?.importType === 'delivery' ? (
+                      <>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Truck/Driver</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                      </>
+                    ) : (
+                      <>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Job #</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                      </>
+                    )}
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
@@ -450,6 +590,9 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
                       row={row}
                       index={idx}
                       onUpdate={handleRowUpdate}
+                      included={includedRows[idx]}
+                      onIncludeChange={handleIncludeChange}
+                      importType={importRecord.meta?.importType || 'service'}
                     />
                   ))}
                 </tbody>
