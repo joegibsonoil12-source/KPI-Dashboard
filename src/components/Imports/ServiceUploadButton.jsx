@@ -2,7 +2,7 @@
  * Service Upload Button Component
  * 
  * Provides a button to upload scanned service tickets directly
- * Creates ticket_imports with meta.importType='service'
+ * Creates ticket_imports and lets worker detect importType after upload
  */
 
 import React, { useState, useRef } from 'react';
@@ -48,9 +48,7 @@ export default function ServiceUploadButton() {
         },
         body: JSON.stringify({
           files: fileData,
-          meta: {
-            importType: 'service',
-          },
+          meta: {},
         }),
       });
       

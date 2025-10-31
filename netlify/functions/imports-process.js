@@ -279,6 +279,8 @@ exports.handler = async (event, context) => {
     // Run import type inference
     const detection = ocrParser.inferImportType(merged.columnMap, merged.rows);
     
+    console.debug(`[imports/process] importId=${importId}, detection=${detection.type}, confidence=${(detection.confidence || 0).toFixed(2)}, hits=${detection.hits.length}`);
+    
     console.debug('[imports-process] Detection result:', {
       type: detection.type,
       confidence: detection.confidence,

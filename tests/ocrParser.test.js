@@ -178,8 +178,8 @@ describe('OCR Parser', () => {
       const result = ocrParser.inferImportType(columnMap, rows);
       
       expect(result.type).toBe('delivery');
-      expect(result.hits.length).toBeGreaterThanOrEqual(4);
-      expect(result.confidence).toBeGreaterThan(0);
+      expect(result.hits.length).toBe(5);
+      expect(result.confidence).toBe(0.625); // 5 / 8
     });
     
     it('should detect service type with < 4 delivery tokens', () => {
@@ -213,7 +213,8 @@ describe('OCR Parser', () => {
       const result = ocrParser.inferImportType(columnMap, rows);
       
       expect(result.type).toBe('delivery');
-      expect(result.confidence).toBeGreaterThanOrEqual(0.5); // 6 hits / 8
+      expect(result.confidence).toBe(0.75); // 6 hits / 8
+      expect(result.hits.length).toBe(6);
     });
     
     it('should calculate confidence correctly', () => {
