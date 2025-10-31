@@ -459,7 +459,7 @@ function inferImportType(columnMap, rows) {
   const deliveryTokens = ['record', 'refer', 'account', 'customer', 'driver', 'truck', 'gallons', 'qty', 'amount', 'extension'];
   
   // Extract column values (field names) from columnMap and normalize
-  const tokens = Object.values(columnMap || {}).map(t => t && t.toLowerCase());
+  const tokens = Object.values(columnMap || {}).filter(t => t).map(t => t.toLowerCase());
   
   // Find matching delivery tokens
   const hits = deliveryTokens.filter(t => tokens.includes(t));
