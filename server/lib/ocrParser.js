@@ -400,6 +400,7 @@ function parseOCRText(text, metadata = {}) {
     const normalized = normalizeRow(rowObj, columnMap);
     normalized.page = metadata.page || 1;
     normalized.y = metadata.y || i;
+    normalized.rawColumns = values; // Store original column values
     
     rows.push(normalized);
   }

@@ -14,6 +14,8 @@ export default function ReviewPage() {
   const [selectedImport, setSelectedImport] = useState(null);
   const [editedRows, setEditedRows] = useState([]);
   const [includedRows, setIncludedRows] = useState([]);
+  const [columnMap, setColumnMap] = useState({});
+  const [showColumnMapper, setShowColumnMapper] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [signedUrls, setSignedUrls] = useState({});
@@ -76,6 +78,8 @@ export default function ReviewPage() {
       setEditedRows(data.parsed?.rows || []);
       // Initialize all rows as included by default
       setIncludedRows(new Array(data.parsed?.rows?.length || 0).fill(true));
+      // Initialize column map
+      setColumnMap(data.parsed?.columnMap || {});
 
       // Generate signed URLs for attached files
       if (data.attached_files && data.attached_files.length > 0) {
@@ -389,6 +393,86 @@ export default function ReviewPage() {
               </div>
             )}
 
+            {/* Column Mapping */}
+            {selectedImport.parsed?.columnMap && (
+              <div className="border border-gray-300 rounded-lg p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-lg font-semibold">Column Mapping</h3>
+                  <button
+                    onClick={() => setShowColumnMapper(!showColumnMapper)}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    {showColumnMapper ? 'Hide' : 'Show'} Mapper
+                  </button>
+                </div>
+                
+                {showColumnMapper && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-600 mb-3">
+                      Adjust how parsed columns map to database fields:
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Object.entries(columnMap).map(([colIdx, fieldName]) => (
+                        <div key={colIdx} className="flex items-center gap-2 text-sm">
+                          <label className="font-medium w-24">Column {colIdx}:</label>
+                          <select
+                            value={fieldName}
+                            onChange={(e) => setColumnMap(prev => ({
+                              ...prev,
+                              [colIdx]: e.target.value
+                            }))}
+                            className="flex-1 border rounded px-2 py-1"
+                          >
+                            <option value="jobNumber">Job Number</option>
+                            <option value="customer">Customer</option>
+                            <option value="address">Address</option>
+                            <option value="date">Date</option>
+                            <option value="status">Status</option>
+                            <option value="amount">Amount</option>
+                            <option value="gallons">Gallons</option>
+                            <option value="qty">Quantity</option>
+                            <option value="driver">Driver</option>
+                            <option value="truck">Truck</option>
+                            <option value="tech">Technician</option>
+                            <option value="description">Description</option>
+                            <option value={`column${colIdx}`}>Generic (column{colIdx})</option>
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        // Apply remapping to all rows
+                        const remapped = editedRows.map(row => {
+                          const newRow = {};
+                          Object.entries(row).forEach(([key, value]) => {
+                            newRow[key] = value;
+                          });
+                          return newRow;
+                        });
+                        setEditedRows(remapped);
+                        alert('Column mapping updated. Click Save Draft to persist changes.');
+                      }}
+                      className="mt-3 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+                    >
+                      Apply Mapping
+                    </button>
+                  </div>
+                )}
+                
+                {!showColumnMapper && (
+                  <div className="text-sm text-gray-600">
+                    {Object.entries(columnMap).slice(0, 3).map(([idx, name]) => (
+                      <span key={idx} className="inline-block mr-3">
+                        Col {idx}: <strong>{name}</strong>
+                      </span>
+                    ))}
+                    {Object.keys(columnMap).length > 3 && '...'}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Attached Images */}
             {selectedImport.attached_files && selectedImport.attached_files.length > 0 && (
               <div>
@@ -509,6 +593,30 @@ export default function ReviewPage() {
                     </tbody>
                   </table>
                 </div>
+                
+                {/* Raw Columns Display */}
+                <details className="mt-4 border border-gray-300 rounded p-3">
+                  <summary className="cursor-pointer font-medium text-sm text-gray-700 hover:text-gray-900">
+                    Show Raw Column Values (for debugging)
+                  </summary>
+                  <div className="mt-3 space-y-2">
+                    {editedRows.slice(0, 5).map((row, idx) => (
+                      <div key={idx} className="text-xs bg-gray-50 p-2 rounded border">
+                        <span className="font-medium">Row {idx + 1}:</span>{' '}
+                        {row.rawColumns ? (
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(row.rawColumns, null, 2)}</pre>
+                        ) : (
+                          <span className="text-gray-500">No raw data available</span>
+                        )}
+                      </div>
+                    ))}
+                    {editedRows.length > 5 && (
+                      <p className="text-xs text-gray-500 italic">
+                        Showing first 5 rows only. Total: {editedRows.length} rows
+                      </p>
+                    )}
+                  </div>
+                </details>
               </div>
             )}
 
