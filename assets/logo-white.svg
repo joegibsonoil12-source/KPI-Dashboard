@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 100">
+  <defs>
+    <style>
+      .brand-text { font-family: 'Arial', sans-serif; font-weight: 700; }
+      .white { fill: #ffffff; }
+      .cream { fill: #f6f7ef; }
+    </style>
+  </defs>
+  <!-- Oil drop icon -->
+  <ellipse cx="40" cy="50" rx="30" ry="35" class="cream"/>
+  <ellipse cx="40" cy="45" rx="20" ry="25" class="white"/>
+  <!-- Company text -->
+  <text x="85" y="45" class="brand-text white" font-size="28">GIBSON OIL</text>
+  <text x="85" y="72" class="brand-text cream" font-size="18">KPI Dashboard</text>
+</svg>

@@ -1,0 +1,12 @@
+(function () {
+  // Copy this template to public/runtime-config.js and replace placeholders
+  // or generate it at build time using the provided script.
+  window.__ENV = {
+    // Base URL for the billboard backend API (no trailing slash)
+    // e.g. "https://kpi-dashboard-seven-eta.vercel.app"
+    BILLBOARD_API_BASE: "%%BILLBOARD_API_BASE%%",
+
+    // Optional: TV token for ?tv=1 mode. If set here, client will add ?token=...
+    BILLBOARD_TV_TOKEN: "%%BILLBOARD_TV_TOKEN%%"
+  };
+})();

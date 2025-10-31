@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <style>
+      .navy { fill: #0f2136; }
+      .olive { fill: #b7bf7f; }
+      .brand-text { font-family: 'Arial', sans-serif; font-weight: 700; }
+    </style>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" class="navy"/>
+  <!-- Oil drop icon centered -->
+  <ellipse cx="50" cy="50" rx="25" ry="30" class="olive"/>
+  <ellipse cx="50" cy="46" rx="16" ry="20" class="navy"/>
+  <!-- G letter -->
+  <text x="50" y="70" text-anchor="middle" class="brand-text olive" font-size="36">G</text>
+</svg>
