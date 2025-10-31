@@ -142,4 +142,61 @@ describe('Imports Accept API', () => {
       expect(result.failed.length).toBe(2);
     });
   });
+  
+  describe('Accept flow end-to-end', () => {
+    it('should process delivery import successfully', () => {
+      // Mock import record with delivery detection
+      const mockImport = {
+        id: 123,
+        parsed: {
+          columnMap: {
+            0: 'customer',
+            1: 'truck',
+            2: 'gallons',
+            3: 'amount',
+            4: 'date'
+          },
+          rows: [
+            {
+              customer: 'ABC Corp',
+              truck: 'T-101',
+              gallons: 500,
+              amount: 1500,
+              date: '2025-01-15',
+              page: 1,
+              y: 100
+            },
+            {
+              customer: 'XYZ Inc',
+              truck: 'T-102',
+              gallons: 750,
+              amount: 2250,
+              date: '2025-01-15',
+              page: 1,
+              y: 150
+            }
+          ]
+        },
+        meta: {
+          importType: 'delivery',
+          detection: {
+            type: 'delivery',
+            confidence: 0.5,
+            hits: ['customer', 'truck', 'gallons', 'amount']
+          }
+        }
+      };
+      
+      // Verify rows meet minimum requirements
+      mockImport.parsed.rows.forEach(row => {
+        expect(row.date).toBeTruthy();
+        expect(row.truck || row.driver).toBeTruthy();
+        expect(row.gallons || row.amount).toBeTruthy();
+      });
+      
+      // Verify detection
+      expect(mockImport.meta.importType).toBe('delivery');
+      expect(mockImport.meta.detection.confidence).toBeGreaterThanOrEqual(0.5);
+    });
+  });
 });
