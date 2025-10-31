@@ -442,16 +442,36 @@ export default function ReviewPage() {
                     </div>
                     <button
                       onClick={() => {
-                        // Apply remapping to all rows
+                        // Apply remapping to all rows using the updated columnMap
                         const remapped = editedRows.map(row => {
-                          const newRow = {};
-                          Object.entries(row).forEach(([key, value]) => {
-                            newRow[key] = value;
-                          });
+                          const newRow = { ...row }; // Keep existing fields
+                          
+                          // If row has rawColumns, remap them using new columnMap
+                          if (row.rawColumns && Array.isArray(row.rawColumns)) {
+                            row.rawColumns.forEach((value, idx) => {
+                              const fieldName = columnMap[idx];
+                              if (fieldName) {
+                                // Update the field with the raw value
+                                newRow[fieldName] = value;
+                              }
+                            });
+                          }
+                          
                           return newRow;
                         });
                         setEditedRows(remapped);
-                        alert('Column mapping updated. Click Save Draft to persist changes.');
+                        
+                        // Also update the import's parsed data
+                        setSelectedImport(prev => ({
+                          ...prev,
+                          parsed: {
+                            ...prev.parsed,
+                            columnMap: columnMap,
+                            rows: remapped,
+                          }
+                        }));
+                        
+                        alert('Column mapping applied. Click Save Draft to persist changes.');
                       }}
                       className="mt-3 bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
                     >

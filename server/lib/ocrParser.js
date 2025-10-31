@@ -483,8 +483,8 @@ function inferImportType(columnMap, rows) {
   const isDelivery = hits.length >= 4;
   const type = isDelivery ? 'delivery' : 'service';
   
-  // Calculate confidence: hits out of 8 possible tokens
-  // (using 8 as denominator per spec for normalized confidence)
+  // Calculate confidence: hits out of total possible delivery tokens
+  // Using 8 as denominator per spec requirement for normalized confidence scoring
   const confidence = hits.length / 8;
   
   console.debug('[ocrParser] Import type inference result:', { 

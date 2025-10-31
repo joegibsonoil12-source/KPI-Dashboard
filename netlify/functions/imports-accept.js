@@ -70,38 +70,47 @@ function determineImportType(importRecord) {
 /**
  * Query delivery_tickets table schema
  * @param {Object} supabase - Supabase client
- * @returns {Promise<Array>} - Array of column names
+ * @returns {Promise<Array>} - Array of column info objects
  */
 async function getDeliveryTicketsSchema(supabase) {
   console.debug('[imports-accept] Querying delivery_tickets schema');
   
-  const { data, error } = await supabase.rpc('exec_sql', {
-    sql: `
-      SELECT column_name, data_type, is_nullable
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = 'delivery_tickets'
-      ORDER BY ordinal_position
-    `
-  });
+  // Try to insert an empty test record to get column info (will fail but shows schema)
+  // Alternatively, use a well-known list of expected columns
+  // For safety, we'll use a predefined schema based on the migration
+  const knownSchema = [
+    { column_name: 'id', data_type: 'uuid' },
+    { column_name: 'date', data_type: 'date' },
+    { column_name: 'store', data_type: 'text' },
+    { column_name: 'product', data_type: 'text' },
+    { column_name: 'driver', data_type: 'text' },
+    { column_name: 'truck', data_type: 'text' },
+    { column_name: 'qty', data_type: 'numeric' },
+    { column_name: 'price', data_type: 'numeric' },
+    { column_name: 'tax', data_type: 'numeric' },
+    { column_name: 'amount', data_type: 'numeric' },
+    { column_name: 'status', data_type: 'text' },
+    { column_name: 'notes', data_type: 'text' },
+    { column_name: 'customerName', data_type: 'text' },
+    { column_name: 'account', data_type: 'text' },
+    { column_name: 'created_by', data_type: 'uuid' },
+    { column_name: 'created_at', data_type: 'timestamptz' },
+    { column_name: 'updated_at', data_type: 'timestamptz' },
+  ];
   
-  // If RPC doesn't work, try direct query
-  if (error) {
-    const { data: directData, error: directError } = await supabase
-      .from('information_schema.columns')
-      .select('column_name, data_type, is_nullable')
-      .eq('table_schema', 'public')
-      .eq('table_name', 'delivery_tickets');
-    
-    if (directError) {
-      console.error('[imports-accept] Schema query failed:', directError);
-      return null;
-    }
-    
-    return directData || [];
+  // Verify table exists by attempting to select from it
+  const { error: testError } = await supabase
+    .from('delivery_tickets')
+    .select('id')
+    .limit(0);
+  
+  if (testError) {
+    console.error('[imports-accept] delivery_tickets table not accessible:', testError);
+    return null;
   }
   
-  return data || [];
+  console.debug('[imports-accept] Using known schema for delivery_tickets');
+  return knownSchema;
 }
 
 /**
@@ -215,9 +224,9 @@ async function createDeliveryTickets(supabase, rows, importId) {
   if (!schemaColumns || schemaColumns.length === 0) {
     console.error('[imports-accept] delivery_tickets table not found or has no columns');
     throw new Error(
-      'STOP: delivery_tickets table schema not found. ' +
-      'Please verify the table exists and has proper columns. ' +
-      'Expected columns: id, date, customerName, product, driver, truck, qty, price, tax, amount, status, notes, account, store, meta, created_at, updated_at'
+      'STOP: delivery_tickets table not found or is not accessible. ' +
+      'Please verify the table exists with proper permissions and columns. ' +
+      'Refer to migration sql/2025-09-30_create_tickets_and_rls.sql for schema details.'
     );
   }
   
