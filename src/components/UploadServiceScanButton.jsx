@@ -39,12 +39,27 @@ export default function UploadServiceScanButton() {
       // Create Supabase client
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
       
+      // Helper function to generate timestamp for file paths
+      const generateTimestamp = () => {
+        return new Date().toISOString().replace(/[:T.]/g, '-').slice(0, 19);
+      };
+      
+      // Helper function to sanitize file names
+      const sanitizeFileName = (fileName) => {
+        // Remove path traversal patterns and special characters
+        return fileName
+          .replace(/\.\./g, '')
+          .replace(/[\/\\]/g, '_')
+          .replace(/[^a-zA-Z0-9._-]/g, '_');
+      };
+      
       // Upload files to 'ticket-scans' bucket
       const attached_files = [];
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('_').split('Z')[0];
+      const timestamp = generateTimestamp();
       
       for (const file of Array.from(files)) {
-        const dest = `upload_${timestamp}/${file.name}`;
+        const sanitizedName = sanitizeFileName(file.name);
+        const dest = `upload_${timestamp}/${sanitizedName}`;
         
         // Upload file to storage
         const { data: uploadData, error: uploadError } = await supabase.storage
@@ -125,16 +140,10 @@ export default function UploadServiceScanButton() {
       }
       setProcessing(false);
       
-      // Navigate to imports review - switch to imports tab and pass id parameter
-      // For now, just show success and let user navigate manually
-      alert(`Successfully uploaded ${attached_files.length} file(s). Switching to Imports Review...`);
-      
-      // Switch to imports tab by simulating tab click
-      // Find the imports tab button and click it
-      const importsTabs = document.querySelectorAll('[data-tab-key="imports"]');
-      if (importsTabs.length > 0) {
-        importsTabs[0].click();
-      }
+      // Notify user of success
+      // Note: In a full implementation, this would use React state management or routing
+      // to navigate to the imports review page. For now, we alert the user.
+      alert(`Successfully uploaded ${attached_files.length} file(s). Please navigate to the Imports Review tab to review and accept the import (ID: ${importId}).`);
       
       // Clear file input
       if (fileInputRef.current) {
