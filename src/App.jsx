@@ -1087,10 +1087,24 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
                     style={{
                       display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
                       borderRadius: 8, border: "1px solid #E5E7EB", background: Current.key === "service" ? "#EEF2FF" : "white",
-                      cursor: "pointer", fontWeight: 500
+                      cursor: "pointer", fontWeight: 500, marginBottom: 6
                     }}
                   >
                     Service Tracking 🔒
+                  </button>
+                </AdminOnly>
+
+                <AdminOnly fallback={null}>
+                  <button
+                    data-tab-key="imports"
+                    onClick={() => setActive("imports")}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left", padding: "8px 12px",
+                      borderRadius: 8, border: "1px solid #E5E7EB", background: Current.key === "imports" ? "#EEF2FF" : "white",
+                      cursor: "pointer", fontWeight: 500
+                    }}
+                  >
+                    Imports Review 🔒
                   </button>
                 </AdminOnly>
 
