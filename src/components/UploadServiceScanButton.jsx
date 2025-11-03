@@ -2,10 +2,13 @@
  * Upload Service Scan Button Component
  * 
  * Provides a button to upload scanned service tickets directly to delivery tickets
- * Creates ticket_imports and processes them via the upload/process API
+ * Creates ticket_imports and processes them via client-side Supabase flow
+ * 
+ * GitHub Pages compatible - uses Supabase client directly instead of server endpoints
  */
 
 import React, { useState, useRef } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
 export default function UploadServiceScanButton() {
   const [uploading, setUploading] = useState(false);
@@ -21,76 +24,116 @@ export default function UploadServiceScanButton() {
     try {
       console.debug('[UploadServiceScanButton] Uploading files:', files.length);
       
-      // Convert files to base64
-      const filePromises = Array.from(files).map(file => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const base64 = reader.result.split(',')[1]; // Remove data:... prefix
-            resolve({
-              filename: file.name,
-              mimeType: file.type,
-              data: base64,
-            });
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-      });
+      // Get Supabase credentials (support window.__ENV override for GitHub Pages)
+      const supabaseUrl = 
+        (typeof window !== 'undefined' && window.__ENV?.VITE_SUPABASE_URL) ||
+        import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = 
+        (typeof window !== 'undefined' && window.__ENV?.VITE_SUPABASE_ANON_KEY) ||
+        import.meta.env.VITE_SUPABASE_ANON_KEY;
       
-      const fileData = await Promise.all(filePromises);
-      
-      // Call upload API
-      const response = await fetch('/api/imports/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          files: fileData,
-          meta: {
-            source: 'delivery-tickets',
-          },
-        }),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Upload failed');
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Missing Supabase configuration. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
       }
       
-      const result = await response.json();
-      console.debug('[UploadServiceScanButton] Upload success:', result);
+      // Create Supabase client
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      
+      // Upload files to 'ticket-scans' bucket
+      const attached_files = [];
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T').join('_').split('Z')[0];
+      
+      for (const file of Array.from(files)) {
+        const dest = `upload_${timestamp}/${file.name}`;
+        
+        // Upload file to storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('ticket-scans')
+          .upload(dest, file, {
+            cacheControl: '3600',
+            upsert: false
+          });
+        
+        if (uploadError) {
+          console.error('[UploadServiceScanButton] Upload error:', uploadError);
+          throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
+        }
+        
+        // Create signed URL for the uploaded file
+        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+          .from('ticket-scans')
+          .createSignedUrl(dest, 3600);
+        
+        if (signedUrlError) {
+          console.error('[UploadServiceScanButton] Signed URL error:', signedUrlError);
+          // Non-fatal, continue without signed URL
+        }
+        
+        // Build attached file metadata
+        attached_files.push({
+          name: file.name,
+          mimetype: file.type,
+          storage_path: dest,
+          url: signedUrlData?.signedUrl || null
+        });
+      }
+      
+      console.debug('[UploadServiceScanButton] Files uploaded:', attached_files.length);
+      
+      // Insert ticket_imports draft row
+      const { data: importRecord, error: insertError } = await supabase
+        .from('ticket_imports')
+        .insert({
+          src: 'upload',
+          attached_files: attached_files,
+          status: 'pending',
+          meta: {
+            importType: 'service',
+            source: 'delivery_page_upload'
+          }
+        })
+        .select()
+        .single();
+      
+      if (insertError) {
+        console.error('[UploadServiceScanButton] Insert error:', insertError);
+        throw new Error(`Failed to create import record: ${insertError.message}`);
+      }
+      
+      const importId = importRecord.id;
+      console.debug(`[imports/upload] source=delivery_page_upload id=${importId} files=${attached_files.length}`);
       
       setUploading(false);
       
-      // Optionally trigger processing immediately
-      if (result.importId) {
-        setProcessing(true);
-        console.debug('[UploadServiceScanButton] Triggering processing for import:', result.importId);
-        
-        // Call process endpoint
-        const processResponse = await fetch('/api/imports/process', {
+      // Best-effort POST to /api/imports/process/:id (ignore failure)
+      setProcessing(true);
+      try {
+        const processResponse = await fetch(`/api/imports/process/${importId}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            importId: result.importId,
-          }),
+          }
         });
         
         if (processResponse.ok) {
-          console.debug('[UploadServiceScanButton] Processing complete');
-          alert(`Successfully uploaded and processed ${result.files.length} file(s). Check Imports Review tab to review and accept.`);
+          console.debug('[UploadServiceScanButton] Processing triggered successfully');
         } else {
-          console.warn('[UploadServiceScanButton] Processing failed, but upload succeeded');
-          alert(`Successfully uploaded ${result.files.length} file(s). Processing will be attempted automatically.`);
+          console.warn('[UploadServiceScanButton] Processing trigger failed (non-fatal)');
         }
-        
-        setProcessing(false);
-      } else {
-        alert(`Successfully uploaded ${result.files?.length || 0} file(s).`);
+      } catch (processError) {
+        console.debug('[UploadServiceScanButton] Processing trigger failed (non-fatal):', processError.message);
+      }
+      setProcessing(false);
+      
+      // Navigate to imports review - switch to imports tab and pass id parameter
+      // For now, just show success and let user navigate manually
+      alert(`Successfully uploaded ${attached_files.length} file(s). Switching to Imports Review...`);
+      
+      // Switch to imports tab by simulating tab click
+      // Find the imports tab button and click it
+      const importsTabs = document.querySelectorAll('[data-tab-key="imports"]');
+      if (importsTabs.length > 0) {
+        importsTabs[0].click();
       }
       
       // Clear file input
