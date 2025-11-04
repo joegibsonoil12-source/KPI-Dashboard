@@ -656,10 +656,29 @@ export default function ImportsReview() {
   const [loading, setLoading] = useState(true);
   const [selectedImport, setSelectedImport] = useState(null);
   const [filter, setFilter] = useState('needs_review');
+  const [highlightId, setHighlightId] = useState(null);
   
   useEffect(() => {
     loadImports();
+    
+    // Check if there's a highlighted import ID from upload
+    const highlightImportId = sessionStorage.getItem('highlightImportId');
+    if (highlightImportId) {
+      setHighlightId(parseInt(highlightImportId, 10));
+      sessionStorage.removeItem('highlightImportId');
+    }
   }, [filter]);
+  
+  // Auto-select highlighted import after data is loaded
+  useEffect(() => {
+    if (highlightId && imports.length > 0 && !loading) {
+      const imp = imports.find(i => i.id === highlightId);
+      if (imp) {
+        setSelectedImport(imp);
+        setHighlightId(null); // Clear after selection
+      }
+    }
+  }, [imports, highlightId, loading]);
   
   const loadImports = async () => {
     setLoading(true);
@@ -735,7 +754,9 @@ export default function ImportsReview() {
             <div
               key={imp.id}
               onClick={() => handleImportClick(imp)}
-              className="border rounded-lg p-4 hover:shadow-lg cursor-pointer transition-shadow"
+              className={`border rounded-lg p-4 hover:shadow-lg cursor-pointer transition-shadow ${
+                highlightId === imp.id ? 'border-green-500 border-2 bg-green-50' : ''
+              }`}
             >
               <div className="flex items-center justify-between">
                 <div>

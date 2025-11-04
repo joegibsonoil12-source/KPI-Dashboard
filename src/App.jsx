@@ -943,6 +943,19 @@ export default function App() {
     return () => { mounted = false; sub?.subscription?.unsubscribe?.(); };
   }, []);
 
+  // Listen for navigation events from UploadServiceScanButton
+  useEffect(() => {
+    const handleNavigateToImports = (event) => {
+      console.debug('[App] Navigating to imports tab, importId:', event.detail?.importId);
+      setActive('imports');
+      // Ensure operations group is open to show imports tab
+      setGroupsOpen((g) => ({ ...g, operations: true }));
+    };
+    
+    window.addEventListener('navigateToImports', handleNavigateToImports);
+    return () => window.removeEventListener('navigateToImports', handleNavigateToImports);
+  }, []);
+
   if (checking) {
     return (
       <div style={{ padding: 24 }}>

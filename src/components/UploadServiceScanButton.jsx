@@ -140,10 +140,15 @@ export default function UploadServiceScanButton() {
       }
       setProcessing(false);
       
-      // Notify user of success
-      // Note: In a full implementation, this would use React state management or routing
-      // to navigate to the imports review page. For now, we alert the user.
-      alert(`Successfully uploaded ${attached_files.length} file(s). Please navigate to the Imports Review tab to review and accept the import (ID: ${importId}).`);
+      // Navigate to imports review tab
+      // Store import ID for highlighting in the review page
+      sessionStorage.setItem('highlightImportId', importId);
+      
+      // Dispatch custom event to trigger tab navigation
+      // The App component will listen for this event
+      window.dispatchEvent(new CustomEvent('navigateToImports', { 
+        detail: { importId } 
+      }));
       
       // Clear file input
       if (fileInputRef.current) {
