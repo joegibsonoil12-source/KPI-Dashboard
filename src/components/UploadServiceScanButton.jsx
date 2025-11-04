@@ -41,8 +41,10 @@ export default function UploadServiceScanButton() {
         (typeof window !== 'undefined' && window.__ENV?.VITE_SUPABASE_ANON_KEY) ||
         import.meta.env.VITE_SUPABASE_ANON_KEY;
       
-      console.debug('[UploadServiceScanButton] Supabase URL:', supabaseUrl ? '✓ configured' : '✗ missing');
-      console.debug('[UploadServiceScanButton] Supabase Anon Key:', supabaseAnonKey ? '✓ configured' : '✗ missing');
+      // Enhanced diagnostics with URL truncation for security
+      const truncateUrl = (url) => url ? `${url.substring(0, 30)}...` : 'missing';
+      console.debug('[UploadServiceScanButton] Supabase URL (truncated):', truncateUrl(supabaseUrl));
+      console.debug('[UploadServiceScanButton] Supabase Anon Key:', supabaseAnonKey ? '✓ present' : '✗ missing');
       
       if (!supabaseUrl || !supabaseAnonKey) {
         throw new Error('Missing Supabase configuration. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
@@ -51,6 +53,33 @@ export default function UploadServiceScanButton() {
       // Create Supabase client
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
       console.debug('[UploadServiceScanButton] Supabase client created');
+      
+      // Diagnostic: Test bucket access before upload
+      console.debug('[UploadServiceScanButton] Testing bucket access...');
+      try {
+        const { data: bucketTest, error: bucketTestError } = await supabase.storage
+          .from('ticket-scans')
+          .list('', { limit: 1 });
+        
+        if (bucketTestError) {
+          console.error('[UploadServiceScanButton] Bucket test error:', bucketTestError.message);
+          if (bucketTestError.message?.includes('not found') || bucketTestError.message?.includes('Bucket not found')) {
+            throw new Error(
+              `Storage bucket 'ticket-scans' not found. ` +
+              `Please create it in Supabase Dashboard or run: supabase storage create-bucket ticket-scans --public false. ` +
+              `See SUPABASE_UPLOAD_SETUP.md for detailed instructions.`
+            );
+          }
+        } else {
+          console.debug('[UploadServiceScanButton] Bucket access test: ✓ OK');
+        }
+      } catch (testError) {
+        // If it's already our formatted error, re-throw it
+        if (testError.message?.includes('Storage bucket')) {
+          throw testError;
+        }
+        console.warn('[UploadServiceScanButton] Bucket test failed (will retry on upload):', testError.message);
+      }
       
       // Helper function to generate timestamp for file paths
       const generateTimestamp = () => {
@@ -86,20 +115,44 @@ export default function UploadServiceScanButton() {
         
         if (uploadError) {
           console.error('[UploadServiceScanButton] Upload error:', uploadError);
+          console.error('[UploadServiceScanButton] Upload error details:', {
+            message: uploadError.message,
+            status: uploadError.status,
+            statusCode: uploadError.statusCode
+          });
           
-          // Handle specific error cases
-          if (uploadError.message?.includes('not found') || uploadError.message?.includes('Bucket not found')) {
+          // Handle specific error cases with actionable messages
+          const errorMsg = uploadError.message || '';
+          const errorStatus = uploadError.status || uploadError.statusCode;
+          
+          if (errorMsg.includes('not found') || errorMsg.includes('Bucket not found') || errorStatus === 404) {
+            // Bucket not found - show modal and stop further processing
             throw new Error(
-              `Storage bucket 'ticket-scans' not found. Please create the bucket in Supabase Dashboard. ` +
-              `See SUPABASE_UPLOAD_SETUP.md for instructions.`
+              `❌ Storage bucket 'ticket-scans' not found.\n\n` +
+              `ACTION REQUIRED:\n` +
+              `1. Go to Supabase Dashboard → Storage\n` +
+              `2. Create a new bucket named 'ticket-scans' (private)\n` +
+              `3. Or run: supabase storage create-bucket ticket-scans --public false\n\n` +
+              `See supabase/STORAGE_BUCKET_SETUP.sql for complete setup instructions.`
             );
-          } else if (uploadError.message?.includes('permission') || uploadError.message?.includes('policy')) {
+          } else if (errorMsg.includes('permission') || errorMsg.includes('policy') || errorStatus === 403) {
+            // Permission denied - show modal suggesting signed upload or RLS fix
             throw new Error(
-              `Permission denied for storage upload. Please verify RLS policies are configured. ` +
-              `Run the SQL from STORAGE_BUCKET_SETUP.sql in Supabase SQL Editor.`
+              `❌ Permission denied for storage upload.\n\n` +
+              `ACTION REQUIRED:\n` +
+              `Run this SQL in Supabase SQL Editor:\n` +
+              `ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;\n` +
+              `CREATE POLICY "Allow anon upload ticket-scans" ON storage.objects FOR INSERT TO anon WITH CHECK (bucket_id = 'ticket-scans');\n\n` +
+              `See supabase/STORAGE_BUCKET_SETUP.sql for complete RLS policies.`
+            );
+          } else if (errorStatus === 400) {
+            throw new Error(
+              `❌ Bad request during upload.\n\n` +
+              `Error: ${errorMsg}\n\n` +
+              `This may indicate a configuration issue with the storage bucket or file validation.`
             );
           } else {
-            throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
+            throw new Error(`Failed to upload ${file.name}: ${errorMsg}`);
           }
         }
         
