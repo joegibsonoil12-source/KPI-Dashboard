@@ -13,6 +13,7 @@ import { createClient } from '@supabase/supabase-js';
 export default function UploadServiceScanButton() {
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [errorModal, setErrorModal] = useState(null);
   const fileInputRef = useRef(null);
   
   const handleFileSelect = async (e) => {
@@ -20,9 +21,17 @@ export default function UploadServiceScanButton() {
     if (!files || files.length === 0) return;
     
     setUploading(true);
+    setErrorModal(null);
     
     try {
-      console.debug('[UploadServiceScanButton] Uploading files:', files.length);
+      // Pre-upload diagnostics
+      console.debug('[UploadServiceScanButton] === Upload Diagnostics ===');
+      console.debug('[UploadServiceScanButton] Files selected:', files.length);
+      console.debug('[UploadServiceScanButton] File details:', Array.from(files).map(f => ({
+        name: f.name,
+        size: f.size,
+        type: f.type
+      })));
       
       // Get Supabase credentials (support window.__ENV override for GitHub Pages)
       const supabaseUrl = 
@@ -32,12 +41,16 @@ export default function UploadServiceScanButton() {
         (typeof window !== 'undefined' && window.__ENV?.VITE_SUPABASE_ANON_KEY) ||
         import.meta.env.VITE_SUPABASE_ANON_KEY;
       
+      console.debug('[UploadServiceScanButton] Supabase URL:', supabaseUrl ? '✓ configured' : '✗ missing');
+      console.debug('[UploadServiceScanButton] Supabase Anon Key:', supabaseAnonKey ? '✓ configured' : '✗ missing');
+      
       if (!supabaseUrl || !supabaseAnonKey) {
         throw new Error('Missing Supabase configuration. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
       }
       
       // Create Supabase client
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      console.debug('[UploadServiceScanButton] Supabase client created');
       
       // Helper function to generate timestamp for file paths
       const generateTimestamp = () => {
@@ -61,7 +74,9 @@ export default function UploadServiceScanButton() {
         const sanitizedName = sanitizeFileName(file.name);
         const dest = `upload_${timestamp}/${sanitizedName}`;
         
-        // Upload file to storage
+        console.debug(`[UploadServiceScanButton] Uploading file: ${file.name} -> ${dest}`);
+        
+        // Upload file to storage with robust error handling
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('ticket-scans')
           .upload(dest, file, {
@@ -71,8 +86,24 @@ export default function UploadServiceScanButton() {
         
         if (uploadError) {
           console.error('[UploadServiceScanButton] Upload error:', uploadError);
-          throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
+          
+          // Handle specific error cases
+          if (uploadError.message?.includes('not found') || uploadError.message?.includes('Bucket not found')) {
+            throw new Error(
+              `Storage bucket 'ticket-scans' not found. Please create the bucket in Supabase Dashboard. ` +
+              `See SUPABASE_UPLOAD_SETUP.md for instructions.`
+            );
+          } else if (uploadError.message?.includes('permission') || uploadError.message?.includes('policy')) {
+            throw new Error(
+              `Permission denied for storage upload. Please verify RLS policies are configured. ` +
+              `Run the SQL from STORAGE_BUCKET_SETUP.sql in Supabase SQL Editor.`
+            );
+          } else {
+            throw new Error(`Failed to upload ${file.name}: ${uploadError.message}`);
+          }
         }
+        
+        console.debug(`[UploadServiceScanButton] File uploaded successfully: ${dest}`);
         
         // Create signed URL for the uploaded file
         const { data: signedUrlData, error: signedUrlError } = await supabase.storage
@@ -82,6 +113,8 @@ export default function UploadServiceScanButton() {
         if (signedUrlError) {
           console.error('[UploadServiceScanButton] Signed URL error:', signedUrlError);
           // Non-fatal, continue without signed URL
+        } else {
+          console.debug(`[UploadServiceScanButton] Signed URL created: ${signedUrlData?.signedUrl ? '✓' : '✗'}`);
         }
         
         // Build attached file metadata
@@ -96,6 +129,7 @@ export default function UploadServiceScanButton() {
       console.debug('[UploadServiceScanButton] Files uploaded:', attached_files.length);
       
       // Insert ticket_imports draft row
+      console.debug('[UploadServiceScanButton] Creating ticket_imports record...');
       const { data: importRecord, error: insertError } = await supabase
         .from('ticket_imports')
         .insert({
@@ -112,7 +146,16 @@ export default function UploadServiceScanButton() {
       
       if (insertError) {
         console.error('[UploadServiceScanButton] Insert error:', insertError);
-        throw new Error(`Failed to create import record: ${insertError.message}`);
+        
+        // Handle specific error cases
+        if (insertError.message?.includes('permission') || insertError.message?.includes('policy')) {
+          throw new Error(
+            `Permission denied for creating import record. Please verify anon RLS policies. ` +
+            `Run the SQL from supabase/migrations/0005_enable_anon_ticket_imports.sql`
+          );
+        } else {
+          throw new Error(`Failed to create import record: ${insertError.message}`);
+        }
       }
       
       const importId = importRecord.id;
@@ -156,10 +199,22 @@ export default function UploadServiceScanButton() {
       }
     } catch (error) {
       console.error('[UploadServiceScanButton] Error:', error);
-      alert('Upload failed: ' + error.message);
+      console.error('[UploadServiceScanButton] Error stack:', error.stack);
+      
+      // Show user-friendly error modal (without sensitive stack trace)
+      setErrorModal({
+        title: 'Upload Failed',
+        message: error.message,
+        timestamp: new Date().toISOString()
+      });
+      
       setUploading(false);
       setProcessing(false);
     }
+  };
+  
+  const closeErrorModal = () => {
+    setErrorModal(null);
   };
   
   const buttonText = () => {
@@ -186,6 +241,45 @@ export default function UploadServiceScanButton() {
         className="hidden"
         onChange={handleFileSelect}
       />
+      
+      {/* Error Modal */}
+      {errorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 p-6">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center">
+                <span className="text-2xl mr-2">⚠️</span>
+                <h3 className="text-lg font-semibold text-gray-900">{errorModal.title}</h3>
+              </div>
+              <button
+                onClick={closeErrorModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <span className="text-2xl">×</span>
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <p className="text-gray-700 whitespace-pre-wrap">{errorModal.message}</p>
+            </div>
+            
+            {errorModal.timestamp && (
+              <p className="text-xs text-gray-500 mb-4">
+                Time: {new Date(errorModal.timestamp).toLocaleString()}
+              </p>
+            )}
+            
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={closeErrorModal}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
