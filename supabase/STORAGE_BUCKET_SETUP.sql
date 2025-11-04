@@ -43,6 +43,9 @@ CREATE POLICY "Allow anon upload ticket-scans"
   WITH CHECK (bucket_id = 'ticket-scans');
 
 -- Policy: Allow anonymous users to read from ticket-scans bucket
+-- Note: This allows anon users to read files for creating signed URLs.
+-- The bucket itself is PRIVATE, so files are not publicly accessible.
+-- Access requires a signed URL which expires after 1 hour.
 DROP POLICY IF EXISTS "Allow anon read ticket-scans" ON storage.objects;
 CREATE POLICY "Allow anon read ticket-scans"
   ON storage.objects

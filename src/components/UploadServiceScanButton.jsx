@@ -199,12 +199,13 @@ export default function UploadServiceScanButton() {
       }
     } catch (error) {
       console.error('[UploadServiceScanButton] Error:', error);
+      console.error('[UploadServiceScanButton] Error stack:', error.stack);
       
-      // Show user-friendly error modal
+      // Show user-friendly error modal (without sensitive stack trace)
       setErrorModal({
         title: 'Upload Failed',
         message: error.message,
-        details: error.stack
+        timestamp: new Date().toISOString()
       });
       
       setUploading(false);
@@ -262,14 +263,11 @@ export default function UploadServiceScanButton() {
               <p className="text-gray-700 whitespace-pre-wrap">{errorModal.message}</p>
             </div>
             
-            <details className="mb-4">
-              <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800">
-                Technical Details
-              </summary>
-              <pre className="mt-2 p-2 bg-gray-100 rounded text-xs overflow-auto max-h-40">
-                {errorModal.details}
-              </pre>
-            </details>
+            {errorModal.timestamp && (
+              <p className="text-xs text-gray-500 mb-4">
+                Time: {new Date(errorModal.timestamp).toLocaleString()}
+              </p>
+            )}
             
             <div className="flex justify-end gap-2">
               <button
