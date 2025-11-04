@@ -666,13 +666,19 @@ export default function ImportsReview() {
     if (highlightImportId) {
       setHighlightId(parseInt(highlightImportId, 10));
       sessionStorage.removeItem('highlightImportId');
-      // Auto-select the import after a short delay to ensure data is loaded
-      setTimeout(() => {
-        const imp = imports.find(i => i.id === parseInt(highlightImportId, 10));
-        if (imp) setSelectedImport(imp);
-      }, 500);
     }
   }, [filter]);
+  
+  // Auto-select highlighted import after data is loaded
+  useEffect(() => {
+    if (highlightId && imports.length > 0 && !loading) {
+      const imp = imports.find(i => i.id === highlightId);
+      if (imp) {
+        setSelectedImport(imp);
+        setHighlightId(null); // Clear after selection
+      }
+    }
+  }, [imports, highlightId, loading]);
   
   const loadImports = async () => {
     setLoading(true);

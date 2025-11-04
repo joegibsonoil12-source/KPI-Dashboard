@@ -150,12 +150,6 @@ export default function UploadServiceScanButton() {
         detail: { importId } 
       }));
       
-      // Fallback: Show success message
-      // This will display if the navigation event is not handled
-      setTimeout(() => {
-        alert(`Successfully uploaded ${attached_files.length} file(s). Import ID: ${importId}`);
-      }, 100);
-      
       // Clear file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
