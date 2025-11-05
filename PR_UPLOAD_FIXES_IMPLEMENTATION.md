@@ -157,14 +157,14 @@ After successful execution, paste this into the PR:
 
 The component has been verified to include all required features:
 
-#### ✓ Pre-Upload Diagnostics (Lines 28-82)
+#### ✓ Pre-Upload Diagnostics (Lines 28-83)
 - Logs file count and details
 - Truncates Supabase URL for security: `${url.substring(0, 30)}...`
 - Checks anon key presence: `'✓ present'` or `'✗ missing'`
 - Tests bucket access with `supabase.storage.from('ticket-scans').list('', {limit:1})`
 - Logs bucket test errors with actionable messages
 
-#### ✓ Robust Client Upload Flow (Lines 37-157)
+#### ✓ Robust Client Upload Flow (Lines 36-157)
 - Creates Supabase client from `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
 - Supports `window.__ENV` override for GitHub Pages runtime config
 - Handles missing configuration with clear error message
