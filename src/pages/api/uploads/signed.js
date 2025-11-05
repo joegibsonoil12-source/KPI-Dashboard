@@ -35,7 +35,7 @@ function createAdminClient() {
  * Helper function to generate timestamp for file paths
  */
 function generateTimestamp() {
-  return new Date().toISOString().replace(/[:T.]/g, "-").slice(0, 19);
+  return new Date().toISOString().replace(/[:T]/g, "-").split(".")[0];
 }
 
 /**

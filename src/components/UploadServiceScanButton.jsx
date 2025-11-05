@@ -83,7 +83,7 @@ export default function UploadServiceScanButton() {
       
       // Helper function to generate timestamp for file paths
       const generateTimestamp = () => {
-        return new Date().toISOString().replace(/[:T.]/g, '-').slice(0, 19);
+        return new Date().toISOString().replace(/[:T]/g, '-').split('.')[0];
       };
       
       // Helper function to sanitize file names
@@ -93,6 +93,43 @@ export default function UploadServiceScanButton() {
           .replace(/\.\./g, '')
           .replace(/[\/\\]/g, '_')
           .replace(/[^a-zA-Z0-9._-]/g, '_');
+      };
+      
+      // Helper function to convert file to base64
+      const fileToBase64 = (file) => {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64String = reader.result.split(',')[1];
+            resolve(base64String);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      };
+      
+      // Helper function to upload file via server endpoint
+      const uploadViaServer = async (file) => {
+        const base64 = await fileToBase64(file);
+        
+        const serverResponse = await fetch('/api/uploads/signed', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            filename: file.name,
+            contentType: file.type,
+            base64: base64,
+          }),
+        });
+        
+        if (!serverResponse.ok) {
+          const errorData = await serverResponse.json();
+          throw new Error(errorData.error || `Server upload failed: ${serverResponse.status}`);
+        }
+        
+        return await serverResponse.json();
       };
       
       // Upload files to 'ticket-scans' bucket
@@ -144,36 +181,7 @@ export default function UploadServiceScanButton() {
             useServerUpload = true;
             
             try {
-              // Convert file to base64
-              const base64 = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                  const base64String = reader.result.split(',')[1];
-                  resolve(base64String);
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-              });
-              
-              // Call server endpoint
-              const serverResponse = await fetch('/api/uploads/signed', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  filename: file.name,
-                  contentType: file.type,
-                  base64: base64,
-                }),
-              });
-              
-              if (!serverResponse.ok) {
-                const errorData = await serverResponse.json();
-                throw new Error(errorData.error || `Server upload failed: ${serverResponse.status}`);
-              }
-              
-              const serverResult = await serverResponse.json();
+              const serverResult = await uploadViaServer(file);
               console.debug('[UploadServiceScanButton] Server upload successful:', serverResult.storagePath);
               
               // Use server result
@@ -221,36 +229,7 @@ export default function UploadServiceScanButton() {
         // If using server upload for subsequent files after first fallback
         if (useServerUpload && !uploadError) {
           try {
-            // Convert file to base64
-            const base64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => {
-                const base64String = reader.result.split(',')[1];
-                resolve(base64String);
-              };
-              reader.onerror = reject;
-              reader.readAsDataURL(file);
-            });
-            
-            // Call server endpoint
-            const serverResponse = await fetch('/api/uploads/signed', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                filename: file.name,
-                contentType: file.type,
-                base64: base64,
-              }),
-            });
-            
-            if (!serverResponse.ok) {
-              const errorData = await serverResponse.json();
-              throw new Error(errorData.error || `Server upload failed: ${serverResponse.status}`);
-            }
-            
-            const serverResult = await serverResponse.json();
+            const serverResult = await uploadViaServer(file);
             console.debug('[UploadServiceScanButton] Server upload successful:', serverResult.storagePath);
             
             // Use server result
