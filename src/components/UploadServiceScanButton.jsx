@@ -98,6 +98,7 @@ export default function UploadServiceScanButton() {
       // Upload files to 'ticket-scans' bucket
       const attached_files = [];
       const timestamp = generateTimestamp();
+      let useServerUpload = false;
       
       for (const file of Array.from(files)) {
         const sanitizedName = sanitizeFileName(file.name);
@@ -105,13 +106,21 @@ export default function UploadServiceScanButton() {
         
         console.debug(`[UploadServiceScanButton] Uploading file: ${file.name} -> ${dest}`);
         
-        // Upload file to storage with robust error handling
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('ticket-scans')
-          .upload(dest, file, {
-            cacheControl: '3600',
-            upsert: false
-          });
+        // Try direct client upload first
+        let uploadData = null;
+        let uploadError = null;
+        
+        if (!useServerUpload) {
+          const result = await supabase.storage
+            .from('ticket-scans')
+            .upload(dest, file, {
+              cacheControl: '3600',
+              upsert: false
+            });
+          
+          uploadData = result.data;
+          uploadError = result.error;
+        }
         
         if (uploadError) {
           console.error('[UploadServiceScanButton] Upload error:', uploadError);
@@ -121,30 +130,83 @@ export default function UploadServiceScanButton() {
             statusCode: uploadError.statusCode
           });
           
-          // Handle specific error cases with actionable messages
+          // Handle specific error cases
           const errorMsg = uploadError.message || '';
           const errorStatus = uploadError.status || uploadError.statusCode;
           
-          if (errorMsg.includes('not found') || errorMsg.includes('Bucket not found') || errorStatus === 404) {
-            // Bucket not found - show modal and stop further processing
-            throw new Error(
-              `❌ Storage bucket 'ticket-scans' not found.\n\n` +
-              `ACTION REQUIRED:\n` +
-              `1. Go to Supabase Dashboard → Storage\n` +
-              `2. Create a new bucket named 'ticket-scans' (private)\n` +
-              `3. Or run: supabase storage create-bucket ticket-scans --public false\n\n` +
-              `See supabase/STORAGE_BUCKET_SETUP.sql for complete setup instructions.`
-            );
-          } else if (errorMsg.includes('permission') || errorMsg.includes('policy') || errorStatus === 403) {
-            // Permission denied - show modal suggesting signed upload or RLS fix
-            throw new Error(
-              `❌ Permission denied for storage upload.\n\n` +
-              `ACTION REQUIRED:\n` +
-              `Run this SQL in Supabase SQL Editor:\n` +
-              `ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;\n` +
-              `CREATE POLICY "Allow anon upload ticket-scans" ON storage.objects FOR INSERT TO anon WITH CHECK (bucket_id = 'ticket-scans');\n\n` +
-              `See supabase/STORAGE_BUCKET_SETUP.sql for complete RLS policies.`
-            );
+          // Check if this is a bucket not found or permission error
+          const isBucketError = errorMsg.includes('not found') || errorMsg.includes('Bucket not found') || errorStatus === 404;
+          const isPermissionError = errorMsg.includes('permission') || errorMsg.includes('policy') || errorStatus === 403;
+          
+          if (isBucketError || isPermissionError) {
+            // Try server-signed-upload fallback
+            console.debug('[UploadServiceScanButton] Client upload failed, attempting server-signed-upload fallback...');
+            useServerUpload = true;
+            
+            try {
+              // Convert file to base64
+              const base64 = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const base64String = reader.result.split(',')[1];
+                  resolve(base64String);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+              });
+              
+              // Call server endpoint
+              const serverResponse = await fetch('/api/uploads/signed', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  filename: file.name,
+                  contentType: file.type,
+                  base64: base64,
+                }),
+              });
+              
+              if (!serverResponse.ok) {
+                const errorData = await serverResponse.json();
+                throw new Error(errorData.error || `Server upload failed: ${serverResponse.status}`);
+              }
+              
+              const serverResult = await serverResponse.json();
+              console.debug('[UploadServiceScanButton] Server upload successful:', serverResult.storagePath);
+              
+              // Use server result
+              attached_files.push({
+                name: file.name,
+                mimetype: file.type,
+                storage_path: serverResult.storagePath,
+                url: serverResult.signedViewUrl,
+              });
+              
+              continue; // Skip to next file
+            } catch (serverError) {
+              console.error('[UploadServiceScanButton] Server upload fallback failed:', serverError);
+              
+              // If server upload also fails, show helpful error
+              if (isBucketError) {
+                throw new Error(
+                  `❌ Storage bucket 'ticket-scans' not found.\n\n` +
+                  `ACTION REQUIRED:\n` +
+                  `1. Go to Supabase Dashboard → Storage\n` +
+                  `2. Create a new bucket named 'ticket-scans' (private)\n` +
+                  `3. Or run: supabase storage create-bucket ticket-scans --public false\n\n` +
+                  `See supabase/STORAGE_BUCKET_SETUP.sql for complete setup instructions.`
+                );
+              } else {
+                throw new Error(
+                  `❌ Permission denied for storage upload.\n\n` +
+                  `Both client and server upload failed.\n` +
+                  `Error: ${serverError.message}\n\n` +
+                  `Please contact administrator to configure storage access.`
+                );
+              }
+            }
           } else if (errorStatus === 400) {
             throw new Error(
               `❌ Bad request during upload.\n\n` +
@@ -156,6 +218,57 @@ export default function UploadServiceScanButton() {
           }
         }
         
+        // If using server upload for subsequent files after first fallback
+        if (useServerUpload && !uploadError) {
+          try {
+            // Convert file to base64
+            const base64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => {
+                const base64String = reader.result.split(',')[1];
+                resolve(base64String);
+              };
+              reader.onerror = reject;
+              reader.readAsDataURL(file);
+            });
+            
+            // Call server endpoint
+            const serverResponse = await fetch('/api/uploads/signed', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                filename: file.name,
+                contentType: file.type,
+                base64: base64,
+              }),
+            });
+            
+            if (!serverResponse.ok) {
+              const errorData = await serverResponse.json();
+              throw new Error(errorData.error || `Server upload failed: ${serverResponse.status}`);
+            }
+            
+            const serverResult = await serverResponse.json();
+            console.debug('[UploadServiceScanButton] Server upload successful:', serverResult.storagePath);
+            
+            // Use server result
+            attached_files.push({
+              name: file.name,
+              mimetype: file.type,
+              storage_path: serverResult.storagePath,
+              url: serverResult.signedViewUrl,
+            });
+            
+            continue; // Skip to next file
+          } catch (serverError) {
+            console.error('[UploadServiceScanButton] Server upload failed:', serverError);
+            throw new Error(`Failed to upload ${file.name} via server: ${serverError.message}`);
+          }
+        }
+        
+        // Client upload succeeded
         console.debug(`[UploadServiceScanButton] File uploaded successfully: ${dest}`);
         
         // Create signed URL for the uploaded file
