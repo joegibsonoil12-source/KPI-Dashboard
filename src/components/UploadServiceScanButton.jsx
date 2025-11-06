@@ -334,15 +334,8 @@ export default function UploadServiceScanButton() {
       }
       setProcessing(false);
       
-      // Navigate to imports review tab
-      // Store import ID for highlighting in the review page
-      sessionStorage.setItem('highlightImportId', importId);
-      
-      // Dispatch custom event to trigger tab navigation
-      // The App component will listen for this event
-      window.dispatchEvent(new CustomEvent('navigateToImports', { 
-        detail: { importId } 
-      }));
+      // Navigate to imports review page
+      window.location.href = `/imports/review?id=${importId}`;
       
       // Clear file input
       if (fileInputRef.current) {
