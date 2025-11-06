@@ -112,7 +112,13 @@ export default function UploadServiceScanButton() {
       const uploadViaServer = async (file) => {
         const base64 = await fileToBase64(file);
         
-        const serverResponse = await fetch('/api/uploads/signed', {
+        // Get server upload endpoint URL from environment or use default relative path
+        const uploadEndpoint = 
+          (typeof window !== 'undefined' && window.__ENV?.VITE_UPLOADS_SIGNED_URL) ||
+          import.meta.env.VITE_UPLOADS_SIGNED_URL ||
+          '/api/uploads/signed';
+        
+        const serverResponse = await fetch(uploadEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
