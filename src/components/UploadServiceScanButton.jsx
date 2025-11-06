@@ -334,7 +334,10 @@ export default function UploadServiceScanButton() {
       }
       setProcessing(false);
       
-      // Navigate to imports review page
+      // Store import ID for highlighting (used by embedded ImportsReview component)
+      sessionStorage.setItem('highlightImportId', importId);
+      
+      // Navigate to imports review page (standalone page)
       window.location.href = `/imports/review?id=${importId}`;
       
       // Clear file input
