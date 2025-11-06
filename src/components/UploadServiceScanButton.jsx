@@ -334,10 +334,12 @@ export default function UploadServiceScanButton() {
       }
       setProcessing(false);
       
-      // Store import ID for highlighting (used by embedded ImportsReview component)
+      // Store import ID for highlighting (used by embedded ImportsReview component in App.jsx)
       sessionStorage.setItem('highlightImportId', importId);
       
-      // Navigate to imports review page (standalone page)
+      // Navigate to standalone imports review page
+      // Note: Uses window.location.href instead of event-based navigation for GitHub Pages compatibility
+      // The standalone page at /src/pages/imports/review.jsx reads the ID from URL params
       window.location.href = `/imports/review?id=${importId}`;
       
       // Clear file input
