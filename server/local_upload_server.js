@@ -64,7 +64,8 @@ function sanitizeFileName(fileName) {
   return fileName
     .replace(/\.\./g, '')
     .replace(/[\/\\]/g, '_')
-    .replace(/[^a-zA-Z0-9._-]/g, '_');
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_{2,}/g, '_'); // Replace multiple underscores with single underscore
 }
 
 /**
@@ -131,7 +132,7 @@ app.post('/uploads/signed', async (req, res) => {
     
     // Upload to ticket-scans bucket
     console.log('[local-upload-server] Uploading to Supabase storage...');
-    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+    const { error: uploadError } = await supabaseAdmin.storage
       .from('ticket-scans')
       .upload(dest, buffer, {
         contentType: contentType,

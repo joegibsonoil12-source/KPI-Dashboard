@@ -109,6 +109,21 @@ export default function UploadServiceScanButton() {
         });
       };
       
+      // Helper function to convert all files to base64 for local storage
+      const convertFilesToBase64 = async (files) => {
+        const filesWithBase64 = [];
+        for (const f of Array.from(files)) {
+          const base64 = await fileToBase64(f);
+          filesWithBase64.push({
+            name: f.name,
+            mimetype: f.type,
+            size: f.size,
+            base64: base64,
+          });
+        }
+        return filesWithBase64;
+      };
+      
       // Helper function to upload file via server endpoint
       const uploadViaServer = async (file) => {
         const base64 = await fileToBase64(file);
@@ -207,16 +222,7 @@ export default function UploadServiceScanButton() {
               console.warn('[UploadServiceScanButton] Attempting local storage fallback...');
               
               // Convert files to base64 for local storage
-              const filesWithBase64 = [];
-              for (const f of Array.from(files)) {
-                const base64 = await fileToBase64(f);
-                filesWithBase64.push({
-                  name: f.name,
-                  mimetype: f.type,
-                  size: f.size,
-                  base64: base64,
-                });
-              }
+              const filesWithBase64 = await convertFilesToBase64(files);
               
               // Save to local storage
               try {
@@ -292,16 +298,7 @@ export default function UploadServiceScanButton() {
             console.warn('[UploadServiceScanButton] Attempting local storage fallback...');
             
             // Convert files to base64 for local storage
-            const filesWithBase64 = [];
-            for (const f of Array.from(files)) {
-              const base64 = await fileToBase64(f);
-              filesWithBase64.push({
-                name: f.name,
-                mimetype: f.type,
-                size: f.size,
-                base64: base64,
-              });
-            }
+            const filesWithBase64 = await convertFilesToBase64(files);
             
             // Save to local storage
             try {

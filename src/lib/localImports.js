@@ -21,7 +21,7 @@ export function saveLocalImport(importData) {
     const imports = getLocalImports();
     
     // Generate unique ID
-    const importId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const importId = `local_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     
     // Add timestamp and ID
     const importRecord = {
