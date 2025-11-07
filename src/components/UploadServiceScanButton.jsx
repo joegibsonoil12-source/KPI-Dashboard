@@ -9,6 +9,7 @@
 
 import React, { useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { saveLocalImport } from '../lib/localImports.js';
 
 export default function UploadServiceScanButton() {
   const [uploading, setUploading] = useState(false);
@@ -108,6 +109,21 @@ export default function UploadServiceScanButton() {
         });
       };
       
+      // Helper function to convert all files to base64 for local storage
+      const convertFilesToBase64 = async (files) => {
+        const filesWithBase64 = [];
+        for (const f of Array.from(files)) {
+          const base64 = await fileToBase64(f);
+          filesWithBase64.push({
+            name: f.name,
+            mimetype: f.type,
+            size: f.size,
+            base64: base64,
+          });
+        }
+        return filesWithBase64;
+      };
+      
       // Helper function to upload file via server endpoint
       const uploadViaServer = async (file) => {
         const base64 = await fileToBase64(file);
@@ -202,21 +218,49 @@ export default function UploadServiceScanButton() {
             } catch (serverError) {
               console.error('[UploadServiceScanButton] Server upload fallback failed:', serverError);
               
-              // If server upload also fails, show helpful error
-              if (isBucketError) {
-                throw new Error(
-                  `❌ Storage bucket 'ticket-scans' not found.\n\n` +
-                  `ACTION REQUIRED:\n` +
-                  `1. Go to Supabase Dashboard → Storage\n` +
-                  `2. Create a new bucket named 'ticket-scans' (private)\n` +
-                  `3. Or run: supabase storage create-bucket ticket-scans --public false\n\n` +
-                  `See supabase/STORAGE_BUCKET_SETUP.sql for complete setup instructions.`
+              // If server upload also fails, try local fallback
+              console.warn('[UploadServiceScanButton] Attempting local storage fallback...');
+              
+              // Convert files to base64 for local storage
+              const filesWithBase64 = await convertFilesToBase64(files);
+              
+              // Save to local storage
+              try {
+                const localImportId = saveLocalImport({
+                  src: 'upload',
+                  attached_files: filesWithBase64,
+                  status: 'local_pending',
+                  meta: {
+                    importType: 'service',
+                    source: 'delivery_page_upload',
+                    uploadFailed: true,
+                    clientError: uploadError?.message,
+                    serverError: serverError.message,
+                  },
+                });
+                
+                console.debug(`[imports/upload] source=delivery_page_upload id=${localImportId} files=${filesWithBase64.length} (saved locally)`);
+                
+                // Show info message and redirect to review
+                setUploading(false);
+                alert(
+                  '⚠️ Upload to cloud storage failed. Your import has been saved locally.\n\n' +
+                  'Note: Local imports are stored in your browser and will not sync across devices.\n' +
+                  'Please ensure storage bucket is configured in Supabase for full functionality.'
                 );
-              } else {
+                
+                // Navigate to imports review page with local import ID
+                window.location.href = `/imports/review?id=${localImportId}`;
+                return;
+              } catch (localError) {
+                console.error('[UploadServiceScanButton] Local storage fallback failed:', localError);
+                
+                // All three methods failed - show comprehensive error
                 throw new Error(
-                  `❌ Permission denied for storage upload.\n\n` +
-                  `Both client and server upload failed.\n` +
-                  `Error: ${serverError.message}\n\n` +
+                  `❌ Upload failed - all methods exhausted.\n\n` +
+                  `Client upload: ${uploadError?.message || 'Failed'}\n` +
+                  `Server upload: ${serverError.message}\n` +
+                  `Local storage: ${localError.message}\n\n` +
                   `Please contact administrator to configure storage access.`
                 );
               }
@@ -249,7 +293,49 @@ export default function UploadServiceScanButton() {
             continue; // Skip to next file
           } catch (serverError) {
             console.error('[UploadServiceScanButton] Server upload failed:', serverError);
-            throw new Error(`Failed to upload ${file.name} via server: ${serverError.message}`);
+            
+            // Try local fallback
+            console.warn('[UploadServiceScanButton] Attempting local storage fallback...');
+            
+            // Convert files to base64 for local storage
+            const filesWithBase64 = await convertFilesToBase64(files);
+            
+            // Save to local storage
+            try {
+              const localImportId = saveLocalImport({
+                src: 'upload',
+                attached_files: filesWithBase64,
+                status: 'local_pending',
+                meta: {
+                  importType: 'service',
+                  source: 'delivery_page_upload',
+                  uploadFailed: true,
+                  serverError: serverError.message,
+                },
+              });
+              
+              console.debug(`[imports/upload] source=delivery_page_upload id=${localImportId} files=${filesWithBase64.length} (saved locally)`);
+              
+              // Show info message and redirect to review
+              setUploading(false);
+              alert(
+                '⚠️ Upload to cloud storage failed. Your import has been saved locally.\n\n' +
+                'Note: Local imports are stored in your browser and will not sync across devices.\n' +
+                'Please ensure storage bucket is configured in Supabase for full functionality.'
+              );
+              
+              // Navigate to imports review page with local import ID
+              window.location.href = `/imports/review?id=${localImportId}`;
+              return;
+            } catch (localError) {
+              console.error('[UploadServiceScanButton] Local storage fallback failed:', localError);
+              throw new Error(
+                `❌ Upload failed - all methods exhausted.\n\n` +
+                `Server upload: ${serverError.message}\n` +
+                `Local storage: ${localError.message}\n\n` +
+                `Please contact administrator.`
+              );
+            }
           }
         }
         
