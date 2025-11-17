@@ -1,14 +1,33 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import TimeSeriesChart from "../charts/TimeSeriesChart";
+import DonutChart from "../charts/DonutChart";
+import BarBreakdown from "../charts/BarBreakdown";
+import DashboardControls from "../DashboardControls";
 
-function Card({ title, value, sub, right, style, children }) {
+function Card({ title, value, sub, right, style, children, trend = null, trendColor = "#16A34A" }) {
   return (
-    <div style={{ background: "white", border: "1px solid #E5E7EB", borderRadius: 12, padding: 16, ...style }}>
+    <div style={{ 
+      background: "white", 
+      border: "1px solid #E5E7EB", 
+      borderRadius: 12, 
+      padding: 16,
+      boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+      transition: "box-shadow 0.2s",
+      ...style 
+    }}>
       <div style={{ display: "flex", alignItems: "baseline" }}>
-        <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 500 }}>{title}</div>
+        <div style={{ fontSize: 12, color: "#6B7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{title}</div>
         <div style={{ marginLeft: "auto" }}>{right}</div>
       </div>
-      {value !== undefined && <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>{value}</div>}
+      {value !== undefined && (
+        <div style={{ fontSize: 28, fontWeight: 700, marginTop: 8, color: "#111827" }}>{value}</div>
+      )}
+      {trend && (
+        <div style={{ fontSize: 11, color: trendColor, marginTop: 4, fontWeight: 500 }}>
+          {trend > 0 ? '↗' : trend < 0 ? '↘' : '→'} {Math.abs(trend).toFixed(1)}%
+        </div>
+      )}
       {sub && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 4 }}>{sub}</div>}
       {children}
     </div>
@@ -91,6 +110,8 @@ function HBars({ rows = [] }) {
 function toISO(d) { return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
 function rangePreset(preset) {
   const now = new Date();
+  if (preset === "today") { return {from: toISO(now), to: toISO(now), label:"Today"}; }
+  if (preset === "7d") { const from = new Date(); from.setDate(now.getDate()-6); return {from: toISO(from), to: toISO(now), label:"Last 7 days"}; }
   if (preset === "30d") { const from = new Date(); from.setDate(now.getDate()-29); return {from: toISO(from), to: toISO(now), label:"Last 30 days"}; }
   if (preset === "mtd") { const from = new Date(now.getFullYear(), now.getMonth(), 1); return {from: toISO(from), to: toISO(now), label:"This month"}; }
   if (preset === "ytd") { const from = new Date(now.getFullYear(), 0, 1); return {from: toISO(from), to: toISO(now), label:"Year to date"}; }
@@ -139,6 +160,9 @@ export default function ExecutiveDashboard() {
   const [serviceDaily, setServiceDaily] = useState([]);
   const [serviceTechs, setServiceTechs] = useState([]);
   const [tickets, setTickets] = useState([]);
+  const [deliveryDaily, setDeliveryDaily] = useState([]);
+  const [truckData, setTruckData] = useState([]);
+  const [productData, setProductData] = useState([]);
   // NEW: grouping for deliveries chart
   const [delivGroup, setDelivGroup] = useState("day"); // 'day' | 'week' | 'month' | 'year'
 
@@ -150,7 +174,8 @@ export default function ExecutiveDashboard() {
       setLoading(true); setErr("");
       try {
         const { from, to } = fromTo;
-        // Query service_jobs table directly instead of non-existent view
+        
+        // Fetch service jobs data
         const { data: d1, error: e1 } = await supabase
           .from("service_jobs")
           .select("job_date,status,job_amount")
@@ -166,13 +191,25 @@ export default function ExecutiveDashboard() {
           .lte("job_date", to);
         if (e2) throw e2;
 
+        // Fetch delivery tickets with all needed fields
         const { data: d3, error: e3 } = await supabase
           .from("delivery_tickets")
-          .select("date, scheduled_window_start, created_at, amount, gallons_delivered, qty, status, truck")
+          .select("date, scheduled_window_start, created_at, amount, gallons_delivered, qty, status, truck, product")
           .limit(5000);
         if (e3) throw e3;
 
+        // Fetch aggregated delivery data from view
+        const { data: d4, error: e4 } = await supabase
+          .from("delivery_tickets_daily")
+          .select("day, ticket_count, total_gallons, revenue")
+          .gte("day", from)
+          .lte("day", to)
+          .order("day", { ascending: true });
+        if (e4) throw e4;
+
         if (!mounted) return;
+        
+        // Filter tickets by date range
         const fromD = new Date(from + "T00:00:00");
         const toD = new Date(to + "T23:59:59");
         const tFiltered = (Array.isArray(d3) ? d3 : []).filter((r) => {
@@ -180,9 +217,45 @@ export default function ExecutiveDashboard() {
           return d && d >= fromD && d <= toD;
         });
 
+        // Calculate per-truck totals
+        const truckMap = new Map();
+        tFiltered.forEach((t) => {
+          const truck = t.truck || "Unknown";
+          if (!truckMap.has(truck)) {
+            truckMap.set(truck, { gallons: 0, revenue: 0, count: 0 });
+          }
+          const data = truckMap.get(truck);
+          data.gallons += Number(t.gallons_delivered ?? t.qty) || 0;
+          data.revenue += Number(t.amount) || 0;
+          data.count += 1;
+        });
+        const trucks = Array.from(truckMap.entries())
+          .map(([truck, data]) => ({ truck, ...data }))
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 10);
+
+        // Calculate per-product totals
+        const productMap = new Map();
+        tFiltered.forEach((t) => {
+          const product = t.product || "Unknown";
+          if (!productMap.has(product)) {
+            productMap.set(product, { gallons: 0, revenue: 0, count: 0 });
+          }
+          const data = productMap.get(product);
+          data.gallons += Number(t.gallons_delivered ?? t.qty) || 0;
+          data.revenue += Number(t.amount) || 0;
+          data.count += 1;
+        });
+        const products = Array.from(productMap.entries())
+          .map(([product, data]) => ({ product, ...data }))
+          .sort((a, b) => b.revenue - a.revenue);
+
         setServiceDaily(Array.isArray(d1) ? d1 : []);
         setServiceTechs(Array.isArray(d2) ? d2 : []);
         setTickets(tFiltered);
+        setDeliveryDaily(Array.isArray(d4) ? d4 : []);
+        setTruckData(trucks);
+        setProductData(products);
       } catch (e) {
         setErr(e?.message || String(e));
       } finally {
@@ -304,96 +377,185 @@ export default function ExecutiveDashboard() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <Section
-        title="Executive Overview"
-        actions={
-          <div style={{ display: "flex", gap: 8 }}>
-            <select value={preset} onChange={(e)=>setPreset(e.target.value)} style={{ padding:"8px 10px", border:"1px solid #E5E7EB", borderRadius:8 }}>
-              <option value="30d">Last 30 days</option>
-              <option value="mtd">This month</option>
-              <option value="ytd">Year to date</option>
-            </select>
-            <div style={{ alignSelf:"center", fontSize:12, color:"#6B7280" }}>
-              {fromTo.label} • {fromTo.from} → {fromTo.to}
-            </div>
-          </div>
-        }
-      >
-        {err && <div style={{ color:"#b91c1c", fontSize:12, marginBottom:8 }}>{err}</div>}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(6, minmax(180px, 1fr))", gap:12 }}>
-          <Card title="Total Revenue (Service + Deliveries)" value={usd(grandRevenue)} sub="Sum over range" />
-          <Card title="Service Revenue (Completed)" value={usd(agg.svcCompletedRevenue)} />
-          <Card title="Delivery Revenue" value={usd(agg.deliveriesTotals?.revenue)} />
-          <Card title="Service Jobs — Completed" value={num(agg.svcCounts?.completed)} />
-          <Card title="Service Pipeline (Sched + In Prog)" value={usd(agg.svcPipelineRevenue)} />
-          <Card title="Delivery Gallons" value={num(agg.deliveriesTotals?.gallons)} sub={"Avg $" + (agg.deliveriesAvgPrice||0).toFixed(2) + "/gal"} />
-        </div>
-      </Section>
+      {/* Date Range Controls */}
+      <DashboardControls
+        preset={preset}
+        onPresetChange={setPreset}
+        fromDate={fromTo.from}
+        toDate={fromTo.to}
+        onDateChange={(from, to) => setFromTo({ from, to, label: "Custom range" })}
+        showCustomDates={false}
+      />
 
+      {err && <div style={{ color:"#b91c1c", fontSize:12, marginBottom:8, padding: 12, background: "#FEE2E2", borderRadius: 8 }}>{err}</div>}
+
+      {/* KPI Cards with Professional Styling */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16 }}>
+        <Card 
+          title="Total Revenue" 
+          value={usd(grandRevenue)} 
+          sub="Service + Deliveries"
+          style={{ background: "linear-gradient(135deg, #0B6E99 0%, #00A99D 100%)", color: "white", border: "none" }}
+        >
+          <div style={{ marginTop: 8 }}>
+            <Sparkline data={agg.combinedRevenueByDay || []} height={40} stroke="rgba(255,255,255,0.8)" fill="rgba(255,255,255,0.2)" />
+          </div>
+        </Card>
+        
+        <Card title="Service Revenue" value={usd(agg.svcCompletedRevenue)} sub="Completed jobs">
+          <div style={{ marginTop: 8 }}>
+            <Sparkline data={agg.serviceCompletedRevenueByDay || []} height={40} stroke="#00A99D" fill="rgba(0,169,157,0.1)" />
+          </div>
+        </Card>
+        
+        <Card title="Delivery Revenue" value={usd(agg.deliveriesTotals?.revenue)} sub={`${num(agg.deliveriesTotals?.tickets)} tickets`}>
+          <div style={{ marginTop: 8 }}>
+            <Sparkline data={agg.deliveriesRevenueByDay || []} height={40} stroke="#F5A623" fill="rgba(245,166,35,0.1)" />
+          </div>
+        </Card>
+        
+        <Card title="Delivery Gallons" value={num(agg.deliveriesTotals?.gallons)} sub={`Avg $${(agg.deliveriesAvgPrice||0).toFixed(2)}/gal`} />
+        
+        <Card title="Service Jobs" value={num(agg.svcCounts?.completed)} sub="Completed" />
+        
+        <Card title="Pipeline" value={usd(agg.svcPipelineRevenue)} sub="Scheduled + In Progress" />
+      </div>
+
+      {/* Main Charts Row */}
       <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:16 }}>
-        <Section title="Combined Revenue Trend">
+        <Section title="Combined Revenue Trend (Daily)">
           <Card>
-            <Sparkline data={agg.combinedRevenueByDay || []} />
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#6B7280", marginTop:6 }}>
-              <span>{agg.allDays?.[0] || ""}</span>
-              <span>{agg.allDays?.[agg.allDays.length-1] || ""}</span>
-            </div>
+            <TimeSeriesChart
+              data={agg.combinedRevenueByDay || []}
+              categories={agg.allDays || []}
+              title="Revenue"
+              height={280}
+              type="area"
+              color="#0B6E99"
+              yAxisFormatter={(val) => "$" + Math.round(val).toLocaleString()}
+            />
           </Card>
         </Section>
-        <Section title="Top Technicians (Service Revenue)">
+        
+        <Section title="Top Technicians">
           <Card>
             <HBars rows={agg.topTechs || []} />
           </Card>
         </Section>
       </div>
 
+      {/* Service and Delivery Charts */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-        <Section title="Service — Jobs by Status (Daily)">
+        <Section title="Service Jobs by Status">
           <Card>
-            <StackedBars categories={agg.serviceDays} series={agg.serviceSeriesStatus} />
-            <div style={{ display:"flex", gap:12, marginTop:8, fontSize:12, color:"#6B7280", flexWrap:"wrap" }}>
-              {agg.serviceSeriesStatus.map((s)=>(
-                <div key={s.name} style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ width:12, height:12, background:s.color, display:"inline-block", borderRadius:3 }} />
-                  {s.name}
-                </div>
-              ))}
-            </div>
+            <BarBreakdown
+              categories={agg.serviceDays.slice(-30) || []}
+              series={agg.serviceSeriesStatus.map(s => ({
+                name: s.name,
+                data: s.values.slice(-30)
+              }))}
+              height={280}
+              stacked={true}
+              colors={['#16A34A', '#4338CA', '#F59E0B', '#DC2626']}
+              yAxisFormatter={(val) => Math.round(val).toString()}
+            />
           </Card>
         </Section>
 
         <Section
-          title="Deliveries — Tickets by Status"
+          title="Delivery Tickets by Status"
           actions={
             <select
               value={delivGroup}
               onChange={(e)=>setDelivGroup(e.target.value)}
-              style={{ padding:"6px 10px", border:"1px solid #E5E7EB", borderRadius:8 }}
-              title="Group by"
+              style={{ padding:"6px 10px", border:"1px solid #E5E7EB", borderRadius:8, fontSize: 12 }}
             >
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-              <option value="year">Year</option>
+              <option value="day">Daily</option>
+              <option value="week">Weekly</option>
+              <option value="month">Monthly</option>
+              <option value="year">Yearly</option>
             </select>
           }
         >
           <Card>
-            <StackedBars
-              categories={agg.ticketsBuckets.map(k=>fmtKeyLabel(k, delivGroup))}
-              series={agg.deliveriesSeriesStatus}
+            <BarBreakdown
+              categories={agg.ticketsBuckets.map(k=>fmtKeyLabel(k, delivGroup)).slice(-30)}
+              series={agg.deliveriesSeriesStatus.map(s => ({
+                name: s.name,
+                data: s.values.slice(-30)
+              }))}
+              height={280}
+              stacked={true}
+              colors={['#16A34A', '#4338CA', '#DC2626']}
+              yAxisFormatter={(val) => Math.round(val).toString()}
             />
-            <div style={{ display:"flex", gap:12, marginTop:8, fontSize:12, color:"#6B7280", flexWrap:"wrap" }}>
-              {agg.deliveriesSeriesStatus.map((s)=>(
-                <div key={s.name} style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ width:12, height:12, background:s.color, display:"inline-block", borderRadius:3 }} />
-                  {s.name}
-                </div>
-              ))}
-            </div>
           </Card>
         </Section>
       </div>
+
+      {/* Truck and Product Breakdown */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+        <Section title="Top 10 Trucks by Revenue">
+          <Card>
+            <BarBreakdown
+              categories={truckData.map(t => t.truck)}
+              series={[{
+                name: "Revenue",
+                data: truckData.map(t => t.revenue)
+              }]}
+              height={300}
+              stacked={false}
+              horizontal={true}
+              colors={['#0B6E99']}
+              yAxisFormatter={(val) => "$" + Math.round(val).toLocaleString()}
+            />
+          </Card>
+        </Section>
+
+        <Section title="Product Mix (Revenue)">
+          <Card>
+            <DonutChart
+              labels={productData.map(p => p.product)}
+              series={productData.map(p => p.revenue)}
+              title="Total"
+              height={300}
+              colors={['#0B6E99', '#00A99D', '#F5A623', '#9333EA', '#DC2626', '#16A34A', '#0891B2']}
+            />
+          </Card>
+        </Section>
+      </div>
+
+      {/* Data Table Summary */}
+      <Section title="Summary Statistics">
+        <Card>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginBottom: 4 }}>TOTAL TICKETS</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{num(agg.deliveriesTotals?.tickets)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginBottom: 4 }}>TOTAL GALLONS</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{num(agg.deliveriesTotals?.gallons)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginBottom: 4 }}>AVG PRICE/GAL</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>${(agg.deliveriesAvgPrice||0).toFixed(2)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginBottom: 4 }}>SERVICE COMPLETED</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{num(agg.svcCounts?.completed)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginBottom: 4 }}>SERVICE SCHEDULED</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{num(agg.svcCounts?.scheduled)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#6B7280", fontWeight: 600, marginBottom: 4 }}>IN PROGRESS</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{num(agg.svcCounts?.inProgress)}</div>
+            </div>
+          </div>
+        </Card>
+      </Section>
     </div>
   );
 }
