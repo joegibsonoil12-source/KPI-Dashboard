@@ -36,6 +36,16 @@ jobs:
           NODE_ENV: production
         run: npm run build
 
+      - name: SPA fallback for GitHub Pages (copy index -> 404)
+        run: |
+          if [ -f ./dist/index.html ]; then
+            echo "Adding SPA fallback: copying dist/index.html => dist/404.html"
+            cp -f ./dist/index.html ./dist/404.html
+          else
+            echo "ERROR: ./dist/index.html not found - build may have failed"
+            exit 1
+          fi
+
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
