@@ -128,11 +128,19 @@ export default function UploadServiceScanButton() {
       const uploadViaServer = async (file) => {
         const base64 = await fileToBase64(file);
         
-        // Get server upload endpoint URL from environment or use default relative path
-        const uploadEndpoint = 
-          (typeof window !== 'undefined' && window.__ENV?.VITE_UPLOADS_SIGNED_URL) ||
-          import.meta.env.VITE_UPLOADS_SIGNED_URL ||
-          '/api/uploads/signed';
+        // Get server upload endpoint URL from environment
+        const apiBase = 
+          (typeof window !== 'undefined' && window.__ENV?.NEXT_PUBLIC_API_BASE) ||
+          (typeof window !== 'undefined' && window.__ENV?.VITE_API_BASE) ||
+          import.meta.env.NEXT_PUBLIC_API_BASE ||
+          import.meta.env.VITE_API_BASE ||
+          '';
+        
+        const uploadEndpoint = apiBase 
+          ? `${apiBase}/api/uploads/signed`
+          : `/.netlify/functions/imports-upload`;
+        
+        console.debug('[UploadServiceScanButton] Upload endpoint:', uploadEndpoint);
         
         const serverResponse = await fetch(uploadEndpoint, {
           method: 'POST',
@@ -400,14 +408,32 @@ export default function UploadServiceScanButton() {
       
       setUploading(false);
       
-      // Best-effort POST to /api/imports/process/:id (ignore failure)
+      // Best-effort POST to process endpoint (ignore failure)
+      // Use configurable API base or fallback to Netlify functions
       setProcessing(true);
       try {
-        const processResponse = await fetch(`/api/imports/process/${importId}`, {
+        const apiBase = 
+          (typeof window !== 'undefined' && window.__ENV?.NEXT_PUBLIC_API_BASE) ||
+          (typeof window !== 'undefined' && window.__ENV?.VITE_API_BASE) ||
+          import.meta.env.NEXT_PUBLIC_API_BASE ||
+          import.meta.env.VITE_API_BASE ||
+          '';
+        const processEndpoint = apiBase 
+          ? `${apiBase}/api/imports/process/${importId}`
+          : `/.netlify/functions/imports-process`;
+        
+        const processPayload = apiBase 
+          ? {} // API endpoint expects empty body
+          : { importId }; // Netlify function expects importId in body
+        
+        console.debug('[UploadServiceScanButton] Process endpoint:', processEndpoint);
+        
+        const processResponse = await fetch(processEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-          }
+          },
+          body: JSON.stringify(processPayload)
         });
         
         if (processResponse.ok) {

@@ -88,8 +88,22 @@ export default function UploadPage() {
         }))
       );
 
+      // Get API base from environment
+      const apiBase = 
+        (typeof window !== 'undefined' && window.__ENV?.NEXT_PUBLIC_API_BASE) ||
+        (typeof window !== 'undefined' && window.__ENV?.VITE_API_BASE) ||
+        import.meta.env.NEXT_PUBLIC_API_BASE ||
+        import.meta.env.VITE_API_BASE ||
+        '';
+      
+      const uploadEndpoint = apiBase 
+        ? `${apiBase}/api/imports/upload`
+        : `/.netlify/functions/imports-upload`;
+      
+      console.debug('[upload] Upload endpoint:', uploadEndpoint);
+
       // Upload to API
-      const response = await fetch('/.netlify/functions/imports-upload', {
+      const response = await fetch(uploadEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -112,14 +126,22 @@ export default function UploadPage() {
       // Auto-process the import
       if (result.importId) {
         try {
-          const processResponse = await fetch('/.netlify/functions/imports-process', {
+          const processEndpoint = apiBase 
+            ? `${apiBase}/api/imports/process/${result.importId}`
+            : `/.netlify/functions/imports-process`;
+          
+          const processPayload = apiBase 
+            ? {} // API endpoint expects empty body
+            : { importId: result.importId }; // Netlify function expects importId in body
+          
+          console.debug('[upload] Process endpoint:', processEndpoint);
+          
+          const processResponse = await fetch(processEndpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              importId: result.importId,
-            }),
+            body: JSON.stringify(processPayload),
           });
 
           const processResult = await processResponse.json();

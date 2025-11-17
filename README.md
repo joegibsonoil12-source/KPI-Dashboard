@@ -421,6 +421,139 @@ In your Vercel project settings, add the following environment variables:
 
 Alternatively, connect your GitHub repository to Vercel for automatic deployments on push.
 
+## Deploying Upload Backend
+
+The upload feature requires a backend (Netlify or Vercel) to handle file uploads to Supabase Storage and process OCR/parsing. This section explains how to deploy the backend functions.
+
+### Why a Backend is Needed
+
+GitHub Pages only serves static files and cannot execute server-side code. The upload flow needs server-side operations to:
+- Create signed upload URLs for Supabase Storage
+- Process uploaded files with OCR (Google Vision API)
+- Parse ticket data and save to database
+
+### Option 1: Deploy to Netlify (Recommended)
+
+#### Step 1: Create Supabase Storage Bucket
+
+In your Supabase Dashboard:
+1. Go to Storage → New bucket
+2. Create a bucket named **`ticket-scans`**
+3. Set to **Private** (not public)
+4. Apply default storage policies or use custom RLS
+
+#### Step 2: Connect Repository to Netlify
+
+1. Sign up at [netlify.com](https://netlify.com) if you haven't already
+2. Click **"New site from Git"**
+3. Connect your GitHub repository
+4. Netlify will auto-detect `netlify.toml` configuration
+
+#### Step 3: Configure Environment Variables
+
+In Netlify Site Settings → Build & Deploy → Environment:
+
+**Required:**
+- `SUPABASE_URL` = Your Supabase project URL (e.g., `https://xxxxx.supabase.co`)
+- `SUPABASE_SERVICE_ROLE_KEY` = Your Supabase service role key (⚠️ server-side only, never commit!)
+- `SUPABASE_ANON_KEY` = Your Supabase anon key (for client-side operations)
+
+**For Client Configuration:**
+- `VITE_SUPABASE_URL` = Same as `SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY` = Same as `SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_API_BASE` = Your Netlify site URL (e.g., `https://your-site.netlify.app`)
+- `VITE_API_BASE` = Same as `NEXT_PUBLIC_API_BASE` (alternative naming)
+
+**Optional (for Google Vision OCR):**
+- `GOOGLE_APPLICATION_CREDENTIALS_JSON` = Your Google Cloud service account JSON key
+- `AUTO_ACCEPT_HIGH_CONFIDENCE` = `true` to auto-accept high-confidence imports
+
+#### Step 4: Deploy
+
+1. Netlify will automatically deploy when you push to `main` branch
+2. Or manually trigger deploy from Netlify dashboard
+
+#### Step 5: Update Frontend Configuration
+
+If your frontend is on GitHub Pages (or separate hosting):
+
+1. Add environment variable to your frontend deployment:
+   - `NEXT_PUBLIC_API_BASE=https://your-netlify-site.netlify.app`
+   - Or `VITE_API_BASE=https://your-netlify-site.netlify.app`
+
+2. The client will automatically use this backend for uploads instead of trying to POST to GitHub Pages
+
+#### Step 6: Apply Database Migration
+
+Run the delivery tickets migration in Supabase SQL Editor:
+```bash
+db/migrations/20251117_delivery_tickets_helpers_triggers.sql
+```
+
+This creates:
+- Triggers to auto-compute `total_amount` from `price * qty + tax + hazmat_fee`
+- Triggers to generate readable `raw_text` summary if OCR doesn't provide it
+- Helper functions `delivery_tickets_bulk_upsert` and `accept_ticket_import`
+
+#### Step 7: Verify Upload Flow
+
+1. Open your site and navigate to the delivery tickets upload page
+2. Upload a sample PDF or image
+3. Check browser console - should see:
+   ```
+   [UploadServiceScanButton] Upload endpoint: https://your-netlify-site.netlify.app/api/imports/upload
+   [UploadServiceScanButton] Process endpoint: https://your-netlify-site.netlify.app/api/imports/process
+   ```
+4. Verify in Supabase:
+   - Storage bucket `ticket-scans` has the uploaded file
+   - `ticket_imports` table has new row with `status: 'pending'` or `'accepted'`
+   - After processing, `ticket_imports.parsed` contains extracted data
+   - If auto-accept enabled, `delivery_tickets` table has new rows
+
+### Option 2: Deploy to Vercel
+
+Vercel deployment is similar, but requires creating API route handlers instead of Netlify Functions:
+
+1. Create API routes in `api/imports/upload.js` and `api/imports/process/[id].js`
+2. Set same environment variables in Vercel dashboard
+3. Deploy to Vercel (see Vercel deployment section above)
+
+**Note:** Netlify Functions are already implemented in this repository (`netlify/functions/`), so Netlify is the faster option.
+
+### Fallback Behavior
+
+The client includes automatic fallback behavior:
+1. **Try API Backend First:** If `NEXT_PUBLIC_API_BASE` or `VITE_API_BASE` is set, use that
+2. **Fall Back to Netlify Functions:** If no API base set, use `/.netlify/functions/*`
+3. **Fall Back to Local Storage:** If uploads fail completely, save to browser localStorage
+
+### Security Notes
+
+⚠️ **Never expose `SUPABASE_SERVICE_ROLE_KEY` client-side!**
+- Only set it in Netlify/Vercel environment secrets
+- It bypasses RLS and has full database access
+- Client-side code should only use `SUPABASE_ANON_KEY`
+
+### Troubleshooting
+
+**Upload returns 405 Method Not Allowed:**
+- Frontend is trying to POST to GitHub Pages
+- Solution: Set `NEXT_PUBLIC_API_BASE` to point to your Netlify/Vercel backend
+
+**Upload returns 404 Bucket Not Found:**
+- Storage bucket `ticket-scans` doesn't exist
+- Solution: Create bucket in Supabase Dashboard → Storage
+
+**Upload succeeds but processing fails:**
+- Check Netlify function logs for errors
+- Verify `SUPABASE_SERVICE_ROLE_KEY` is set correctly
+- Check if `ticket_imports` table exists and has RLS policies
+
+**OCR/Parsing not working:**
+- Google Vision API key may be missing or invalid
+- Check Netlify function logs for API errors
+- Verify `GOOGLE_APPLICATION_CREDENTIALS_JSON` is valid JSON
+
 ## Billboard Runtime Notes
 
 The Billboard feature (`/billboard`) is designed to work on both static hosting (GitHub Pages) and server-side deployments (Vercel). It provides real-time KPI updates through multiple mechanisms.
