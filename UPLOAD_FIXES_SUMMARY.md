@@ -106,6 +106,24 @@ Since Supabase CLI is not available in the CI/CD environment, these steps must b
 ## Build Status
 ✅ Build completed successfully with no errors
 
+## New Features (External Copy & Migration)
+
+### External Copy
+The upload function now optionally copies uploaded files to external storage:
+- **AWS S3**: Files are copied to a company S3 bucket if AWS credentials are configured
+- **Google Drive**: Files are copied to a company Drive folder if Drive credentials are configured
+- **Non-Fatal**: External copy failures do not block the main upload flow
+- **Metadata**: Copy results are recorded in `attached_files` as `externalCopy` array
+
+### Migration Endpoint
+A new serverless function `imports-migrate-local.js` allows bulk-importing local fallback data:
+- **Authentication**: Requires `MIGRATE_SECRET` header for security
+- **Purpose**: Migrate locally-saved imports (from browser localStorage) into the database
+- **Process**: Creates `ticket_imports` records and uploads files to Supabase
+- **Use Case**: Recover data after temporary upload failures are resolved
+
+See `SUPABASE_UPLOAD_SETUP.md` for detailed configuration and usage instructions.
+
 ## Next Steps
 - [ ] Run code review to validate changes
 - [ ] Run security scan (CodeQL)
@@ -115,12 +133,18 @@ Since Supabase CLI is not available in the CI/CD environment, these steps must b
 
 ## Files Modified
 1. `src/components/UploadServiceScanButton.jsx` - Enhanced with diagnostics and error handling
+2. `netlify/functions/imports-upload.js` - Added external copy (S3/Drive) functionality
+3. `package.json` - Added AWS SDK and Google APIs dependencies
+4. `SUPABASE_UPLOAD_SETUP.md` - Added external copy and migration endpoint documentation
+5. `README.md` - Added references to new features
+6. `UPLOAD_FIXES_SUMMARY.md` - Updated with new features
 
 ## Files Created
 1. `supabase/migrations/0005_enable_anon_ticket_imports.sql` - RLS policies
 2. `supabase/STORAGE_BUCKET_SETUP.sql` - Storage bucket setup
 3. `SUPABASE_UPLOAD_SETUP.md` - Setup guide
 4. `UPLOAD_FIXES_SUMMARY.md` - This document
+5. `netlify/functions/imports-migrate-local.js` - Migration endpoint for local imports
 
 ## Compatibility
 - ✅ GitHub Pages deployment (anonymous users)

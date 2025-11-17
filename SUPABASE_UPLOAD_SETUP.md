@@ -143,3 +143,60 @@ After setup, you should see:
 - Migration: `supabase/migrations/0005_enable_anon_ticket_imports.sql`
 - Storage Setup: `supabase/STORAGE_BUCKET_SETUP.sql`
 - Component: `src/components/UploadServiceScanButton.jsx`
+
+## External copy & migration endpoint
+
+We now optionally copy any uploaded ticket scan to an external company folder.
+
+### To enable S3:
+Set the following environment variables in your server env (Netlify/Vercel):
+- `AWS_REGION` - Your AWS region (e.g., `us-east-1`)
+- `AWS_ACCESS_KEY_ID` - Your AWS access key ID
+- `AWS_SECRET_ACCESS_KEY` - Your AWS secret access key
+- `AWS_S3_BUCKET` - S3 bucket name to copy files to
+
+### To enable Google Drive:
+Set the following environment variables in your server env:
+- `GOOGLE_SERVICE_ACCOUNT_JSON` - The JSON key (stringified) for your Google Cloud service account
+- `GOOGLE_DRIVE_FOLDER_ID` - The Google Drive folder ID where files should be stored
+
+**Note**: The service account must have write access to the target Drive folder.
+
+### Migration endpoint:
+A new serverless function is available to migrate local fallback imports into the database:
+
+**Endpoint**: `POST /.netlify/functions/imports-migrate-local`
+
+**Authentication**: Requires header `x-migrate-secret: <MIGRATE_SECRET>`
+
+**Request Body**:
+```json
+{
+  "localImports": [
+    {
+      "id": "local_...",
+      "src": "...",
+      "attached_files": [
+        { "name": "x.pdf", "mimetype": "application/pdf", "base64": "..." }
+      ],
+      "meta": {...}
+    }
+  ]
+}
+```
+
+**Environment Variable Required**:
+- `MIGRATE_SECRET` - A secure random token to protect the migration endpoint
+
+**Usage**: Use this endpoint to bulk-migrate local fallback imports (stored by the browser in `kpi_local_imports` localStorage) into `ticket_imports` table. The endpoint will:
+1. Create a new `ticket_imports` record for each local import
+2. Upload attached files to Supabase storage
+3. Update the import record with file metadata
+4. Optionally copy files to S3/Drive if configured
+
+**External Copy Behavior**:
+- External copying is **optional** and **non-fatal**
+- If external copy fails, the file is still stored in Supabase
+- Copy results are recorded in the `attached_files` metadata as `externalCopy` array
+- Example: `{ "type": "s3", "location": "s3://bucket/path" }` or `{ "type": "drive", "id": "fileId", "webViewLink": "..." }`
+
