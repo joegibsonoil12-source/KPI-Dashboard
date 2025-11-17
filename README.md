@@ -527,6 +527,24 @@ The client includes automatic fallback behavior:
 2. **Fall Back to Netlify Functions:** If no API base set, use `/.netlify/functions/*`
 3. **Fall Back to Local Storage:** If uploads fail completely, save to browser localStorage
 
+### External Copy (Optional)
+
+The upload system now supports optional external backup copies of uploaded files:
+- **AWS S3**: Set `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_S3_BUCKET`
+- **Google Drive**: Set `GOOGLE_SERVICE_ACCOUNT_JSON` and `GOOGLE_DRIVE_FOLDER_ID`
+
+External copying is non-fatal - if it fails, the file is still stored in Supabase. Copy results are recorded in the `attached_files` metadata. See `SUPABASE_UPLOAD_SETUP.md` for detailed configuration.
+
+### Migration Endpoint
+
+A new endpoint `/.netlify/functions/imports-migrate-local` allows bulk-importing local fallback data:
+- Requires `MIGRATE_SECRET` environment variable for authentication
+- Accepts JSON exports of locally-saved imports (from browser localStorage)
+- Creates `ticket_imports` records and uploads files to Supabase
+- Useful for recovering data after temporary upload failures
+
+See `SUPABASE_UPLOAD_SETUP.md` for usage instructions.
+
 ### Security Notes
 
 ⚠️ **Never expose `SUPABASE_SERVICE_ROLE_KEY` client-side!**
