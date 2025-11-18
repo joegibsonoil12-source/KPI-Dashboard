@@ -12,7 +12,7 @@ import DeliveryTicketsEditor from "./components/DeliveryTickets";
 import ServiceTracking from "./components/ServiceTracking";
 import ExecutiveDashboard from "./components/dashboard/ExecutiveDashboard";
 import Billboard from "./components/Billboard";
-import Budget from "./components/Budget";
+import CStoresGallons from "./tabs/CStoresGallons";
 import GraphsPage from "./components/Graphs/GraphsPage";
 import ImportsReview from "./components/Imports/ImportsReview";
 import FinancialHealth from "./components/FinancialHealth";
@@ -871,7 +871,7 @@ function ExportCenter() {
 const TABS = [
   { key: "dashboard",    label: "Dashboard",        adminOnly: false,  Component: ExecutiveDashboard },
   { key: "financial",    label: "Financial Health", adminOnly: false,  Component: FinancialHealth },
-  { key: "budget",       label: "Budget",           adminOnly: false,  Component: Budget },
+  { key: "cstores",      label: "C-Stores (Gallons)", adminOnly: false,  Component: CStoresGallons },
   { key: "procedures",   label: "Procedures",       adminOnly: false,  Component: Procedures },
   { key: "billboard",    label: "Billboard",        adminOnly: false,  Component: Billboard },
   { key: "graphs",       label: "Graphs",           adminOnly: false,  Component: GraphsPage },
@@ -1041,7 +1041,7 @@ function AppBody({ active, setActive, groupsOpen, toggleGroup, Current }) {
       }}>
         <nav style={{ padding: 12 }}>
           {/* Top-level tabs */}
-          {["dashboard","financial","ops","budget","export","procedures","billboard","graphs"].map((key) => {
+          {["dashboard","financial","cstores","procedures","billboard","graphs"].map((key) => {
             const tab = TABS.find(t => t.key === key);
             if (!tab) return null; // SAFETY: skip missing entries to avoid runtime crash
             const isActive = Current.key === tab.key;
