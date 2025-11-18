@@ -16,13 +16,51 @@ jobs:
 
       - name: Install required packages and supabase CLI
         run: |
-          set -e
+          set -euo pipefail
+
           sudo apt-get update -y
-          sudo apt-get install -y curl wget gnupg ca-certificates postgresql-client
-          # install supabase CLI (latest release)
-          curl -sL "https://github.com/supabase/cli/releases/latest/download/supabase_${{ runner.os }}_x86_64.tar.gz" \
-            | sudo tar xz -C /usr/local/bin
-          supabase --version || true
+          sudo apt-get install -y curl wget gnupg ca-certificates postgresql-client jq
+
+          echo "Finding latest Supabase CLI release asset for Linux x86_64..."
+          ASSET_URL=$(
+            curl -s https://api.github.com/repos/supabase/cli/releases/latest \
+            | jq -r '.assets[] | select(.name | test("linux|Linux"; "i") and (.name | test("x86_64|amd64"; "i"))) | .browser_download_url' \
+            | head -n1
+          )
+
+          if [ -z "$ASSET_URL" ]; then
+            echo "ERROR: Could not discover Supabase CLI asset URL from GitHub Releases."
+            curl -s https://api.github.com/repos/supabase/cli/releases/latest | jq '.'
+            exit 1
+          fi
+
+          echo "Downloading supabase CLI from: $ASSET_URL"
+          curl -L --fail "$ASSET_URL" -o /tmp/supabase_cli_archive
+
+          echo "Downloaded file info:"
+          file /tmp/supabase_cli_archive || true
+          ls -l /tmp/supabase_cli_archive
+
+          if file /tmp/supabase_cli_archive | grep -qi 'gzip'; then
+            sudo tar -xzf /tmp/supabase_cli_archive -C /usr/local/bin
+          elif file /tmp/supabase_cli_archive | grep -qi 'XZ compressed'; then
+            sudo tar -xJf /tmp/supabase_cli_archive -C /usr/local/bin
+          else
+            echo "Downloaded file is not a known tar format. Dumping head for diagnosis:"
+            head -n 50 /tmp/supabase_cli_archive || true
+            echo "ERROR: Unknown archive format, aborting."
+            exit 1
+          fi
+
+          # Handle case where binary extracts to subdirectory
+          if [ -f /usr/local/bin/supabase/supabase ]; then
+            sudo mv /usr/local/bin/supabase/supabase /usr/local/bin/
+            sudo rmdir /usr/local/bin/supabase || true
+          fi
+
+          sudo chmod +x /usr/local/bin/supabase || true
+          echo "Supabase version:"
+          /usr/local/bin/supabase --version || supabase --version || true
 
       - name: Login supabase CLI
         env:
@@ -50,11 +88,10 @@ jobs:
         run: |
           set -e
           echo "Running psql connectivity test..."
-          # print minimal info so logs show whether it's password or network issue
           if psql "$DATABASE_URL" -c "SELECT now();" ; then
             echo "PSQL OK: DB reachable and credentials accepted."
           else
-            echo "PSQL failed - check SUPABASE_DB_URL / network / password"
+            echo "PSQL failed — check SUPABASE_DB_URL / network / password"
             exit 1
           fi
 
