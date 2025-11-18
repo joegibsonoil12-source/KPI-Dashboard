@@ -238,29 +238,68 @@ exports.handler = async (event, context) => {
         // Perform OCR and parsing
         const result = await ocrParser.parse(buffer, file.mimeType);
         
-        if (!result.success) {
-          console.warn('[imports-process] Parse failed for file:', file.filename, result.error);
-          continue;
-        }
-        
+        // Always push result even if OCR failed - we return stub data now
         pageResults.push(result);
         fullOcrText += result.ocrText + '\n\n';
         
-        console.debug('[imports-process] Parsed file:', file.filename, 'rows:', result.parsed.rows.length);
+        console.debug('[imports-process] Parsed file:', file.filename, 'rows:', result.parsed.rows.length, 'engine:', result.ocrEngine);
       } catch (error) {
         console.error('[imports-process] Error processing file:', file.filename, error);
         // Continue with other files
       }
     }
     
+    // Even if all OCR failed, create stub import for manual review
     if (pageResults.length === 0) {
+      console.warn('[imports-process] No files could be processed, creating stub import for manual review');
+      
+      // Update with stub data
+      const { error: updateError } = await supabase
+        .from('ticket_imports')
+        .update({
+          ocr_text: 'OCR processing failed or not configured. Please review files manually.',
+          parsed: {
+            columnMap: {},
+            rows: [],
+            summary: { totalRows: 0, scheduledJobs: 0, scheduledRevenue: 0, salesTotal: 0 },
+            confidence: 0,
+            status: 'needs_review'
+          },
+          confidence: 0,
+          status: 'needs_review',
+          processed_at: new Date().toISOString(),
+        })
+        .eq('id', importId);
+      
+      if (updateError) {
+        console.error('[imports-process] Error updating import with stub:', updateError);
+        return {
+          statusCode: 500,
+          headers,
+          body: JSON.stringify({
+            success: false,
+            error: 'Database update failed',
+            message: 'Failed to save stub import data',
+          }),
+        };
+      }
+      
       return {
-        statusCode: 500,
+        statusCode: 200,
         headers,
         body: JSON.stringify({
-          success: false,
-          error: 'Processing failed',
-          message: 'Failed to process any files',
+          success: true,
+          importId: importId,
+          parsed: {
+            columnMap: {},
+            rows: [],
+            summary: { totalRows: 0, scheduledJobs: 0, scheduledRevenue: 0, salesTotal: 0 },
+            confidence: 0,
+            status: 'needs_review'
+          },
+          confidence: 0,
+          status: 'needs_review',
+          message: 'OCR not available - import saved for manual review',
         }),
       };
     }

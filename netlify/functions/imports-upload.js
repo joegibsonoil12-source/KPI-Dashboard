@@ -173,7 +173,7 @@ exports.handler = async (event, context) => {
       .from('ticket_imports')
       .insert({
         src: 'upload',
-        status: 'pending',
+        status: 'needs_review', // Changed from 'pending' so imports are visible immediately
         meta,
         attached_files: [],
       })

@@ -394,7 +394,7 @@ export default function UploadServiceScanButton() {
         .insert({
           src: 'upload',
           attached_files: attached_files,
-          status: 'pending',
+          status: 'needs_review', // Changed from 'pending' so imports are visible immediately
           meta: {
             importType: 'service',
             source: 'delivery_page_upload'
@@ -422,9 +422,12 @@ export default function UploadServiceScanButton() {
       
       setUploading(false);
       
-      // Best-effort POST to process endpoint (ignore failure)
+      // Best-effort POST to process endpoint
       // Use configurable API base or fallback to Netlify functions
       setProcessing(true);
+      let processingSucceeded = false;
+      let processingMessage = '';
+      
       try {
         const apiBase = 
           (typeof window !== 'undefined' && window.__ENV?.NEXT_PUBLIC_API_BASE) ||
@@ -441,6 +444,7 @@ export default function UploadServiceScanButton() {
           : { importId }; // Netlify function expects importId in body
         
         console.debug('[UploadServiceScanButton] Process endpoint:', processEndpoint);
+        console.debug('[UploadServiceScanButton] Process payload:', processPayload);
         
         const processResponse = await fetch(processEndpoint, {
           method: 'POST',
@@ -451,14 +455,27 @@ export default function UploadServiceScanButton() {
         });
         
         if (processResponse.ok) {
-          console.debug('[UploadServiceScanButton] Processing triggered successfully');
+          const processResult = await processResponse.json();
+          console.debug('[UploadServiceScanButton] Processing result:', processResult);
+          processingSucceeded = true;
+          processingMessage = processResult.message || 'Processing completed successfully';
         } else {
-          console.warn('[UploadServiceScanButton] Processing trigger failed (non-fatal)');
+          const errorData = await processResponse.json().catch(() => ({ message: 'Unknown error' }));
+          console.warn('[UploadServiceScanButton] Processing failed:', errorData);
+          processingMessage = errorData.message || 'OCR processing failed - import saved for manual review';
         }
       } catch (processError) {
-        console.debug('[UploadServiceScanButton] Processing trigger failed (non-fatal):', processError.message);
+        console.warn('[UploadServiceScanButton] Processing trigger error:', processError.message);
+        processingMessage = 'OCR processing not available - import saved for manual review';
       }
       setProcessing(false);
+      
+      // Show appropriate user message
+      const uploadMessage = processingSucceeded 
+        ? `✅ Successfully uploaded ${attached_files.length} file(s). ${processingMessage}`
+        : `⚠️ Upload successful, but OCR processing failed.\n\n${processingMessage}\n\nYou can find the import in the Imports Review section and process it manually.`;
+      
+      alert(uploadMessage);
       
       // Store import ID for highlighting (used by embedded ImportsReview component in App.jsx)
       sessionStorage.setItem('highlightImportId', importId);

@@ -786,6 +786,12 @@ async function parse(buffer, mimeType, options = {}) {
     console.warn('[ocrParser] Google Vision failed, trying Tesseract:', googleError.message);
     
     try {
+      // Skip Tesseract for PDFs - it requires image conversion which isn't implemented
+      if (fileType === 'pdf') {
+        console.warn('[ocrParser] Skipping Tesseract for PDF (no image conversion available)');
+        throw new Error('PDF OCR requires Google Vision API or image conversion setup');
+      }
+      
       // Preprocess image if it's not a PDF
       let processedBuffer = buffer;
       if (fileType === 'image') {
@@ -813,22 +819,38 @@ async function parse(buffer, mimeType, options = {}) {
     } catch (tesseractError) {
       console.error('[ocrParser] Both OCR engines failed:', tesseractError.message);
       
-      // Return detailed error message
-      let errorMessage = 'OCR processing failed. ';
+      // Don't throw - return a stub result so import can be manually reviewed
+      console.warn('[ocrParser] Returning stub result for manual review');
+      
+      let errorMessage = 'OCR processing not available. ';
       
       if (fileType === 'pdf' && isScanned) {
-        errorMessage += 'This PDF appears to be a scanned image. OCR could not read the text. Try rescanning with higher contrast and quality.';
+        errorMessage += 'This PDF appears to be a scanned image. OCR requires Google Vision API configuration.';
       } else if (fileType === 'pdf' && !isScanned) {
         errorMessage += 'Could not process PDF text. The file may be corrupted or protected.';
       } else {
-        errorMessage += 'Could not read text from image. Ensure the image is clear and high resolution.';
+        errorMessage += 'Could not read text from image. OCR service may not be configured.';
       }
       
+      // Return success with empty stub data for manual review
       return {
-        success: false,
-        error: 'OCR processing failed',
-        message: errorMessage,
-        details: {
+        success: true,
+        parsed: {
+          columnMap: {},
+          rows: [],
+          summary: {
+            totalRows: 0,
+            scheduledJobs: 0,
+            scheduledRevenue: 0,
+            salesTotal: 0
+          },
+          confidence: 0,
+          status: 'needs_review'
+        },
+        ocrText: errorMessage,
+        isScanned,
+        ocrEngine: 'none',
+        ocrError: {
           googleError: googleError.message,
           tesseractError: tesseractError.message,
           fileType,

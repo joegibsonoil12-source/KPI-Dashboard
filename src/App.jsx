@@ -15,6 +15,7 @@ import Billboard from "./components/Billboard";
 import Budget from "./components/Budget";
 import GraphsPage from "./components/Graphs/GraphsPage";
 import ImportsReview from "./components/Imports/ImportsReview";
+import FinancialHealth from "./components/FinancialHealth";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -869,6 +870,7 @@ function ExportCenter() {
 /* ========================================================================== */
 const TABS = [
   { key: "dashboard",    label: "Dashboard",        adminOnly: false,  Component: ExecutiveDashboard },
+  { key: "financial",    label: "Financial Health", adminOnly: false,  Component: FinancialHealth },
   { key: "budget",       label: "Budget",           adminOnly: false,  Component: Budget },
   { key: "procedures",   label: "Procedures",       adminOnly: false,  Component: Procedures },
   { key: "billboard",    label: "Billboard",        adminOnly: false,  Component: Billboard },
@@ -954,8 +956,17 @@ export default function App() {
       setGroupsOpen((g) => ({ ...g, operations: true }));
     };
     
+    const handleNavigateToFinancial = () => {
+      console.debug('[App] Navigating to financial health tab');
+      setActive('financial');
+    };
+    
     window.addEventListener('navigateToImports', handleNavigateToImports);
-    return () => window.removeEventListener('navigateToImports', handleNavigateToImports);
+    window.addEventListener('navigateToFinancial', handleNavigateToFinancial);
+    return () => {
+      window.removeEventListener('navigateToImports', handleNavigateToImports);
+      window.removeEventListener('navigateToFinancial', handleNavigateToFinancial);
+    };
   }, []);
 
   if (checking) {
