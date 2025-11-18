@@ -61,24 +61,42 @@ export default function ServiceUploadButton() {
       console.debug('[ServiceUploadButton] Upload success:', result);
       
       // Optionally trigger processing immediately
+      let processingMessage = '';
       if (result.importId) {
         console.debug('[ServiceUploadButton] Triggering processing for import:', result.importId);
         
-        // Call process endpoint
-        fetch('/api/imports/process', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            importId: result.importId,
-          }),
-        }).catch(err => {
+        try {
+          // Call process endpoint and wait for response
+          const processResponse = await fetch('/api/imports/process', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              importId: result.importId,
+            }),
+          });
+          
+          if (processResponse.ok) {
+            const processResult = await processResponse.json();
+            console.debug('[ServiceUploadButton] Processing result:', processResult);
+            processingMessage = processResult.message || 'Processing completed successfully';
+          } else {
+            const errorData = await processResponse.json().catch(() => ({ message: 'Unknown error' }));
+            console.warn('[ServiceUploadButton] Processing failed:', errorData);
+            processingMessage = `OCR processing failed - ${errorData.message || 'import saved for manual review'}`;
+          }
+        } catch (err) {
           console.error('[ServiceUploadButton] Processing error:', err);
-        });
+          processingMessage = 'OCR processing not available - import saved for manual review';
+        }
       }
       
-      alert(`Successfully uploaded ${result.files.length} file(s). Processing started.`);
+      const uploadMessage = processingMessage.includes('failed') || processingMessage.includes('not available')
+        ? `⚠️ Successfully uploaded ${result.files.length} file(s), but ${processingMessage}\n\nYou can find the import in Imports Review.`
+        : `✅ Successfully uploaded ${result.files.length} file(s). ${processingMessage}`;
+      
+      alert(uploadMessage);
       
       // Clear file input
       if (fileInputRef.current) {
