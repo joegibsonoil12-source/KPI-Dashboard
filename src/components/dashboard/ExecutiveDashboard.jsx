@@ -108,6 +108,36 @@ function HBars({ rows = [] }) {
 }
 
 function toISO(d) { return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+
+// Normalize status values to standard set: completed, scheduled, in_progress, canceled
+function normalizeStatus(status) {
+  if (!status) return "scheduled"; // default for empty status
+  const s = String(status).toLowerCase().trim();
+  
+  // Completed variations
+  if (s.includes("complete") || s.includes("done") || s.includes("finish")) {
+    return "completed";
+  }
+  
+  // Canceled/Cancelled variations
+  if (s.includes("cancel") || s.includes("void")) {
+    return "canceled";
+  }
+  
+  // In Progress variations
+  if (s.includes("progress") || s.includes("active") || s.includes("ongoing") || s.includes("started")) {
+    return "in_progress";
+  }
+  
+  // Scheduled variations
+  if (s.includes("schedule") || s.includes("pending") || s.includes("upcoming")) {
+    return "scheduled";
+  }
+  
+  // Default: treat unknown statuses as scheduled
+  return "scheduled";
+}
+
 function rangePreset(preset) {
   const now = new Date();
   if (preset === "today") { return {from: toISO(now), to: toISO(now), label:"Today"}; }
@@ -356,7 +386,10 @@ export default function ExecutiveDashboard() {
       st.set(status, { count: cur.count + (cnt||0), revenue: cur.revenue + (rev||0), due: cur.due + (due||0) });
     };
     // Each row is a single job, so count=1 and use job_amount (not total_revenue)
-    serviceDaily.forEach((r) => addS(dayKey(r.job_date), r.status, 1, Number(r.job_amount||0), 0));
+    serviceDaily.forEach((r) => {
+      const normalizedStatus = normalizeStatus(r.status);
+      addS(dayKey(r.job_date), normalizedStatus, 1, Number(r.job_amount||0), 0);
+    });
     const serviceCompletedRevenueByDay = serviceDays.map((d) => mapService.get(d)?.get("completed")?.revenue || 0);
     const serviceSeriesStatus = [
       { name: "Completed", key: "completed", color: "#16A34A" },
@@ -365,15 +398,15 @@ export default function ExecutiveDashboard() {
       { name: "Canceled", key: "canceled", color: "#DC2626" },
     ].map((s) => ({ name: s.name, color: s.color, values: serviceDays.map((d)=> mapService.get(d)?.get(s.key)?.count || 0) }));
 
-    const svcCompletedRevenue = serviceDaily.filter(r=>r.status==="completed").reduce((a,b)=>a+Number(b.job_amount||0),0);
+    const svcCompletedRevenue = serviceDaily.filter(r=>normalizeStatus(r.status)==="completed").reduce((a,b)=>a+Number(b.job_amount||0),0);
     const svcPipelineRevenue = ["scheduled","in_progress"].reduce((sum, st) => (
-      sum + serviceDaily.filter(r=>r.status===st).reduce((a,b)=>a+Number(b.job_amount||0),0)
+      sum + serviceDaily.filter(r=>normalizeStatus(r.status)===st).reduce((a,b)=>a+Number(b.job_amount||0),0)
     ), 0);
     const svcCounts = {
-      completed: serviceDaily.filter(r=>r.status==="completed").length,
-      scheduled: serviceDaily.filter(r=>r.status==="scheduled").length,
-      inProgress: serviceDaily.filter(r=>r.status==="in_progress").length,
-      canceled: serviceDaily.filter(r=>r.status==="canceled").length,
+      completed: serviceDaily.filter(r=>normalizeStatus(r.status)==="completed").length,
+      scheduled: serviceDaily.filter(r=>normalizeStatus(r.status)==="scheduled").length,
+      inProgress: serviceDaily.filter(r=>normalizeStatus(r.status)==="in_progress").length,
+      canceled: serviceDaily.filter(r=>normalizeStatus(r.status)==="canceled").length,
     };
 
     // Deliveries — for combined daily revenue (unchanged day basis)
