@@ -4,12 +4,7 @@ import useDateRange from "../hooks/useDateRange";
 import DateRangePicker from "../components/DateRangePicker";
 import { fetchMetrics } from "../lib/fetchMetrics";
 import { RANGE_TYPES } from "../lib/dateRanges";
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import { supabase } from "../lib/supabaseClient";
 
 export default function Graphs() {
   const dr = useDateRange(RANGE_TYPES.WEEK);
