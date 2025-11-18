@@ -18,13 +18,18 @@
     "@supabase/supabase-js": "^2.45.0",
     "apexcharts": "^5.3.6",
     "busboy": "^1.6.0",
+    "canvas": "^3.2.0",
     "dexie": "^4.0.7",
     "googleapis": "^128.0.0",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^2.4.5",
     "react": "^18.2.0",
     "react-apexcharts": "^1.8.0",
     "react-dom": "^18.2.0",
     "react-fast-marquee": "^1.6.5",
     "recharts": "^2.9.0",
+    "sharp": "^0.34.5",
+    "tesseract.js": "^6.0.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

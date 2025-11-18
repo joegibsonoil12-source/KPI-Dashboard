@@ -338,3 +338,138 @@ describe('OCR Parser Integration', () => {
     expect(result.hits.length).toBeLessThan(4);
   });
 });
+
+describe('OCR Text Cleaning', () => {
+  describe('cleanOCRText', () => {
+    it('should remove duplicate spaces', () => {
+      const text = 'Hello    World   Test';
+      const cleaned = ocrParser.cleanOCRText(text);
+      expect(cleaned).toBe('Hello World Test');
+    });
+    
+    it('should remove extra newlines', () => {
+      const text = 'Line 1\n\n\n\nLine 2';
+      const cleaned = ocrParser.cleanOCRText(text);
+      expect(cleaned).toBe('Line 1\n\nLine 2');
+    });
+  });
+});
+
+describe('Delivery Ticket Validation', () => {
+  describe('validateDeliveryTicket', () => {
+    it('should pass validation for valid ticket', () => {
+      const row = {
+        date: '2025-01-15',
+        gallons: 100,
+        amount: 500,
+        driver: 'John Doe',
+      };
+      
+      const result = ocrParser.validateDeliveryTicket(row, 1);
+      
+      expect(result.valid).toBe(true);
+      expect(result.errors.length).toBe(0);
+    });
+    
+    it('should fail validation for missing date', () => {
+      const row = {
+        gallons: 100,
+        amount: 500,
+      };
+      
+      const result = ocrParser.validateDeliveryTicket(row, 1);
+      
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.errors[0]).toContain('date');
+    });
+    
+    it('should fail validation for zero gallons', () => {
+      const row = {
+        date: '2025-01-15',
+        gallons: 0,
+        amount: 500,
+      };
+      
+      const result = ocrParser.validateDeliveryTicket(row, 1);
+      
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('Gallons'))).toBe(true);
+    });
+    
+    it('should fail validation for zero amount', () => {
+      const row = {
+        date: '2025-01-15',
+        gallons: 100,
+        amount: 0,
+      };
+      
+      const result = ocrParser.validateDeliveryTicket(row, 1);
+      
+      expect(result.valid).toBe(false);
+      expect(result.errors.some(e => e.includes('Amount'))).toBe(true);
+    });
+  });
+});
+
+describe('Row Filtering', () => {
+  describe('filterNonTicketRows', () => {
+    it('should filter out total rows', () => {
+      const rows = [
+        { date: '2025-01-15', gallons: 100, amount: 500 },
+        { date: 'GRAND TOTAL', gallons: 1000, amount: 5000 },
+        { date: '2025-01-16', gallons: 200, amount: 600 },
+      ];
+      
+      const filtered = ocrParser.filterNonTicketRows(rows);
+      
+      expect(filtered.length).toBe(2);
+      expect(filtered[0].gallons).toBe(100);
+      expect(filtered[1].gallons).toBe(200);
+    });
+    
+    it('should filter out rows with too few fields', () => {
+      const rows = [
+        { date: '2025-01-15', gallons: 100, amount: 500, driver: 'John' },
+        { date: '2025-01-16' }, // Only one field
+        { date: '2025-01-17', gallons: 200, amount: 600, driver: 'Jane' },
+      ];
+      
+      const filtered = ocrParser.filterNonTicketRows(rows);
+      
+      expect(filtered.length).toBe(2);
+    });
+  });
+});
+
+describe('Enhanced Column Header Mapping', () => {
+  describe('mapColumnHeaders', () => {
+    it('should map delivery-specific headers', () => {
+      const headerRow = ['Ticket #', 'Account', 'Driver', 'Truck', 'Gallons', 'Price', 'Amount'];
+      
+      const columnMap = ocrParser.mapColumnHeaders(headerRow);
+      
+      expect(columnMap[0]).toBe('ticketNumber');
+      expect(columnMap[1]).toBe('account');
+      expect(columnMap[2]).toBe('driver');
+      expect(columnMap[3]).toBe('truck');
+      expect(columnMap[4]).toBe('gallons');
+      expect(columnMap[5]).toBe('price');
+      expect(columnMap[6]).toBe('amount');
+    });
+    
+    it('should handle variations in header names', () => {
+      const headerRow = ['Record', 'Acct', 'Del By', 'Vehicle', 'Qty', 'Unit Price', 'Extension'];
+      
+      const columnMap = ocrParser.mapColumnHeaders(headerRow);
+      
+      expect(columnMap[0]).toBe('ticketNumber'); // Record -> ticket
+      expect(columnMap[1]).toBe('account'); // Acct -> account
+      expect(columnMap[2]).toBe('driver'); // Del By -> driver
+      expect(columnMap[3]).toBe('truck'); // Vehicle -> truck
+      expect(columnMap[4]).toBe('gallons'); // Qty -> gallons
+      expect(columnMap[5]).toBe('price'); // Unit Price -> price
+      expect(columnMap[6]).toBe('amount'); // Extension -> amount
+    });
+  });
+});

@@ -63,6 +63,20 @@ The migration automatically enables RLS and creates policies to allow anonymous 
 
 ## Features
 
+### OCR-Powered Delivery Ticket Importing
+The dashboard now supports automatic OCR (Optical Character Recognition) for processing scanned delivery tickets:
+
+- **Scanned PDF Support**: Automatically detects and processes scanned PDFs
+- **Image Support**: Process JPG, PNG, and GIF scans
+- **Dual OCR Engines**: Google Vision API (primary) with Tesseract.js fallback
+- **Smart Detection**: Distinguishes between scanned images and digital text PDFs
+- **Automatic Parsing**: Extracts delivery ticket fields (date, driver, truck, gallons, amount, etc.)
+- **Validation**: Validates required fields and data formats
+- **Error Handling**: Clear error messages with troubleshooting hints
+- **Debug Mode**: Export raw OCR text and parsed CSV for testing
+
+📚 **See [docs/OCR_SETUP_GUIDE.md](docs/OCR_SETUP_GUIDE.md) for complete setup instructions**
+
 ### Video Management
 The dashboard includes video management functionality through the **Procedures** tab only. The standalone Videos tab has been removed from the application. Video management features include:
 
