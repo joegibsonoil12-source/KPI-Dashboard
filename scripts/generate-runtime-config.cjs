@@ -11,6 +11,9 @@ const path = require('path');
 const outPath = path.resolve(__dirname, '..', 'public', 'runtime-config.js');
 
 const config = {
+  // base path for routing (GitHub Pages uses /KPI-Dashboard/, Vercel uses /)
+  BASE_PATH: process.env.VERCEL === '1' ? '' : '/KPI-Dashboard',
+
   // billboard settings
   BILLBOARD_API_BASE: process.env.VERCEL_BILLBOARD_API_BASE || process.env.BILLBOARD_API_BASE || '',
   BILLBOARD_TV_TOKEN: process.env.VERCEL_BILLBOARD_TV_TOKEN || process.env.BILLBOARD_TV_TOKEN || '',
