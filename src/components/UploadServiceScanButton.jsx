@@ -249,7 +249,7 @@ export default function UploadServiceScanButton() {
                 
                 console.debug(`[imports/upload] source=delivery_page_upload id=${localImportId} files=${filesWithBase64.length} (saved locally)`);
                 
-                // Show info message and redirect to review
+                // Show info message and navigate to review
                 setUploading(false);
                 alert(
                   '⚠️ Upload to cloud storage failed. Your import has been saved locally.\n\n' +
@@ -257,9 +257,15 @@ export default function UploadServiceScanButton() {
                   'Please ensure storage bucket is configured in Supabase for full functionality.'
                 );
                 
-                // Navigate to imports review page with local import ID
-                const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
-                window.location.href = `${basePath}/imports/review?id=${localImportId}`;
+                // Store import ID for highlighting
+                sessionStorage.setItem('highlightImportId', localImportId);
+                
+                // Navigate to imports tab using custom event
+                console.debug('[UploadServiceScanButton] Dispatching navigateToImports event with local importId:', localImportId);
+                window.dispatchEvent(new CustomEvent('navigateToImports', {
+                  detail: { importId: localImportId }
+                }));
+                
                 return;
               } catch (localError) {
                 console.error('[UploadServiceScanButton] Local storage fallback failed:', localError);
@@ -325,7 +331,7 @@ export default function UploadServiceScanButton() {
               
               console.debug(`[imports/upload] source=delivery_page_upload id=${localImportId} files=${filesWithBase64.length} (saved locally)`);
               
-              // Show info message and redirect to review
+              // Show info message and navigate to review
               setUploading(false);
               alert(
                 '⚠️ Upload to cloud storage failed. Your import has been saved locally.\n\n' +
@@ -333,9 +339,15 @@ export default function UploadServiceScanButton() {
                 'Please ensure storage bucket is configured in Supabase for full functionality.'
               );
               
-              // Navigate to imports review page with local import ID
-              const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
-              window.location.href = `${basePath}/imports/review?id=${localImportId}`;
+              // Store import ID for highlighting
+              sessionStorage.setItem('highlightImportId', localImportId);
+              
+              // Navigate to imports tab using custom event
+              console.debug('[UploadServiceScanButton] Dispatching navigateToImports event with local importId:', localImportId);
+              window.dispatchEvent(new CustomEvent('navigateToImports', {
+                detail: { importId: localImportId }
+              }));
+              
               return;
             } catch (localError) {
               console.error('[UploadServiceScanButton] Local storage fallback failed:', localError);
@@ -451,11 +463,12 @@ export default function UploadServiceScanButton() {
       // Store import ID for highlighting (used by embedded ImportsReview component in App.jsx)
       sessionStorage.setItem('highlightImportId', importId);
       
-      // Navigate to standalone imports review page
-      // Note: Uses window.location.href instead of event-based navigation for GitHub Pages compatibility
-      // The standalone page at /src/pages/imports/review.jsx reads the ID from URL params
-      const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
-      window.location.href = `${basePath}/imports/review?id=${importId}`;
+      // Navigate to imports tab using custom event
+      // This ensures the SPA stays on the same page and just switches tabs
+      console.debug('[UploadServiceScanButton] Dispatching navigateToImports event with importId:', importId);
+      window.dispatchEvent(new CustomEvent('navigateToImports', {
+        detail: { importId }
+      }));
       
       // Clear file input
       if (fileInputRef.current) {
