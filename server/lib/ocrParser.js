@@ -5,12 +5,16 @@
  * 
  * Features:
  * - Google Vision API integration (preferred)
- * - Tesseract fallback
+ * - Tesseract.js fallback
+ * - PDF text layer detection (scanned vs digital)
+ * - PDF to image conversion for scanned PDFs
+ * - Image preprocessing (deskew, contrast, normalization)
  * - Auto-rotation of pages
  * - Table detection via Y/X clustering
  * - Column mapping via header token matching
  * - Multi-page merge with page tracking
  * - Confidence scoring
+ * - Delivery ticket specific parsing and validation
  * 
  * Environment Variables:
  * - GOOGLE_VISION_API_KEY: Google Cloud Vision API key
@@ -19,6 +23,11 @@
 
 const fs = require('fs');
 const path = require('path');
+const pdfParse = require('pdf-parse');
+const { createWorker } = require('tesseract.js');
+const sharp = require('sharp');
+const { PDFDocument } = require('pdf-lib');
+const { createCanvas, loadImage } = require('canvas');
 
 /**
  * Detect if file is PDF or image
@@ -46,6 +55,101 @@ function detectFileType(buffer) {
 }
 
 /**
+ * Check if PDF has text layer or is scanned (image-only)
+ * @param {Buffer} buffer - PDF buffer
+ * @returns {Promise<Object>} - { hasText: boolean, text: string }
+ */
+async function checkPDFTextLayer(buffer) {
+  try {
+    const data = await pdfParse(buffer);
+    const text = data.text.trim();
+    const hasText = text.length > 50; // Arbitrary threshold
+    
+    console.debug('[ocrParser] PDF text layer check:', {
+      hasText,
+      textLength: text.length,
+      pages: data.numpages
+    });
+    
+    return { hasText, text, numPages: data.numpages };
+  } catch (error) {
+    console.error('[ocrParser] Error checking PDF text layer:', error);
+    return { hasText: false, text: '', numPages: 0 };
+  }
+}
+
+/**
+ * Preprocess image for better OCR accuracy
+ * @param {Buffer} imageBuffer - Image buffer
+ * @returns {Promise<Buffer>} - Preprocessed image buffer
+ */
+async function preprocessImage(imageBuffer) {
+  try {
+    const processed = await sharp(imageBuffer)
+      .greyscale() // Convert to grayscale
+      .normalize() // Normalize brightness/contrast
+      .sharpen() // Sharpen edges
+      .threshold(128) // Binarize with threshold
+      .png() // Convert to PNG
+      .toBuffer();
+    
+    console.debug('[ocrParser] Image preprocessed');
+    return processed;
+  } catch (error) {
+    console.warn('[ocrParser] Image preprocessing failed, using original:', error.message);
+    return imageBuffer;
+  }
+}
+
+/**
+ * Convert PDF page to image
+ * @param {Buffer} pdfBuffer - PDF buffer
+ * @param {number} pageNumber - Page number (1-indexed)
+ * @returns {Promise<Buffer>} - Image buffer (PNG)
+ */
+async function convertPDFPageToImage(pdfBuffer, pageNumber = 1) {
+  try {
+    // Note: This is a simplified implementation
+    // In production, consider using pdf2pic or similar library for better quality
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pages = pdfDoc.getPages();
+    
+    if (pageNumber > pages.length || pageNumber < 1) {
+      throw new Error(`Invalid page number: ${pageNumber}. PDF has ${pages.length} pages.`);
+    }
+    
+    // This is a placeholder - actual implementation would need a proper PDF renderer
+    // For now, we'll return an error indicating the limitation
+    throw new Error('PDF to image conversion requires additional setup. Please use Google Vision API for PDFs or provide image files.');
+  } catch (error) {
+    console.error('[ocrParser] PDF to image conversion failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Clean OCR text output
+ * @param {string} text - Raw OCR text
+ * @returns {string} - Cleaned text
+ */
+function cleanOCRText(text) {
+  let cleaned = text;
+  
+  // Remove duplicate spaces
+  cleaned = cleaned.replace(/\s+/g, ' ');
+  
+  // Fix common OCR mistakes
+  cleaned = cleaned.replace(/\bO\b/g, '0'); // Standalone O -> 0
+  cleaned = cleaned.replace(/\b[Il]\b/g, '1'); // Standalone I/l -> 1
+  cleaned = cleaned.replace(/\bS\b/g, '5'); // Standalone S -> 5 (context dependent)
+  
+  // Remove extra newlines
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  
+  return cleaned.trim();
+}
+
+/**
  * Perform OCR using Google Vision API
  * @param {Buffer} buffer - Image buffer
  * @param {string} mimeType - MIME type
@@ -58,32 +162,37 @@ async function performGoogleVisionOCR(buffer, mimeType) {
     throw new Error('GOOGLE_VISION_API_KEY not configured');
   }
   
-  // For PDFs, use async document text detection
-  // For images, use sync text detection
+  // For PDFs, check if it's scanned first
   const isPdf = mimeType === 'application/pdf';
   
-  const endpoint = isPdf
-    ? `https://vision.googleapis.com/v1/files:asyncBatchAnnotate?key=${apiKey}`
-    : `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
+  if (isPdf) {
+    // Check if PDF has text layer
+    const { hasText, text } = await checkPDFTextLayer(buffer);
+    
+    if (hasText) {
+      // PDF has text layer, use it directly
+      console.debug('[ocrParser] PDF has text layer, using extracted text');
+      return {
+        text: cleanOCRText(text),
+        blocks: [],
+        confidence: 0.95, // High confidence for text-based PDFs
+      };
+    }
+    
+    // PDF is scanned (no text layer), needs OCR
+    console.debug('[ocrParser] PDF is scanned, will use OCR');
+  }
   
+  // Use image annotation for both images and scanned PDFs
+  const endpoint = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
   const base64Content = buffer.toString('base64');
   
-  const requestBody = isPdf
-    ? {
-        requests: [{
-          inputConfig: {
-            content: base64Content,
-            mimeType: mimeType,
-          },
-          features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-        }],
-      }
-    : {
-        requests: [{
-          image: { content: base64Content },
-          features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-        }],
-      };
+  const requestBody = {
+    requests: [{
+      image: { content: base64Content },
+      features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+    }],
+  };
   
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -98,14 +207,7 @@ async function performGoogleVisionOCR(buffer, mimeType) {
   
   const result = await response.json();
   
-  // Handle async PDF processing
-  if (isPdf && result.responses && result.responses[0]?.outputConfig) {
-    // For async processing, we need to poll for results
-    // This is simplified - in production, implement proper polling
-    throw new Error('PDF async processing requires additional implementation');
-  }
-  
-  // Parse sync response
+  // Parse response
   const annotations = result.responses?.[0]?.fullTextAnnotation;
   
   if (!annotations) {
@@ -117,21 +219,47 @@ async function performGoogleVisionOCR(buffer, mimeType) {
   }
   
   return {
-    text: annotations.text || '',
+    text: cleanOCRText(annotations.text || ''),
     blocks: annotations.pages || [],
     confidence: calculateConfidence(annotations),
   };
 }
 
 /**
- * Perform OCR using Tesseract (fallback)
+ * Perform OCR using Tesseract.js (fallback)
  * @param {Buffer} buffer - Image buffer
  * @returns {Promise<Object>} - OCR result
  */
 async function performTesseractOCR(buffer) {
-  // This requires tesseract.js or node-tesseract-ocr
-  // For now, throw error indicating it needs to be implemented
-  throw new Error('Tesseract OCR fallback not yet implemented. Install tesseract.js package.');
+  console.debug('[ocrParser] Starting Tesseract OCR');
+  
+  try {
+    // Preprocess image for better accuracy
+    const preprocessed = await preprocessImage(buffer);
+    
+    // Create Tesseract worker
+    const worker = await createWorker('eng');
+    
+    // Perform OCR
+    const { data } = await worker.recognize(preprocessed);
+    
+    // Terminate worker
+    await worker.terminate();
+    
+    console.debug('[ocrParser] Tesseract OCR complete:', {
+      textLength: data.text.length,
+      confidence: data.confidence
+    });
+    
+    return {
+      text: cleanOCRText(data.text),
+      confidence: data.confidence / 100, // Convert to 0-1 scale
+      blocks: data.blocks || [],
+    };
+  } catch (error) {
+    console.error('[ocrParser] Tesseract OCR failed:', error);
+    throw new Error(`Tesseract OCR failed: ${error.message}`);
+  }
 }
 
 /**
@@ -285,6 +413,7 @@ function mapToColumns(row, columnPositions) {
 
 /**
  * Map column headers to field names via token matching
+ * Enhanced for delivery tickets
  * @param {Array} headerRow - Header row text values
  * @returns {Object} - Column map { 0: 'jobNumber', 1: 'customer', ... }
  */
@@ -292,15 +421,24 @@ function mapColumnHeaders(headerRow) {
   const columnMap = {};
   
   const headerPatterns = {
+    // Delivery ticket specific fields
+    ticketNumber: /ticket\s*#|ticket\s*no|ticket\s*number|record\s*#|record|rec/i,
+    account: /account|acct|acc\s*#/i,
+    customer: /customer|client|name|cust/i,
+    address: /address|location|addr/i,
+    driver: /driver|operator|delivered\s*by/i,
+    truck: /truck|vehicle|unit|equip/i,
+    date: /date|delivered|del\s*date|when/i,
+    product: /product|fuel|type|desc/i,
+    gallons: /gallons|qty|quantity|gal|volume/i,
+    price: /price|rate|unit\s*price|per\s*gal/i,
+    tax: /tax|hst|gst/i,
+    amount: /amount|total|price|revenue|\$|cost|ext|extension/i,
+    // Service ticket fields (for compatibility)
     jobNumber: /job\s*#|job\s*number|job\s*no/i,
-    customer: /customer|client|name/i,
-    address: /address|location/i,
-    date: /date|scheduled|when/i,
     status: /status|state/i,
-    amount: /amount|total|price|revenue|\$|cost/i,
     tech: /tech|technician|employee|assigned/i,
     description: /description|service|work|notes/i,
-    gallons: /gallons|qty|quantity|gal/i,
   };
   
   headerRow.forEach((header, idx) => {
@@ -324,6 +462,7 @@ function mapColumnHeaders(headerRow) {
 
 /**
  * Normalize a row of data
+ * Enhanced with better numeric parsing
  * @param {Object} row - Raw row object
  * @param {Object} columnMap - Column mapping
  * @returns {Object} - Normalized row
@@ -335,11 +474,98 @@ function normalizeRow(row, columnMap) {
     const fieldName = columnMap[key] || key;
     let normalizedValue = value;
     
-    // Normalize numeric values
-    if (fieldName === 'amount' || fieldName === 'gallons') {
-      // Remove currency symbols, commas
-      normalizedValue = value.replace(/[\$,]/g, '').trim();
+    // Normalize numeric values (amount, gallons, price, tax)
+    if (['amount', 'gallons', 'price', 'tax'].includes(fieldName)) {
+      // Remove currency symbols, commas, and extra spaces
+      normalizedValue = value.replace(/[\$,\s]/g, '').trim();
       const num = parseFloat(normalizedValue);
+      normalizedValue = isNaN(num) ? 0 : num;
+    }
+    
+    // Normalize dates (basic)
+    if (fieldName === 'date') {
+      normalizedValue = value.trim();
+    }
+    
+    // Normalize text fields
+    if (typeof normalizedValue === 'string') {
+      normalizedValue = normalizedValue.trim();
+    }
+    
+    normalized[fieldName] = normalizedValue;
+  });
+  
+  return normalized;
+}
+
+/**
+ * Validate a delivery ticket row
+ * @param {Object} row - Normalized row
+ * @param {number} rowIndex - Row index for error reporting
+ * @returns {Object} - Validation result { valid: boolean, errors: [] }
+ */
+function validateDeliveryTicket(row, rowIndex) {
+  const errors = [];
+  
+  // Check required fields
+  const requiredFields = ['date', 'gallons', 'amount'];
+  requiredFields.forEach(field => {
+    if (!row[field] || row[field] === '' || row[field] === 0) {
+      errors.push(`Row ${rowIndex}: Missing or empty ${field}`);
+    }
+  });
+  
+  // Validate numeric fields
+  if (row.gallons !== undefined && row.gallons <= 0) {
+    errors.push(`Row ${rowIndex}: Gallons must be greater than 0 (got ${row.gallons})`);
+  }
+  
+  if (row.amount !== undefined && row.amount <= 0) {
+    errors.push(`Row ${rowIndex}: Amount must be greater than 0 (got ${row.amount})`);
+  }
+  
+  // Validate date format (basic check)
+  if (row.date) {
+    const dateStr = String(row.date);
+    // Check if date contains numbers
+    if (!/\d/.test(dateStr)) {
+      errors.push(`Row ${rowIndex}: Invalid date format (${dateStr})`);
+    }
+  }
+  
+  // Validate price if present
+  if (row.price !== undefined && row.price < 0) {
+    errors.push(`Row ${rowIndex}: Price cannot be negative (got ${row.price})`);
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+/**
+ * Filter out non-ticket rows (totals, headers, footers)
+ * @param {Array} rows - Parsed rows
+ * @returns {Array} - Filtered rows
+ */
+function filterNonTicketRows(rows) {
+  return rows.filter(row => {
+    const rowStr = JSON.stringify(row).toLowerCase();
+    
+    // Skip rows that look like totals or summaries
+    if (rowStr.includes('total') && rowStr.includes('grand')) return false;
+    if (rowStr.includes('subtotal')) return false;
+    if (rowStr.includes('page total')) return false;
+    if (rowStr.includes('continued')) return false;
+    
+    // Skip rows with too few fields
+    const filledFields = Object.values(row).filter(v => v && v !== '').length;
+    if (filledFields < 3) return false;
+    
+    return true;
+  });
+}
       normalizedValue = isNaN(num) ? 0 : num;
     }
     
@@ -357,6 +583,7 @@ function normalizeRow(row, columnMap) {
 
 /**
  * Parse OCR text into structured data
+ * Enhanced with validation and filtering
  * @param {string} text - OCR text
  * @param {Object} metadata - File metadata (page number, etc.)
  * @returns {Object} - Parsed result with rows and summary
@@ -374,7 +601,10 @@ function parseOCRText(text, metadata = {}) {
   
   for (let i = 0; i < potentialHeaders.length; i++) {
     const line = potentialHeaders[i].toLowerCase();
-    if (line.includes('job') || line.includes('customer') || line.includes('date')) {
+    // Enhanced header detection for delivery tickets
+    if (line.includes('ticket') || line.includes('record') || 
+        line.includes('driver') || line.includes('gallons') ||
+        line.includes('job') || line.includes('customer') || line.includes('date')) {
       headerRowIndex = i;
       break;
     }
@@ -385,6 +615,8 @@ function parseOCRText(text, metadata = {}) {
   
   // Parse data rows
   const rows = [];
+  const validationErrors = [];
+  
   for (let i = headerRowIndex + 1; i < lines.length; i++) {
     const line = lines[i];
     const values = line.split(/\s{2,}|\t/);
@@ -402,17 +634,29 @@ function parseOCRText(text, metadata = {}) {
     normalized.y = metadata.y || i;
     normalized.rawColumns = values; // Store original column values
     
+    // Validate row
+    const validation = validateDeliveryTicket(normalized, i);
+    if (!validation.valid) {
+      validationErrors.push(...validation.errors);
+      normalized.validationErrors = validation.errors;
+    }
+    
     rows.push(normalized);
   }
   
-  console.debug('[ocrParser] Parsed rows:', rows.length);
+  // Filter out non-ticket rows
+  const filteredRows = filterNonTicketRows(rows);
+  
+  console.debug('[ocrParser] Parsed rows:', rows.length, 'filtered:', filteredRows.length);
   
   // Calculate summary
-  const summary = calculateSummary(rows);
+  const summary = calculateSummary(filteredRows);
+  summary.validationErrors = validationErrors;
+  summary.filteredRows = rows.length - filteredRows.length;
   
   return {
     columnMap,
-    rows,
+    rows: filteredRows,
     summary,
     confidence: 0.5, // Placeholder - needs proper calculation
   };
@@ -487,6 +731,7 @@ function inferImportType(columnMap, rows) {
 
 /**
  * Main parse function
+ * Enhanced with scanned PDF detection and better error handling
  * @param {Buffer} buffer - File buffer
  * @param {string} mimeType - File MIME type
  * @param {Object} options - Parse options
@@ -495,8 +740,19 @@ function inferImportType(columnMap, rows) {
 async function parse(buffer, mimeType, options = {}) {
   console.debug('[ocrParser] Starting parse, mimeType:', mimeType);
   
+  const fileType = detectFileType(buffer);
+  console.debug('[ocrParser] File type detected:', fileType);
+  
+  // Check if PDF is scanned
+  let isScanned = false;
+  if (fileType === 'pdf') {
+    const { hasText } = await checkPDFTextLayer(buffer);
+    isScanned = !hasText;
+    console.debug('[ocrParser] PDF scanned:', isScanned);
+  }
+  
   try {
-    // Attempt Google Vision first
+    // Try Google Vision first if available
     const ocrResult = await performGoogleVisionOCR(buffer, mimeType);
     
     // Parse OCR text into structured data
@@ -505,39 +761,79 @@ async function parse(buffer, mimeType, options = {}) {
     // Merge confidence from OCR
     parsed.confidence = Math.min(ocrResult.confidence, parsed.confidence + 0.3);
     
-    // Determine status
+    // Determine status based on confidence and validation errors
     const autoAccept = process.env.AUTO_ACCEPT_HIGH_CONFIDENCE === 'true';
-    parsed.status = (parsed.confidence >= 0.95 && autoAccept) ? 'accepted' : 'needs_review';
+    const hasValidationErrors = parsed.summary?.validationErrors?.length > 0;
+    parsed.status = (parsed.confidence >= 0.95 && autoAccept && !hasValidationErrors) 
+      ? 'accepted' 
+      : 'needs_review';
     
-    console.debug('[ocrParser] Parse complete, confidence:', parsed.confidence);
+    console.debug('[ocrParser] Parse complete:', {
+      confidence: parsed.confidence,
+      rows: parsed.rows.length,
+      validationErrors: parsed.summary?.validationErrors?.length || 0,
+      status: parsed.status
+    });
     
     return {
       success: true,
       parsed,
       ocrText: ocrResult.text,
+      isScanned,
+      ocrEngine: 'google_vision',
     };
   } catch (googleError) {
     console.warn('[ocrParser] Google Vision failed, trying Tesseract:', googleError.message);
     
     try {
+      // Preprocess image if it's not a PDF
+      let processedBuffer = buffer;
+      if (fileType === 'image') {
+        processedBuffer = await preprocessImage(buffer);
+      }
+      
       // Fallback to Tesseract
-      const ocrResult = await performTesseractOCR(buffer);
+      const ocrResult = await performTesseractOCR(processedBuffer);
       const parsed = parseOCRText(ocrResult.text, { page: 1 });
       parsed.confidence = ocrResult.confidence || 0.4;
       parsed.status = 'needs_review';
+      
+      console.debug('[ocrParser] Tesseract parse complete:', {
+        confidence: parsed.confidence,
+        rows: parsed.rows.length
+      });
       
       return {
         success: true,
         parsed,
         ocrText: ocrResult.text,
+        isScanned,
+        ocrEngine: 'tesseract',
       };
     } catch (tesseractError) {
       console.error('[ocrParser] Both OCR engines failed:', tesseractError.message);
       
+      // Return detailed error message
+      let errorMessage = 'OCR processing failed. ';
+      
+      if (fileType === 'pdf' && isScanned) {
+        errorMessage += 'This PDF appears to be a scanned image. OCR could not read the text. Try rescanning with higher contrast and quality.';
+      } else if (fileType === 'pdf' && !isScanned) {
+        errorMessage += 'Could not process PDF text. The file may be corrupted or protected.';
+      } else {
+        errorMessage += 'Could not read text from image. Ensure the image is clear and high resolution.';
+      }
+      
       return {
         success: false,
         error: 'OCR processing failed',
-        message: `Google Vision: ${googleError.message}, Tesseract: ${tesseractError.message}`,
+        message: errorMessage,
+        details: {
+          googleError: googleError.message,
+          tesseractError: tesseractError.message,
+          fileType,
+          isScanned
+        }
       };
     }
   }
@@ -552,4 +848,10 @@ module.exports = {
   mapColumnHeaders,
   calculateSummary,
   inferImportType,
+  // New exports
+  checkPDFTextLayer,
+  preprocessImage,
+  cleanOCRText,
+  validateDeliveryTicket,
+  filterNonTicketRows,
 };

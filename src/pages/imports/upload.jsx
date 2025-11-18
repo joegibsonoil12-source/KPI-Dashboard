@@ -152,15 +152,32 @@ export default function UploadPage() {
               processed: true,
               parsed: processResult.parsed,
               confidence: processResult.confidence,
+              isScanned: processResult.isScanned,
+              ocrEngine: processResult.ocrEngine,
+            }));
+          } else {
+            // Processing failed - show error but keep upload result
+            setError(processResult.message || 'Failed to process the uploaded file');
+            setUploadResult(prev => ({
+              ...prev,
+              processed: false,
+              processingError: processResult.message || 'Processing failed',
             }));
           }
         } catch (processError) {
           console.error('[upload] Error processing import:', processError);
+          setError(`Processing error: ${processError.message}`);
+          setUploadResult(prev => ({
+            ...prev,
+            processed: false,
+            processingError: processError.message,
+          }));
         }
       }
     } catch (err) {
       console.error('[upload] Upload error:', err);
       setError(err.message || 'Upload failed');
+      setUploadResult(null); // Clear any partial results
     } finally {
       setUploading(false);
     }
@@ -181,6 +198,19 @@ export default function UploadPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <h1 className="text-3xl font-bold mb-6">Upload Scanned Tickets</h1>
+
+      {/* Help Text */}
+      <div className="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded">
+        <p className="text-sm mb-2">
+          <strong>OCR-Powered Import:</strong> This uploader accepts scanned PDFs and images and will automatically perform OCR to extract delivery ticket data.
+        </p>
+        <p className="text-sm mb-2">
+          <strong>Supported Formats:</strong> PDF (scanned or digital), JPG, PNG, GIF
+        </p>
+        <p className="text-sm">
+          <strong>For Best Results:</strong> Use high-contrast scans with readable text. Ensure the document is properly aligned and not blurry.
+        </p>
+      </div>
 
       <div className="mb-6 bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded">
         <p className="text-sm">
@@ -282,22 +312,51 @@ export default function UploadPage() {
       {/* Error Message */}
       {error && (
         <div className="mt-6 bg-red-50 border border-red-200 text-red-800 p-4 rounded">
-          <p className="font-medium">Error</p>
-          <p>{error}</p>
+          <p className="font-medium mb-2">Upload or Processing Error</p>
+          <p className="text-sm whitespace-pre-wrap">{error}</p>
+          {uploadResult?.processingError && (
+            <div className="mt-3">
+              <p className="text-sm font-medium">Possible causes:</p>
+              <ul className="list-disc list-inside text-sm mt-1">
+                <li>The PDF may be a low-quality scan</li>
+                <li>The image contrast may be too low</li>
+                <li>The document may not contain recognizable delivery ticket data</li>
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
       {/* Success Message */}
-      {uploadResult && (
+      {uploadResult && !error && (
         <div className="mt-6 bg-green-50 border border-green-200 text-green-800 p-4 rounded">
           <p className="font-medium mb-2">Upload Successful!</p>
-          <p>Import ID: {uploadResult.importId}</p>
-          {uploadResult.processed && (
-            <>
-              <p>Confidence: {(uploadResult.confidence * 100).toFixed(1)}%</p>
-              <p>Rows: {uploadResult.parsed?.rows?.length || 0}</p>
-            </>
-          )}
+          <div className="space-y-1 text-sm">
+            <p>Import ID: <span className="font-mono">{uploadResult.importId}</span></p>
+            {uploadResult.processed && (
+              <>
+                <p>OCR Engine: <span className="font-medium">{uploadResult.ocrEngine === 'google_vision' ? 'Google Vision' : 'Tesseract'}</span></p>
+                {uploadResult.isScanned !== undefined && (
+                  <p>Document Type: <span className="font-medium">{uploadResult.isScanned ? 'Scanned Image' : 'Digital Text'}</span></p>
+                )}
+                <p>Confidence: <span className="font-medium">{(uploadResult.confidence * 100).toFixed(1)}%</span></p>
+                <p>Rows Detected: <span className="font-medium">{uploadResult.parsed?.rows?.length || 0}</span></p>
+                {uploadResult.parsed?.summary?.validationErrors?.length > 0 && (
+                  <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                    <p className="font-medium text-yellow-800">Validation Warnings:</p>
+                    <ul className="list-disc list-inside text-xs text-yellow-700 mt-1">
+                      {uploadResult.parsed.summary.validationErrors.slice(0, 5).map((err, idx) => (
+                        <li key={idx}>{err}</li>
+                      ))}
+                      {uploadResult.parsed.summary.validationErrors.length > 5 && (
+                        <li>... and {uploadResult.parsed.summary.validationErrors.length - 5} more</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
           <button
             onClick={goToReview}
             className="mt-4 bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
