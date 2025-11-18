@@ -4,6 +4,7 @@ import TimeSeriesChart from "../charts/TimeSeriesChart";
 import DonutChart from "../charts/DonutChart";
 import BarBreakdown from "../charts/BarBreakdown";
 import DashboardControls from "../DashboardControls";
+import CompanyHealthCard from "../CompanyHealthCard";
 
 function Card({ title, value, sub, right, style, children, trend = null, trendColor = "#16A34A" }) {
   return (
@@ -540,6 +541,9 @@ export default function ExecutiveDashboard() {
           value={(agg.avgMilesPerStop || 0).toFixed(1)} 
           sub={`${num(Math.round(agg.totalMiles || 0))} miles / ${num(agg.deliveredStops || 0)} stops`} 
         />
+        
+        {/* Company Health Score Card */}
+        <CompanyHealthCard />
       </div>
 
       {/* Main Charts Row */}

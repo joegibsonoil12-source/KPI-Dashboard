@@ -956,8 +956,17 @@ export default function App() {
       setGroupsOpen((g) => ({ ...g, operations: true }));
     };
     
+    const handleNavigateToFinancial = () => {
+      console.debug('[App] Navigating to financial health tab');
+      setActive('financial');
+    };
+    
     window.addEventListener('navigateToImports', handleNavigateToImports);
-    return () => window.removeEventListener('navigateToImports', handleNavigateToImports);
+    window.addEventListener('navigateToFinancial', handleNavigateToFinancial);
+    return () => {
+      window.removeEventListener('navigateToImports', handleNavigateToImports);
+      window.removeEventListener('navigateToFinancial', handleNavigateToFinancial);
+    };
   }, []);
 
   if (checking) {
