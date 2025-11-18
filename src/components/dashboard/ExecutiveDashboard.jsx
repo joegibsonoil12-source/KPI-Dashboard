@@ -208,7 +208,7 @@ export default function ExecutiveDashboard() {
         // Keep this minimal - only fetch what we need for charts
         const { data: d3, error: e3 } = await supabase
           .from("delivery_tickets")
-          .select("date, scheduled_window_start, created_at, amount, gallons_delivered, qty, status, truck, product")
+          .select("date, scheduled_window_start, created_at, amount, gallons_delivered, qty, status, truck, product, miles_driven")
           .gte("date", from)
           .lte("date", to)
           .limit(5000);
@@ -355,7 +355,8 @@ export default function ExecutiveDashboard() {
       const cur = st.get(status) || { count: 0, revenue: 0, due: 0 };
       st.set(status, { count: cur.count + (cnt||0), revenue: cur.revenue + (rev||0), due: cur.due + (due||0) });
     };
-    serviceDaily.forEach((r) => addS(dayKey(r.job_date), r.status, r.job_count||0, Number(r.total_revenue||0), Number(r.total_due||0)));
+    // Each row is a single job, so count=1 and use job_amount (not total_revenue)
+    serviceDaily.forEach((r) => addS(dayKey(r.job_date), r.status, 1, Number(r.job_amount||0), 0));
     const serviceCompletedRevenueByDay = serviceDays.map((d) => mapService.get(d)?.get("completed")?.revenue || 0);
     const serviceSeriesStatus = [
       { name: "Completed", key: "completed", color: "#16A34A" },
@@ -364,15 +365,15 @@ export default function ExecutiveDashboard() {
       { name: "Canceled", key: "canceled", color: "#DC2626" },
     ].map((s) => ({ name: s.name, color: s.color, values: serviceDays.map((d)=> mapService.get(d)?.get(s.key)?.count || 0) }));
 
-    const svcCompletedRevenue = serviceDaily.filter(r=>r.status==="completed").reduce((a,b)=>a+Number(b.total_revenue||0),0);
+    const svcCompletedRevenue = serviceDaily.filter(r=>r.status==="completed").reduce((a,b)=>a+Number(b.job_amount||0),0);
     const svcPipelineRevenue = ["scheduled","in_progress"].reduce((sum, st) => (
-      sum + serviceDaily.filter(r=>r.status===st).reduce((a,b)=>a+Number(b.total_revenue||0),0)
+      sum + serviceDaily.filter(r=>r.status===st).reduce((a,b)=>a+Number(b.job_amount||0),0)
     ), 0);
     const svcCounts = {
-      completed: serviceDaily.filter(r=>r.status==="completed").reduce((a,b)=>a+(b.job_count||0),0),
-      scheduled: serviceDaily.filter(r=>r.status==="scheduled").reduce((a,b)=>a+(b.job_count||0),0),
-      inProgress: serviceDaily.filter(r=>r.status==="in_progress").reduce((a,b)=>a+(b.job_count||0),0),
-      canceled: serviceDaily.filter(r=>r.status==="canceled").reduce((a,b)=>a+(b.job_count||0),0),
+      completed: serviceDaily.filter(r=>r.status==="completed").length,
+      scheduled: serviceDaily.filter(r=>r.status==="scheduled").length,
+      inProgress: serviceDaily.filter(r=>r.status==="in_progress").length,
+      canceled: serviceDaily.filter(r=>r.status==="canceled").length,
     };
 
     // Deliveries — for combined daily revenue (unchanged day basis)
@@ -420,6 +421,12 @@ export default function ExecutiveDashboard() {
     };
     const deliveriesAvgPrice = deliveriesTotals.gallons > 0 ? deliveriesTotals.revenue / deliveriesTotals.gallons : 0;
 
+    // Calculate average miles per stop for delivered tickets
+    const deliveredTickets = tickets.filter(t => String(t.status || "").toLowerCase() === "delivered");
+    const totalMiles = deliveredTickets.reduce((a, b) => a + (Number(b.miles_driven) || 0), 0);
+    const deliveredStops = deliveredTickets.length;
+    const avgMilesPerStop = deliveredStops > 0 ? totalMiles / deliveredStops : 0;
+
     // Combined revenue trend (service completed + delivery amounts) on daily axis
     const allDays = Array.from(new Set([...serviceDays, ...ticketsDays])).sort();
     const mapSvcRev = new Map(serviceDays.map((d,i)=>[d, serviceCompletedRevenueByDay[i] || 0]));
@@ -443,6 +450,7 @@ export default function ExecutiveDashboard() {
       ticketsDays, deliveriesRevenueByDay, // kept for combined chart
       ticketsBuckets, deliveriesSeriesStatus, // used by grouped delivery chart
       deliveriesTotals, deliveriesAvgPrice,
+      avgMilesPerStop, totalMiles, deliveredStops, // miles per stop metrics
       allDays, combinedRevenueByDay, topTechs,
     };
   }, [serviceDaily, serviceTechs, tickets, delivGroup]);
@@ -494,7 +502,11 @@ export default function ExecutiveDashboard() {
         
         <Card title="Service Jobs" value={num(agg.svcCounts?.completed)} sub="Completed" />
         
-        <Card title="Pipeline" value={usd(agg.svcPipelineRevenue)} sub="Scheduled + In Progress" />
+        <Card 
+          title="Avg Miles per Stop" 
+          value={(agg.avgMilesPerStop || 0).toFixed(1)} 
+          sub={`${num(Math.round(agg.totalMiles || 0))} miles / ${num(agg.deliveredStops || 0)} stops`} 
+        />
       </div>
 
       {/* Main Charts Row */}
