@@ -49,9 +49,18 @@ jobs:
             exit 1
           fi
 
+          # Guard against assets not being an array of objects
           ASSET_URL=$(
-            jq -r '.assets[]? | select(.name|test("linux|Linux"; "i") and (.name|test("x86_64|amd64"; "i"))) | .browser_download_url' \
-              "$RELEASE_JSON" | head -n1 || true
+            jq -r '
+              if (.assets? | type) == "array" then
+                .assets[]
+                | objects
+                | select(.name | test("linux|Linux"; "i") and (.name | test("x86_64|amd64"; "i")))
+                | .browser_download_url
+              else
+                empty
+              end
+            ' "$RELEASE_JSON" | head -n1 || true
           )
 
           # fallback: attempt some known filenames via release latest/download endpoint
@@ -75,6 +84,8 @@ jobs:
 
           if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
             echo "ERROR: Could not discover Supabase CLI asset URL from GitHub Releases or fallback names."
+            echo "Dumping release JSON for diagnosis:"
+            sed -n '1,200p' "$RELEASE_JSON" || true
             exit 1
           fi
 
