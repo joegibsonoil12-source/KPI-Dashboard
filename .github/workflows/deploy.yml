@@ -1,0 +1,82 @@
+name: deploy
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install required packages and supabase CLI
+        run: |
+          set -e
+          sudo apt-get update -y
+          sudo apt-get install -y curl wget gnupg ca-certificates postgresql-client
+          # install supabase CLI (latest release)
+          curl -sL "https://github.com/supabase/cli/releases/latest/download/supabase_${{ runner.os }}_x86_64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin
+          supabase --version || true
+
+      - name: Login supabase CLI
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -e
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "SUPABASE_ACCESS_TOKEN is missing - add it to repo secrets"; exit 1
+          fi
+          supabase login --token "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Link supabase project
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set -e
+          if [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "SUPABASE_PROJECT_REF is missing - add it to repo secrets"; exit 1
+          fi
+          supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Debug DB connectivity (psql)
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -e
+          echo "Running psql connectivity test..."
+          # print minimal info so logs show whether it's password or network issue
+          if psql "$DATABASE_URL" -c "SELECT now();" ; then
+            echo "PSQL OK: DB reachable and credentials accepted."
+          else
+            echo "PSQL failed - check SUPABASE_DB_URL / network / password"
+            exit 1
+          fi
+
+      - name: Push DB migrations to Supabase
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -e
+          export DATABASE_URL="$DATABASE_URL"
+          # try a few times to survive transient network failures
+          ATTEMPTS=3
+          for i in $(seq 1 $ATTEMPTS); do
+            echo "supabase db push — attempt $i/$ATTEMPTS"
+            if supabase db push; then
+              echo "supabase db push: SUCCESS"
+              break
+            else
+              echo "supabase db push: failed attempt $i"
+              if [ "$i" -lt "$ATTEMPTS" ]; then
+                echo "Sleeping 5s and retrying..."
+                sleep 5
+              else
+                echo "supabase db push failed after $ATTEMPTS attempts"
+                exit 1
+              fi
+            fi
+          done
