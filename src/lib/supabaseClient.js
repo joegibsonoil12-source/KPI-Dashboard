@@ -56,9 +56,14 @@ if (!urlFinal || !anonFinal) {
   /* eslint-enable no-console */
 }
 
-export const supabase = createClient(finalUrl, finalAnon, {
-  auth: { persistSession: true, autoRefreshToken: true },
-});
+// Create singleton instance using globalThis to prevent multiple GoTrueClient instances
+if (!globalThis.__supabaseClient) {
+  globalThis.__supabaseClient = createClient(finalUrl, finalAnon, {
+    auth: { persistSession: true, autoRefreshToken: true },
+  });
+}
+
+export const supabase = globalThis.__supabaseClient;
 
 // Export factory function for creating client instances (keeps existing API)
 export function createSupabaseClient(supabaseUrl = finalUrl, supabaseKey = finalAnon) {

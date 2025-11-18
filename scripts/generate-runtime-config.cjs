@@ -14,6 +14,14 @@ const config = {
   // base path for routing (GitHub Pages uses /KPI-Dashboard/, Vercel uses /)
   BASE_PATH: process.env.VERCEL === '1' ? '' : '/KPI-Dashboard',
 
+  // API base for serverless functions (Netlify/Vercel functions host)
+  API_BASE:
+    process.env.VERCEL_API_BASE ||
+    process.env.API_BASE ||
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.VITE_API_BASE ||
+    '',
+
   // billboard settings
   BILLBOARD_API_BASE: process.env.VERCEL_BILLBOARD_API_BASE || process.env.BILLBOARD_API_BASE || '',
   BILLBOARD_TV_TOKEN: process.env.VERCEL_BILLBOARD_TV_TOKEN || process.env.BILLBOARD_TV_TOKEN || '',

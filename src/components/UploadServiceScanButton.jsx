@@ -8,7 +8,8 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabaseClient';
+import { postFn } from '../lib/api';
 import { saveLocalImport } from '../lib/localImports.js';
 
 export default function UploadServiceScanButton() {
@@ -51,9 +52,8 @@ export default function UploadServiceScanButton() {
         throw new Error('Missing Supabase configuration. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
       }
       
-      // Create Supabase client
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
-      console.debug('[UploadServiceScanButton] Supabase client created');
+      // using shared supabase client from src/lib/supabaseClient.js
+      console.debug('[UploadServiceScanButton] Using shared Supabase client');
       
       // Diagnostic: Test bucket access before upload
       console.debug('[UploadServiceScanButton] Testing bucket access...');
@@ -128,38 +128,33 @@ export default function UploadServiceScanButton() {
       const uploadViaServer = async (file) => {
         const base64 = await fileToBase64(file);
         
-        // Get server upload endpoint URL from environment
-        const apiBase = 
+        const apiBase =
+          (typeof window !== 'undefined' && window.__ENV?.API_BASE) ||
           (typeof window !== 'undefined' && window.__ENV?.NEXT_PUBLIC_API_BASE) ||
           (typeof window !== 'undefined' && window.__ENV?.VITE_API_BASE) ||
           import.meta.env.NEXT_PUBLIC_API_BASE ||
           import.meta.env.VITE_API_BASE ||
           '';
-        
-        const uploadEndpoint = apiBase 
-          ? `${apiBase}/api/uploads/signed`
+
+        const uploadEndpoint = apiBase
+          ? `${apiBase}/.netlify/functions/imports-upload`
           : `/.netlify/functions/imports-upload`;
-        
+
         console.debug('[UploadServiceScanButton] Upload endpoint:', uploadEndpoint);
-        
-        const serverResponse = await fetch(uploadEndpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: file.type,
-            base64: base64,
-          }),
+
+        // build JSON payload
+        const payload = JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          base64: base64,
         });
-        
-        if (!serverResponse.ok) {
-          const errorData = await serverResponse.json();
-          throw new Error(errorData.error || `Server upload failed: ${serverResponse.status}`);
-        }
-        
-        return await serverResponse.json();
+
+        // use the shared postFn helper (it will throw with a clear message for HTML responses)
+        const result = await postFn(uploadEndpoint, payload, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        return result;
       };
       
       // Upload files to 'ticket-scans' bucket
