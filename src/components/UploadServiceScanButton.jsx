@@ -258,7 +258,8 @@ export default function UploadServiceScanButton() {
                 );
                 
                 // Navigate to imports review page with local import ID
-                window.location.href = `/imports/review?id=${localImportId}`;
+                const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
+                window.location.href = `${basePath}/imports/review?id=${localImportId}`;
                 return;
               } catch (localError) {
                 console.error('[UploadServiceScanButton] Local storage fallback failed:', localError);
@@ -333,7 +334,8 @@ export default function UploadServiceScanButton() {
               );
               
               // Navigate to imports review page with local import ID
-              window.location.href = `/imports/review?id=${localImportId}`;
+              const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
+              window.location.href = `${basePath}/imports/review?id=${localImportId}`;
               return;
             } catch (localError) {
               console.error('[UploadServiceScanButton] Local storage fallback failed:', localError);
@@ -452,7 +454,8 @@ export default function UploadServiceScanButton() {
       // Navigate to standalone imports review page
       // Note: Uses window.location.href instead of event-based navigation for GitHub Pages compatibility
       // The standalone page at /src/pages/imports/review.jsx reads the ID from URL params
-      window.location.href = `/imports/review?id=${importId}`;
+      const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
+      window.location.href = `${basePath}/imports/review?id=${importId}`;
       
       // Clear file input
       if (fileInputRef.current) {

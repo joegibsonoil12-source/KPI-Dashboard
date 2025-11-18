@@ -175,28 +175,51 @@ export default function ExecutiveDashboard() {
       try {
         const { from, to } = fromTo;
         
-        // Fetch service jobs data
+        // Fetch service jobs data from aggregated views for better performance
+        // Note: For now, we still use raw service_jobs for status breakdown
+        // TODO: Create service_jobs_daily_by_status view for complete optimization
         const { data: d1, error: e1 } = await supabase
           .from("service_jobs")
           .select("job_date,status,job_amount")
           .gte("job_date", from)
           .lte("job_date", to)
           .order("job_date", { ascending: true });
-        if (e1) throw e1;
+        if (e1) {
+          console.error('Failed to load service jobs:', e1);
+          // Don't throw - show graceful error
+          if (e1.message?.includes('permission') || e1.message?.includes('policy')) {
+            setErr('Data unavailable — check Supabase permissions for service_jobs table');
+          } else {
+            throw e1;
+          }
+        }
 
         const { data: d2, error: e2 } = await supabase
           .from("service_job_techs")
           .select("tech_name, job_amount, job_date")
           .gte("job_date", from)
           .lte("job_date", to);
-        if (e2) throw e2;
+        if (e2) {
+          console.error('Failed to load service job techs:', e2);
+          // Non-fatal, continue without tech data
+        }
 
-        // Fetch delivery tickets with all needed fields
+        // Fetch delivery tickets with all needed fields for status grouping
+        // Keep this minimal - only fetch what we need for charts
         const { data: d3, error: e3 } = await supabase
           .from("delivery_tickets")
           .select("date, scheduled_window_start, created_at, amount, gallons_delivered, qty, status, truck, product")
+          .gte("date", from)
+          .lte("date", to)
           .limit(5000);
-        if (e3) throw e3;
+        if (e3) {
+          console.error('Failed to load delivery tickets:', e3);
+          if (e3.message?.includes('permission') || e3.message?.includes('policy')) {
+            setErr('Data unavailable — check Supabase permissions for delivery_tickets table');
+          } else {
+            throw e3;
+          }
+        }
 
         // Fetch aggregated delivery data from view
         const { data: d4, error: e4 } = await supabase
@@ -205,11 +228,39 @@ export default function ExecutiveDashboard() {
           .gte("day", from)
           .lte("day", to)
           .order("day", { ascending: true });
-        if (e4) throw e4;
+        if (e4) {
+          console.error('Failed to load delivery_tickets_daily view:', e4);
+          if (e4.message?.includes('permission') || e4.message?.includes('policy')) {
+            setErr('Data unavailable — check Supabase permissions. Run SQL grants for delivery_tickets_daily view');
+          } else {
+            throw e4;
+          }
+        }
+
+        // Fetch per-truck aggregated data from new view
+        const { data: d5, error: e5 } = await supabase
+          .from("delivery_tickets_per_truck")
+          .select("truck, ticket_count, total_gallons, revenue")
+          .order("revenue", { ascending: false })
+          .limit(10);
+        if (e5) {
+          console.warn('Failed to load per-truck view, falling back to client-side aggregation:', e5);
+          // Non-fatal - will compute client-side if view not available
+        }
+
+        // Fetch per-product aggregated data from new view
+        const { data: d6, error: e6 } = await supabase
+          .from("delivery_tickets_per_product")
+          .select("product, ticket_count, total_gallons, revenue")
+          .order("revenue", { ascending: false });
+        if (e6) {
+          console.warn('Failed to load per-product view, falling back to client-side aggregation:', e6);
+          // Non-fatal - will compute client-side if view not available
+        }
 
         if (!mounted) return;
         
-        // Filter tickets by date range
+        // Filter tickets by date range (only used if we didn't get view data)
         const fromD = new Date(from + "T00:00:00");
         const toD = new Date(to + "T23:59:59");
         const tFiltered = (Array.isArray(d3) ? d3 : []).filter((r) => {
@@ -217,38 +268,62 @@ export default function ExecutiveDashboard() {
           return d && d >= fromD && d <= toD;
         });
 
-        // Calculate per-truck totals
-        const truckMap = new Map();
-        tFiltered.forEach((t) => {
-          const truck = t.truck || "Unknown";
-          if (!truckMap.has(truck)) {
-            truckMap.set(truck, { gallons: 0, revenue: 0, count: 0 });
-          }
-          const data = truckMap.get(truck);
-          data.gallons += Number(t.gallons_delivered ?? t.qty) || 0;
-          data.revenue += Number(t.amount) || 0;
-          data.count += 1;
-        });
-        const trucks = Array.from(truckMap.entries())
-          .map(([truck, data]) => ({ truck, ...data }))
-          .sort((a, b) => b.revenue - a.revenue)
-          .slice(0, 10);
+        // Use per-truck view data if available, otherwise compute client-side
+        let trucks = [];
+        if (d5 && Array.isArray(d5) && d5.length > 0) {
+          // Use aggregated view data (preferred)
+          trucks = d5.map(t => ({
+            truck: t.truck,
+            gallons: Number(t.total_gallons) || 0,
+            revenue: Number(t.revenue) || 0,
+            count: Number(t.ticket_count) || 0
+          }));
+        } else {
+          // Fallback: Calculate per-truck totals client-side
+          const truckMap = new Map();
+          tFiltered.forEach((t) => {
+            const truck = t.truck || "Unknown";
+            if (!truckMap.has(truck)) {
+              truckMap.set(truck, { gallons: 0, revenue: 0, count: 0 });
+            }
+            const data = truckMap.get(truck);
+            data.gallons += Number(t.gallons_delivered ?? t.qty) || 0;
+            data.revenue += Number(t.amount) || 0;
+            data.count += 1;
+          });
+          trucks = Array.from(truckMap.entries())
+            .map(([truck, data]) => ({ truck, ...data }))
+            .sort((a, b) => b.revenue - a.revenue)
+            .slice(0, 10);
+        }
 
-        // Calculate per-product totals
-        const productMap = new Map();
-        tFiltered.forEach((t) => {
-          const product = t.product || "Unknown";
-          if (!productMap.has(product)) {
-            productMap.set(product, { gallons: 0, revenue: 0, count: 0 });
-          }
-          const data = productMap.get(product);
-          data.gallons += Number(t.gallons_delivered ?? t.qty) || 0;
-          data.revenue += Number(t.amount) || 0;
-          data.count += 1;
-        });
-        const products = Array.from(productMap.entries())
-          .map(([product, data]) => ({ product, ...data }))
-          .sort((a, b) => b.revenue - a.revenue);
+        // Use per-product view data if available, otherwise compute client-side
+        let products = [];
+        if (d6 && Array.isArray(d6) && d6.length > 0) {
+          // Use aggregated view data (preferred)
+          products = d6.map(p => ({
+            product: p.product,
+            gallons: Number(p.total_gallons) || 0,
+            revenue: Number(p.revenue) || 0,
+            count: Number(p.ticket_count) || 0
+          }));
+        } else {
+          // Fallback: Calculate per-product totals client-side
+          const productMap = new Map();
+          tFiltered.forEach((t) => {
+            const product = t.product || "Unknown";
+            if (!productMap.has(product)) {
+              productMap.set(product, { gallons: 0, revenue: 0, count: 0 });
+            }
+            const data = productMap.get(product);
+            data.gallons += Number(t.gallons_delivered ?? t.qty) || 0;
+            data.revenue += Number(t.amount) || 0;
+            data.count += 1;
+          });
+          products = Array.from(productMap.entries())
+            .map(([product, data]) => ({ product, ...data }))
+            .sort((a, b) => b.revenue - a.revenue);
+        }
 
         setServiceDaily(Array.isArray(d1) ? d1 : []);
         setServiceTechs(Array.isArray(d2) ? d2 : []);
@@ -257,6 +332,7 @@ export default function ExecutiveDashboard() {
         setTruckData(trucks);
         setProductData(products);
       } catch (e) {
+        console.error('Dashboard load error:', e);
         setErr(e?.message || String(e));
       } finally {
         setLoading(false);

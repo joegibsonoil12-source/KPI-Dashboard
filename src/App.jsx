@@ -102,7 +102,8 @@ function SignInCard() {
   async function onSignIn(e) {
     e.preventDefault();
     setError("");
-    const redirect = new URL("/KPI-Dashboard/", window.location.href).href;
+    const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
+    const redirect = new URL(basePath + "/", window.location.href).href;
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
     if (error) setError(error.message); else setSent(true);
   }
@@ -885,7 +886,8 @@ const TABS = [
 function SelfCheck({ session }) {
   const [open, setOpen] = useState(false);
   const supaKeys = Object.keys(localStorage).filter((k) => k.startsWith("sb-")).slice(0, 5);
-  const expectedRedirect = new URL("/KPI-Dashboard/", window.location.href).href;
+  const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
+  const expectedRedirect = new URL(basePath + "/", window.location.href).href;
   return (
     <div style={{ position: "fixed", left: 16, bottom: 16, zIndex: 9999 }}>
       <button onClick={() => setOpen((v) => !v)}
@@ -957,11 +959,12 @@ export default function App() {
   }, []);
 
   if (checking) {
+    const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
     return (
       <div style={{ padding: 24 }}>
         <div style={{ fontSize: 18, marginBottom: 8 }}>Restoring session…</div>
         <div style={{ fontSize: 13, color: "#6B7280" }}>
-          If this never finishes, try <a href={new URL("/KPI-Dashboard/", window.location.href).href}>reloading</a>.
+          If this never finishes, try <a href={new URL(basePath + "/", window.location.href).href}>reloading</a>.
         </div>
       </div>
     );

@@ -170,10 +170,11 @@ export default function UploadPage() {
    * Navigate to review page
    */
   const goToReview = () => {
+    const basePath = (window.__ENV && window.__ENV.BASE_PATH) || '/KPI-Dashboard';
     if (uploadResult && uploadResult.importId) {
-      window.location.href = `/imports/review?id=${uploadResult.importId}`;
+      window.location.href = `${basePath}/imports/review?id=${uploadResult.importId}`;
     } else {
-      window.location.href = '/imports/review';
+      window.location.href = `${basePath}/imports/review`;
     }
   };
 
