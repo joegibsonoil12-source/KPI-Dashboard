@@ -12,6 +12,7 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState(null);
+  const [debugMode, setDebugMode] = useState(false);
   const fileInputRef = useRef(null);
 
   /**
@@ -195,6 +196,78 @@ export default function UploadPage() {
     }
   };
 
+  /**
+   * Download raw OCR text
+   */
+  const downloadOCRText = async () => {
+    if (!uploadResult || !uploadResult.importId) return;
+    
+    try {
+      const apiBase = 
+        (typeof window !== 'undefined' && window.__ENV?.NEXT_PUBLIC_API_BASE) ||
+        (typeof window !== 'undefined' && window.__ENV?.VITE_API_BASE) ||
+        import.meta.env.NEXT_PUBLIC_API_BASE ||
+        import.meta.env.VITE_API_BASE ||
+        '';
+      
+      // Fetch import record to get OCR text
+      const response = await fetch(`${apiBase}/.netlify/functions/imports-process?id=${uploadResult.importId}`);
+      const data = await response.json();
+      
+      if (data.ocrText) {
+        const blob = new Blob([data.ocrText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ocr-text-${uploadResult.importId}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      console.error('Failed to download OCR text:', err);
+    }
+  };
+
+  /**
+   * Download parsed data as CSV
+   */
+  const downloadCSV = () => {
+    if (!uploadResult || !uploadResult.parsed || !uploadResult.parsed.rows) return;
+    
+    const rows = uploadResult.parsed.rows;
+    if (rows.length === 0) return;
+    
+    // Get all unique keys from all rows
+    const allKeys = [...new Set(rows.flatMap(row => Object.keys(row)))];
+    
+    // Create CSV header
+    const csv = [
+      allKeys.join(','),
+      ...rows.map(row => 
+        allKeys.map(key => {
+          const value = row[key];
+          // Escape quotes and wrap in quotes if contains comma
+          if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value;
+        }).join(',')
+      )
+    ].join('\n');
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `parsed-data-${uploadResult.importId}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <h1 className="text-3xl font-bold mb-6">Upload Scanned Tickets</h1>
@@ -217,6 +290,26 @@ export default function UploadPage() {
           <strong>Auto-Detection:</strong> Upload your scanned tickets (service or delivery). 
           The system will automatically detect the type based on content.
         </p>
+      </div>
+
+      {/* Debug Mode Toggle */}
+      <div className="mb-6">
+        <label className="flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={debugMode}
+            onChange={(e) => setDebugMode(e.target.checked)}
+            className="mr-2"
+          />
+          <span className="text-sm font-medium text-gray-700">
+            Enable Debug Mode (Admin)
+          </span>
+        </label>
+        {debugMode && (
+          <p className="text-xs text-gray-500 mt-1">
+            Debug mode allows you to export raw OCR text and parsed CSV data for troubleshooting.
+          </p>
+        )}
       </div>
 
       {/* Drag/Drop Zone */}
@@ -357,12 +450,34 @@ export default function UploadPage() {
               </>
             )}
           </div>
-          <button
-            onClick={goToReview}
-            className="mt-4 bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
-          >
-            Review Import
-          </button>
+          
+          {/* Action Buttons */}
+          <div className="mt-4 flex gap-3 flex-wrap">
+            <button
+              onClick={goToReview}
+              className="bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700"
+            >
+              Review Import
+            </button>
+            
+            {/* Debug Export Buttons */}
+            {debugMode && uploadResult.processed && (
+              <>
+                <button
+                  onClick={downloadCSV}
+                  className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+                >
+                  Download CSV
+                </button>
+                <button
+                  onClick={downloadOCRText}
+                  className="bg-gray-600 text-white py-2 px-4 rounded hover:bg-gray-700"
+                >
+                  Download OCR Text
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
