@@ -309,22 +309,37 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
     if (!importRecord?.attached_files) return;
     
     const imageUrls = [];
+    const failedImages = [];
     
     for (const file of importRecord.attached_files) {
       try {
-        const { data } = await supabase.storage
+        const { data, error } = await supabase.storage
           .from('ticket-scans')
           .createSignedUrl(file.path, 3600); // 1 hour expiry
+        
+        if (error) {
+          console.error('[ImportsReview] Error loading image:', file.filename, error);
+          failedImages.push(file.filename);
+          continue;
+        }
         
         if (data?.signedUrl) {
           imageUrls.push({
             url: data.signedUrl,
             filename: file.filename,
           });
+        } else {
+          console.warn('[ImportsReview] No signed URL for image:', file.filename);
+          failedImages.push(file.filename);
         }
       } catch (error) {
-        console.error('[ImportsReview] Error loading image:', error);
+        console.error('[ImportsReview] Error loading image:', file.filename, error);
+        failedImages.push(file.filename);
       }
+    }
+    
+    if (failedImages.length > 0) {
+      console.warn('[ImportsReview] Failed to load images:', failedImages.join(', '));
     }
     
     setImages(imageUrls);
@@ -388,7 +403,24 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
       // Filter to only included rows
       const rowsToImport = rows.filter((_, idx) => includedRows[idx]);
       
-      // Call the netlify function
+      // IMPORTANT: Update the import record with filtered rows first
+      // This ensures the backend processes only the selected rows
+      const parsed = {
+        ...importRecord.parsed,
+        rows: rowsToImport,
+        summary: recalculateSummary(rowsToImport),
+      };
+      
+      const { error: updateError } = await supabase
+        .from('ticket_imports')
+        .update({ parsed: parsed })
+        .eq('id', importRecord.id);
+      
+      if (updateError) {
+        throw new Error(`Failed to update import with selected rows: ${updateError.message}`);
+      }
+      
+      // Now call the netlify function to accept and create records
       const response = await fetch('/.netlify/functions/imports-accept', {
         method: 'POST',
         headers: {
