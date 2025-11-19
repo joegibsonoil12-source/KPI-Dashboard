@@ -22,13 +22,17 @@ export async function fetchServiceJobsForRange(startDate, endDate) {
   }
   
   // Query service_jobs table for date range
+  // Use job_date for filtering as it's indexed and handles fallback to job_created_at
+  const startDateStr = startDate.toISOString().split('T')[0]; // YYYY-MM-DD
+  const endDateStr = endDate.toISOString().split('T')[0]; // YYYY-MM-DD
+  
   const { data, error } = await supabase
     .from("service_jobs")
     .select("*")
     .eq("created_by", userId)
-    .gte("scheduled_start_at", startDate.toISOString())
-    .lte("scheduled_start_at", endDate.toISOString())
-    .order("scheduled_start_at", { ascending: true });
+    .gte("job_date", startDateStr)
+    .lte("job_date", endDateStr)
+    .order("scheduled_start_at", { ascending: true, nullsLast: true });
   
   if (error) {
     console.error("Fetch service jobs error:", error);

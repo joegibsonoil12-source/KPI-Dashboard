@@ -457,13 +457,20 @@ export default function HcpScheduleCalendar() {
     });
     
     filteredJobs.forEach(job => {
+      // Use scheduledStart if available, otherwise fall back to jobDate
+      let jobDate;
       if (job.scheduledStart) {
-        const jobDate = parseISO(job.scheduledStart);
-        const dayKey = startOfDay(jobDate).toISOString();
-        
-        if (grouped[dayKey]) {
-          grouped[dayKey].push(job);
-        }
+        jobDate = parseISO(job.scheduledStart);
+      } else if (job.jobDate) {
+        jobDate = parseISO(job.jobDate);
+      } else {
+        return; // Skip jobs with no date
+      }
+      
+      const dayKey = startOfDay(jobDate).toISOString();
+      
+      if (grouped[dayKey]) {
+        grouped[dayKey].push(job);
       }
     });
     
