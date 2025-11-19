@@ -289,6 +289,22 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
     }
   }, [importRecord]);
   
+  const handleAddRow = () => {
+    const newRow = {
+      jobNumber: '',
+      customer: '',
+      date: '',
+      status: '',
+      amount: '',
+      gallons: '',
+      page: 1,
+      y: 0,
+    };
+
+    setRows(prev => [...prev, newRow]);
+    setIncludedRows(prev => [...prev, true]);
+  };
+  
   const loadImages = async () => {
     if (!importRecord?.attached_files) return;
     
@@ -456,6 +472,12 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
   
   if (!importRecord) return null;
   
+  const hasNoRows = !rows || rows.length === 0;
+  const isLowConfidence =
+    typeof importRecord?.parsed?.confidence === 'number'
+      ? importRecord.parsed.confidence === 0
+      : !importRecord?.parsed?.confidence;
+  
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-auto">
       <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full m-4 max-h-[90vh] overflow-auto">
@@ -548,12 +570,44 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
           
           {/* Parsed Rows */}
           <div className="mb-6">
-            <h3 className="text-lg font-bold mb-3">
-              Parsed Data 
-              <span className="ml-2 text-sm font-normal text-gray-600">
-                (Type: {importRecord.meta?.importType || 'service'})
-              </span>
-            </h3>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-bold">
+                Parsed Data 
+                <span className="ml-2 text-sm font-normal text-gray-600">
+                  (Type: {importRecord.meta?.importType || 'service'})
+                </span>
+              </h3>
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="px-3 py-1 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Add Row
+              </button>
+            </div>
+            
+            {/* Warning banner for empty rows */}
+            {hasNoRows && (
+              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-2">
+                  <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-yellow-800">
+                      No rows were parsed from this file. This usually means OCR couldn't read the scan or isn't fully configured. 
+                      You can type rows manually below, or re-upload a clearer scan.
+                    </p>
+                    {isLowConfidence && (
+                      <p className="text-sm text-yellow-700 mt-2">
+                        Ask your admin to check GOOGLE_VISION_API_KEY on the server if this happens often.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <div className="border rounded overflow-hidden">
               <table className="w-full">
                 <thead className="bg-gray-50">
