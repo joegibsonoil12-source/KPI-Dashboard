@@ -54,6 +54,7 @@ export async function fetchServiceJobsForRange(startDate, endDate) {
     notes: "", // Not tracked in current schema
     address: row.address || "",
     jobDate: row.job_date,
+    isEstimate: row.is_estimate || false,
   }));
 }
 

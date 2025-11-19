@@ -71,6 +71,7 @@ export async function upsertServiceJobs(rows, userId) {
     primary_tech: row.primary_tech || null,
     job_amount: row.job_amount || null,
     due_amount: row.due_amount || null,
+    is_estimate: row.is_estimate || false,
     raw: row.raw || null,
   }));
   
