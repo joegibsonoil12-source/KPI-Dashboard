@@ -55,6 +55,12 @@ export async function fetchServiceJobsForRange(startDate, endDate) {
     address: row.address || "",
     jobDate: row.job_date,
     isEstimate: row.is_estimate || false,
+    // Estimate-specific fields
+    estimateStatus: row.estimate_status || "",
+    outcome: row.hcp_outcome || "",
+    openValue: row.open_value || 0,
+    wonValue: row.won_value || 0,
+    lostValue: row.lost_value || 0,
   }));
 }
 

@@ -1,0 +1,6 @@
+Estimate #,Options count,Customer name,Employees,Estimate status,Created date,Scheduled date,Outcome,Open value,Won value,Lost value,Estimate lead source,Estimate tags,Location name
+="5001",3,John Smith,Bob Jones,Pending,2025-11-15,2025-11-20,open,"$2,500.00",$0.00,$0.00,Google Ads,HVAC Maintenance,123 Main St
+="5002",2,Sarah Johnson,Alice Davis,Accepted,2025-11-14,2025-11-18,won,$0.00,"$4,750.50",$0.00,Referral,AC Replacement,456 Oak Ave
+="5003",1,Michael Brown,Charlie Smith,Declined,2025-11-13,2025-11-17,lost,$0.00,$0.00,"$1,200.00",Website,Plumbing Repair,789 Elm St
+="5004",4,Emily Davis,Bob Jones,In Review,2025-11-16,,open,"$8,500.00",$0.00,$0.00,Phone Call,Full System Install,321 Pine Rd
+="5005",2,David Wilson,Alice Davis,Accepted,2025-11-12,2025-11-15,won,$0.00,"$3,200.00",$0.00,Return Customer,Water Heater,654 Maple Dr

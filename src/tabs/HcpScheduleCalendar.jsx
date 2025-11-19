@@ -189,10 +189,34 @@ function JobDetailModal({ job, onClose }) {
               <div className="text-xs text-gray-500 mb-1">Job Amount</div>
               <div className="font-medium">{formatCurrency(job.jobAmount)}</div>
             </div>
-            <div>
-              <div className="text-xs text-gray-500 mb-1">Due Amount</div>
-              <div className="font-medium">{formatCurrency(job.dueAmount)}</div>
-            </div>
+            {!job.isEstimate && (
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Due Amount</div>
+                <div className="font-medium">{formatCurrency(job.dueAmount)}</div>
+              </div>
+            )}
+            {job.isEstimate && job.outcome && (
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Outcome</div>
+                <div className="font-medium capitalize">{job.outcome}</div>
+              </div>
+            )}
+            {job.isEstimate && (
+              <>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Open Value</div>
+                  <div className="font-medium">{formatCurrency(job.openValue)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Won Value</div>
+                  <div className="font-medium">{formatCurrency(job.wonValue)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-1">Lost Value</div>
+                  <div className="font-medium">{formatCurrency(job.lostValue)}</div>
+                </div>
+              </>
+            )}
             {job.address && (
               <div className="col-span-2">
                 <div className="text-xs text-gray-500 mb-1">Address</div>
