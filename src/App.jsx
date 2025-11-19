@@ -16,7 +16,7 @@ import CStoresGallons from "./tabs/CStoresGallons";
 import GraphsPage from "./components/Graphs/GraphsPage";
 import ImportsReview from "./components/Imports/ImportsReview";
 import FinancialHealth from "./components/FinancialHealth";
-import HcpScheduleUpload from "./tabs/HcpScheduleUpload";
+import HcpScheduleCalendar from "./tabs/HcpScheduleCalendar";
 
 /* ========================================================================== */
 /* Error Boundary                                                             */
@@ -876,7 +876,7 @@ const TABS = [
   { key: "procedures",   label: "Procedures",       adminOnly: false,  Component: Procedures },
   { key: "billboard",    label: "Billboard",        adminOnly: false,  Component: Billboard },
   { key: "graphs",       label: "Graphs",           adminOnly: false,  Component: GraphsPage },
-  { key: "hcpSchedule",  label: "Schedule (HCP)",   adminOnly: false,  Component: HcpScheduleUpload },
+  { key: "hcpSchedule",  label: "Schedule (HCP)",   adminOnly: false,  Component: HcpScheduleCalendar },
   // Admin-only group:
   { key: "invoicing",    label: "Store Invoicing",  adminOnly: true,   Component: StoreInvoicing },
   { key: "tickets",      label: "Delivery Tickets", adminOnly: true,   Component: DeliveryTicketsEditor },
