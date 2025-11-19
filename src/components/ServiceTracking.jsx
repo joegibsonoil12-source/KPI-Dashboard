@@ -653,7 +653,7 @@ export default function ServiceTracking() {
                     <td className="px-3 py-2">
                       {job.is_estimate ? (
                         <span className="inline-flex items-center rounded-full border border-purple-400 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
-                          EST
+                          ESTIMATE
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full border border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-slate-700">

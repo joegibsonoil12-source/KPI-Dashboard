@@ -34,6 +34,10 @@
  *     lastWeekTotalRevenue: number,
  *     percentChange: number
  *   },
+ *   cStoreGallons: [
+ *     { storeId: string, weekEnding: string, totalGallons: number },
+ *     ...
+ *   ],
  *   lastUpdated: string (ISO timestamp)
  * }
  */
@@ -242,6 +246,30 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
 }
 
 /**
+ * Fetch C-Store gallons summary from Supabase
+ * @returns {Promise<Array>} - C-Store gallons data
+ */
+async function fetchCStoreGallonsSummary() {
+  const supabase = createSupabaseClient();
+  
+  const { data, error } = await supabase
+    .from('cstore_gallons')
+    .select('store_id, week_ending, total_gallons')
+    .order('store_id', { ascending: true });
+
+  if (error) {
+    console.error('[Billboard] Error fetching c-store gallons:', error);
+    return [];
+  }
+
+  return (data || []).map(row => ({
+    storeId: row.store_id,
+    weekEnding: row.week_ending,
+    totalGallons: Number(row.total_gallons) || 0,
+  }));
+}
+
+/**
  * Aggregate billboard data from all sources
  * @returns {Promise<Object>} - Complete billboard summary
  */
@@ -264,11 +292,13 @@ async function aggregateBillboardData() {
     lastWeekService,
     thisWeekDelivery,
     lastWeekDelivery,
+    cStoreGallons,
   ] = await Promise.all([
     fetchServiceTrackingSummary(thisWeekStart, thisWeekEnd),
     fetchServiceTrackingSummary(lastWeekStart, lastWeekEnd),
     fetchDeliveryTicketsSummary(thisWeekStart, thisWeekEnd),
     fetchDeliveryTicketsSummary(lastWeekStart, lastWeekEnd),
+    fetchCStoreGallonsSummary(),
   ]);
 
   // Calculate total revenue for This Week and Last Week
@@ -296,6 +326,7 @@ async function aggregateBillboardData() {
       lastWeekScheduledJobs: lastWeekService.scheduledJobs,
       lastWeekScheduledRevenue: lastWeekService.scheduledRevenue,
     },
+    cStoreGallons,
     lastUpdated: new Date().toISOString(),
   };
 }
