@@ -151,6 +151,13 @@ function JobDetailModal({ job, onClose }) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold">Job #{job.jobNumber}</h2>
+              <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                <span className="uppercase tracking-wide">
+                  {job.isEstimate ? "Estimate" : "Job"}
+                </span>
+                <span>•</span>
+                <span>{job.jobType || "-"}</span>
+              </div>
               <p className="text-gray-600 mt-1">{job.customer}</p>
             </div>
             <button
@@ -164,10 +171,6 @@ function JobDetailModal({ job, onClose }) {
         
         <div className="p-6">
           <div className="grid grid-cols-2 gap-4 mb-6">
-            <div>
-              <div className="text-xs text-gray-500 mb-1">Job Type</div>
-              <div className="font-medium">{job.jobType || '-'}</div>
-            </div>
             <div>
               <div className="text-xs text-gray-500 mb-1">Status</div>
               <div className="font-medium capitalize">{job.status.replace(/_/g, ' ') || '-'}</div>
@@ -280,16 +283,25 @@ function DayColumn({ day, jobs, onSelectJob }) {
         {jobs.map(job => {
           const colorKey = getColorForJob(job);
           const color = COLOR_CODES[colorKey];
+          const borderStyle = job.isEstimate ? '1px dashed rgba(0,0,0,0.35)' : '1px solid transparent';
+          
           return (
             <button
               key={job.id}
-              className="w-full text-left rounded-md px-2 py-1 text-xs hover:opacity-80 transition-opacity"
-              style={{ backgroundColor: color.bg, color: color.text }}
+              className="w-full text-left rounded-md px-2 py-1 text-xs hover:opacity-80 transition-opacity shadow-sm"
+              style={{ backgroundColor: color.bg, color: color.text, border: borderStyle }}
               onClick={() => onSelectJob(job)}
             >
-              <div className="font-semibold truncate">{job.customer}</div>
+              <div className="flex items-center justify-between gap-1">
+                <div className="font-semibold truncate">{job.customer}</div>
+                {job.isEstimate && (
+                  <span className="ml-1 inline-flex items-center rounded-full border border-purple-700 bg-white/40 px-1.5 py-0.5 text-[10px] font-bold text-purple-800">
+                    EST
+                  </span>
+                )}
+              </div>
               <div className="truncate">{job.jobType || job.status.replace(/_/g, ' ')}</div>
-              <div className="text-xs opacity-90">{formatTimeRange(job.scheduledStart, job.scheduledEnd)}</div>
+              <div className="opacity-80">{formatTimeRange(job.scheduledStart, job.scheduledEnd)}</div>
             </button>
           );
         })}
@@ -377,6 +389,7 @@ export default function HcpScheduleCalendar() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [filterTech, setFilterTech] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [scheduleTypeFilter, setScheduleTypeFilter] = useState("all"); // all | jobs | estimates
   
   // Load jobs for current week
   useEffect(() => {
@@ -426,7 +439,7 @@ export default function HcpScheduleCalendar() {
     return Array.from(techSet).sort();
   }, [jobs]);
   
-  // Filter jobs by technician and search
+  // Filter jobs by technician, search, and type
   const filteredJobs = useMemo(() => {
     let filtered = jobs;
     
@@ -444,8 +457,15 @@ export default function HcpScheduleCalendar() {
       );
     }
     
+    // Filter by type (job/estimate)
+    if (scheduleTypeFilter === "jobs") {
+      filtered = filtered.filter(j => !j.isEstimate);
+    } else if (scheduleTypeFilter === "estimates") {
+      filtered = filtered.filter(j => j.isEstimate);
+    }
+    
     return filtered;
-  }, [jobs, filterTech, searchTerm]);
+  }, [jobs, filterTech, searchTerm, scheduleTypeFilter]);
   
   // Group jobs by day
   const jobsByDay = useMemo(() => {
@@ -513,6 +533,29 @@ export default function HcpScheduleCalendar() {
                 <option key={tech} value={tech}>{tech}</option>
               ))}
             </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">Type:</label>
+            <div className="inline-flex gap-2 text-xs">
+              <button 
+                onClick={() => setScheduleTypeFilter("all")}
+                className={`px-3 py-2 rounded-lg ${scheduleTypeFilter === "all" ? "bg-blue-600 text-white" : "bg-white border border-gray-300"}`}
+              >
+                All
+              </button>
+              <button 
+                onClick={() => setScheduleTypeFilter("jobs")}
+                className={`px-3 py-2 rounded-lg ${scheduleTypeFilter === "jobs" ? "bg-blue-600 text-white" : "bg-white border border-gray-300"}`}
+              >
+                Jobs
+              </button>
+              <button 
+                onClick={() => setScheduleTypeFilter("estimates")}
+                className={`px-3 py-2 rounded-lg ${scheduleTypeFilter === "estimates" ? "bg-blue-600 text-white" : "bg-white border border-gray-300"}`}
+              >
+                Estimates
+              </button>
+            </div>
           </div>
         </div>
       </div>

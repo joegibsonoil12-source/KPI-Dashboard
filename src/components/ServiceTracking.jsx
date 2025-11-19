@@ -74,6 +74,7 @@ export default function ServiceTracking() {
   const [customEndDate, setCustomEndDate] = useState("");
   const [selectedTech, setSelectedTech] = useState("ALL");
   const [selectedStatus, setSelectedStatus] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all"); // all | jobs | estimates
   
   const fileInputRef = useRef(null);
   
@@ -254,10 +255,17 @@ export default function ServiceTracking() {
   }, [filteredByDate, selectedTech]);
   
   // Filter by status
-  const filteredJobs = useMemo(() => {
+  const filteredByStatus = useMemo(() => {
     if (selectedStatus === "all") return filteredByTech;
     return filteredByTech.filter(j => j.status === selectedStatus);
   }, [filteredByTech, selectedStatus]);
+  
+  // Filter by type (job/estimate)
+  const filteredJobs = useMemo(() => {
+    if (typeFilter === "jobs") return filteredByStatus.filter(j => !j.is_estimate);
+    if (typeFilter === "estimates") return filteredByStatus.filter(j => j.is_estimate);
+    return filteredByStatus;
+  }, [filteredByStatus, typeFilter]);
   
   // Get unique techs
   const availableTechs = useMemo(() => getUniqueTechs(filteredByDate), [filteredByDate]);
@@ -401,6 +409,7 @@ export default function ServiceTracking() {
                   <tr>
                     <th className="px-3 py-2 text-xs">Job #</th>
                     <th className="px-3 py-2 text-xs">Customer</th>
+                    <th className="px-3 py-2 text-xs">Type</th>
                     <th className="px-3 py-2 text-xs">Status</th>
                     <th className="px-3 py-2 text-xs">Date</th>
                     <th className="px-3 py-2 text-xs">Tech</th>
@@ -412,6 +421,17 @@ export default function ServiceTracking() {
                     <tr key={idx} className="border-t">
                       <td className="px-3 py-2">{row.job_number}</td>
                       <td className="px-3 py-2">{row.customer_name}</td>
+                      <td className="px-3 py-2">
+                        {row.is_estimate ? (
+                          <span className="inline-flex items-center rounded-full border border-purple-400 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+                            EST
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full border border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                            JOB
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2">
                         <StatusBadge status={row.status} />
                       </td>
@@ -517,7 +537,7 @@ export default function ServiceTracking() {
           </div>
           
           {/* Tech and Status Filters */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <label className="font-semibold">Tech:</label>
               <select 
@@ -546,6 +566,30 @@ export default function ServiceTracking() {
                 <option value="unscheduled">Unscheduled</option>
                 <option value="canceled">Canceled</option>
               </select>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <label className="font-semibold">Type:</label>
+              <div className="inline-flex gap-2 text-xs">
+                <button 
+                  onClick={() => setTypeFilter("all")}
+                  className={`px-3 py-1.5 rounded ${typeFilter === "all" ? "bg-blue-600 text-white" : "bg-white border"}`}
+                >
+                  All
+                </button>
+                <button 
+                  onClick={() => setTypeFilter("jobs")}
+                  className={`px-3 py-1.5 rounded ${typeFilter === "jobs" ? "bg-blue-600 text-white" : "bg-white border"}`}
+                >
+                  Jobs
+                </button>
+                <button 
+                  onClick={() => setTypeFilter("estimates")}
+                  className={`px-3 py-1.5 rounded ${typeFilter === "estimates" ? "bg-blue-600 text-white" : "bg-white border"}`}
+                >
+                  Estimates
+                </button>
+              </div>
             </div>
             
             <span className="text-sm text-slate-600">
@@ -590,6 +634,7 @@ export default function ServiceTracking() {
                 <tr>
                   <th className="px-3 py-2 text-xs">Job #</th>
                   <th className="px-3 py-2 text-xs">Customer</th>
+                  <th className="px-3 py-2 text-xs">Type</th>
                   <th className="px-3 py-2 text-xs">Status</th>
                   <th className="px-3 py-2 text-xs">Date</th>
                   <th className="px-3 py-2 text-xs">Tech</th>
@@ -605,6 +650,17 @@ export default function ServiceTracking() {
                   <tr key={job.id} className="border-t">
                     <td className="px-3 py-2">{job.job_number}</td>
                     <td className="px-3 py-2">{job.customer_name}</td>
+                    <td className="px-3 py-2">
+                      {job.is_estimate ? (
+                        <span className="inline-flex items-center rounded-full border border-purple-400 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+                          EST
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full border border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                          JOB
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2">
                       <StatusBadge status={job.status} />
                     </td>
@@ -631,7 +687,7 @@ export default function ServiceTracking() {
                 ))}
                 {filteredJobs.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
+                    <td colSpan={11} className="px-3 py-6 text-center text-slate-500">
                       No jobs found. Upload a Housecall Pro report to get started.
                     </td>
                   </tr>

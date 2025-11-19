@@ -255,6 +255,12 @@ function parseRow(rowData, headers) {
   row.job_date = deriveJobDate(row.scheduled_start_at, row.job_created_at);
   row.primary_tech = extractPrimaryTech(row.assigned_employees_raw);
   
+  // Detect estimates from job_description, status, or raw_status
+  row.is_estimate = 
+    /estimate/i.test(row.job_description || "") ||
+    /estimate/i.test(row.status || "") ||
+    /estimate/i.test(row.raw_status || "");
+  
   return row;
 }
 
