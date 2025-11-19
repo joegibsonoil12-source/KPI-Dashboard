@@ -8,12 +8,14 @@ function findWeekEndingDate(sheet) {
   const range = XLSX.utils.decode_range(sheet['!ref']);
   for (let r = range.s.r; r <= range.e.r; r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
-      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+      const cellAddr = XLSX.utils.encode_cell({ r: r, c: c });
+      const cell = sheet[cellAddr];
       if (!cell) continue;
       const v = String(cell.v || '').toLowerCase();
       if (v.includes('w/e')) {
         // Look to the right for an actual date cell
-        const dateCell = sheet[XLSX.utils.encode_cell({ r, c + 1 })];
+        const dateCellAddr = XLSX.utils.encode_cell({ r: r, c: c + 1 });
+        const dateCell = sheet[dateCellAddr];
         if (dateCell && dateCell.v) {
           const d = new Date(dateCell.v);
           if (!isNaN(d.getTime())) {
@@ -31,7 +33,8 @@ function findTotalGallons(sheet) {
   for (let r = range.s.r; r <= range.e.r; r++) {
     let label = null;
     for (let c = range.s.c; c <= range.e.c; c++) {
-      const cell = sheet[XLSX.utils.encode_cell({ r, c })];
+      const cellAddr = XLSX.utils.encode_cell({ r: r, c: c });
+      const cell = sheet[cellAddr];
       if (!cell) continue;
       const value = String(cell.v || '');
       if (!label && value.toLowerCase().includes('total gallons')) {
