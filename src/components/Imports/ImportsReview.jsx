@@ -307,44 +307,68 @@ function ImportDetail({ importRecord, onClose, onStatusChange }) {
   };
   
   const loadImages = async () => {
-    if (!importRecord?.attached_files) return;
-    
-    const imageUrls = [];
-    const failedImagesList = [];
-    
-    for (const file of importRecord.attached_files) {
-      try {
-        const { data, error } = await supabase.storage
-          .from('ticket-scans')
-          .createSignedUrl(file.path, 3600); // 1 hour expiry
-        
-        if (error) {
-          console.error('[ImportsReview] Error loading image:', file.filename, error);
-          failedImagesList.push(file.filename);
-          continue;
-        }
-        
-        if (data?.signedUrl) {
-          imageUrls.push({
-            url: data.signedUrl,
-            filename: file.filename,
-          });
-        } else {
-          console.warn('[ImportsReview] No signed URL for image:', file.filename);
-          failedImagesList.push(file.filename);
-        }
-      } catch (error) {
-        console.error('[ImportsReview] Error loading image:', file.filename, error);
-        failedImagesList.push(file.filename);
+    try {
+      // Defensive check: ensure attached_files is an array
+      const files = Array.isArray(importRecord?.attached_files)
+        ? importRecord.attached_files
+        : [];
+      
+      // Filter out invalid files early
+      const validFiles = files.filter(
+        (f) => f && typeof f.path === 'string' && f.path.trim() !== ''
+      );
+      
+      if (validFiles.length === 0) {
+        console.warn('[ImportsReview] No valid attached_files for import', importRecord?.id);
+        setImages([]);
+        setFailedImages(files.length > 0 ? ['Invalid file entries found'] : []);
+        return;
       }
+      
+      const imageUrls = [];
+      const failedImagesList = [];
+      
+      for (const file of validFiles) {
+        try {
+          const rawPath = file.path;
+          const cleanPath = rawPath.replace(/^public\//, '');
+          
+          const { data, error } = await supabase.storage
+            .from('ticket-scans')
+            .createSignedUrl(cleanPath, 3600); // 1 hour expiry
+          
+          if (error) {
+            console.error('[ImportsReview] Error loading image:', file.filename || cleanPath, error);
+            failedImagesList.push(file.filename || cleanPath);
+            continue;
+          }
+          
+          if (data?.signedUrl) {
+            imageUrls.push({
+              url: data.signedUrl,
+              filename: file.filename || file.name || cleanPath,
+            });
+          } else {
+            console.warn('[ImportsReview] No signed URL for image:', file.filename || cleanPath);
+            failedImagesList.push(file.filename || cleanPath);
+          }
+        } catch (err) {
+          console.error('[ImportsReview] Error handling file', file, err);
+          failedImagesList.push(file.filename || file.path || 'unknown');
+        }
+      }
+      
+      if (failedImagesList.length > 0) {
+        console.warn('[ImportsReview] Failed to load images:', failedImagesList.join(', '));
+      }
+      
+      setImages(imageUrls);
+      setFailedImages(failedImagesList);
+    } catch (err) {
+      console.error('[ImportsReview] Failed to load images', err);
+      setImages([]);
+      setFailedImages(['Failed to load images. Check console logs for details.']);
     }
-    
-    if (failedImagesList.length > 0) {
-      console.warn('[ImportsReview] Failed to load images:', failedImagesList.join(', '));
-    }
-    
-    setImages(imageUrls);
-    setFailedImages(failedImagesList);
   };
   
   const handleRowUpdate = (index, updatedRow) => {
