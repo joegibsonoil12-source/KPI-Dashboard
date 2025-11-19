@@ -64,6 +64,7 @@ export async function upsertServiceJobs(rows, userId) {
     raw_status: row.raw_status || null,
     customer_name: row.customer_name || null,
     address: row.address || null,
+    location_name: row.location_name || null,
     job_created_at: row.job_created_at || null,
     scheduled_start_at: row.scheduled_start_at || null,
     job_date: row.job_date || null,
@@ -72,6 +73,14 @@ export async function upsertServiceJobs(rows, userId) {
     job_amount: row.job_amount || null,
     due_amount: row.due_amount || null,
     is_estimate: row.is_estimate || false,
+    // Estimate-specific fields
+    hcp_estimate_id: row.hcp_estimate_id || null,
+    estimate_status: row.estimate_status || null,
+    hcp_outcome: row.hcp_outcome || null,
+    estimate_tags: row.estimate_tags || null,
+    open_value: row.open_value || null,
+    won_value: row.won_value || null,
+    lost_value: row.lost_value || null,
     raw: row.raw || null,
   }));
   

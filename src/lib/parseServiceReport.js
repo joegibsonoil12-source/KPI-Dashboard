@@ -170,6 +170,11 @@ const COLUMN_MAPPINGS = {
   "job#": "job_number",
   "job number": "job_number",
   
+  // Estimate # -> hcp_estimate_id (also used as job_number for estimates)
+  "estimate #": "hcp_estimate_id",
+  "estimate#": "hcp_estimate_id",
+  "estimate number": "hcp_estimate_id",
+  
   // Job description -> job_description
   "job description": "job_description",
   "description": "job_description",
@@ -178,9 +183,30 @@ const COLUMN_MAPPINGS = {
   "job status": "raw_status",
   "status": "raw_status",
   
+  // Estimate status -> estimate_status
+  "estimate status": "estimate_status",
+  
+  // Outcome -> hcp_outcome
+  "outcome": "hcp_outcome",
+  
+  // Estimate tags -> estimate_tags
+  "estimate tags": "estimate_tags",
+  "tags": "estimate_tags",
+  
+  // Options count
+  "options count": "options_count",
+  
+  // Lead source
+  "estimate lead source": "lead_source",
+  "lead source": "lead_source",
+  
   // Customer name -> customer_name
   "customer name": "customer_name",
   "customer": "customer_name",
+  
+  // Location name -> location_name
+  "location name": "location_name",
+  "location": "location_name",
   
   // Address -> address
   "address": "address",
@@ -212,6 +238,11 @@ const COLUMN_MAPPINGS = {
   "due amount": "due_amount",
   "due": "due_amount",
   "balance": "due_amount",
+  
+  // Estimate value fields
+  "open value": "open_value",
+  "won value": "won_value",
+  "lost value": "lost_value",
 };
 
 /**
@@ -241,7 +272,8 @@ function parseRow(rowData, headers) {
     // Type-specific parsing
     if (ourField === "job_created_at" || ourField === "scheduled_start_at") {
       row[ourField] = parseDate(value);
-    } else if (ourField === "job_amount" || ourField === "due_amount") {
+    } else if (ourField === "job_amount" || ourField === "due_amount" || 
+               ourField === "open_value" || ourField === "won_value" || ourField === "lost_value") {
       row[ourField] = parseCurrency(value);
     } else if (ourField === "raw_status") {
       row[ourField] = value;
@@ -255,11 +287,48 @@ function parseRow(rowData, headers) {
   row.job_date = deriveJobDate(row.scheduled_start_at, row.job_created_at);
   row.primary_tech = extractPrimaryTech(row.assigned_employees_raw);
   
-  // Detect estimates from job_description, status, or raw_status
+  // Detect estimates: check for hcp_estimate_id field OR estimate keywords
   row.is_estimate = 
+    !!row.hcp_estimate_id ||
     /estimate/i.test(row.job_description || "") ||
     /estimate/i.test(row.status || "") ||
     /estimate/i.test(row.raw_status || "");
+  
+  // For estimates: derive job_number from hcp_estimate_id if not present
+  if (row.is_estimate && row.hcp_estimate_id && !row.job_number) {
+    row.job_number = `EST-${row.hcp_estimate_id}`;
+  }
+  
+  // For estimates: calculate amount from Open/Won/Lost values based on outcome
+  if (row.is_estimate && (row.open_value != null || row.won_value != null || row.lost_value != null)) {
+    const outcome = (row.hcp_outcome || "").toLowerCase();
+    
+    if (outcome === "open") {
+      row.job_amount = row.open_value || 0;
+    } else if (outcome === "won") {
+      row.job_amount = row.won_value || 0;
+    } else if (outcome === "lost") {
+      row.job_amount = row.lost_value || 0;
+    } else {
+      // Fallback: take max of the three
+      row.job_amount = Math.max(
+        row.open_value || 0,
+        row.won_value || 0,
+        row.lost_value || 0
+      );
+    }
+  }
+  
+  // For estimates: use estimate_status as status if raw_status is not set
+  if (row.is_estimate && !row.raw_status && row.estimate_status) {
+    row.raw_status = row.estimate_status;
+    row.status = normalizeStatus(row.estimate_status);
+  }
+  
+  // For estimates: use outcome in status if available
+  if (row.is_estimate && row.hcp_outcome && !row.status) {
+    row.status = row.hcp_outcome.toLowerCase();
+  }
   
   return row;
 }
