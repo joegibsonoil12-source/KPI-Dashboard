@@ -211,7 +211,7 @@ export default function ExecutiveDashboard() {
         // TODO: Create service_jobs_daily_by_status view for complete optimization
         const { data: d1, error: e1 } = await supabase
           .from("service_jobs")
-          .select("job_date,status,job_amount")
+          .select("job_date,status,job_amount,is_estimate,open_value,won_value,lost_value")
           .gte("job_date", from)
           .lte("job_date", to)
           .order("job_date", { ascending: true });
@@ -478,6 +478,19 @@ export default function ExecutiveDashboard() {
       .sort((a,b)=>b.value-a.value)
       .slice(0,7);
 
+    // Estimate aggregations
+    const estimates = serviceDaily.filter(r => r.is_estimate);
+    const estimatesCount = estimates.length;
+    const estimatesOpenValue = estimates.reduce((a, b) => a + (Number(b.open_value) || 0), 0);
+    const estimatesWonValue = estimates.reduce((a, b) => a + (Number(b.won_value) || 0), 0);
+    const estimatesLostValue = estimates.reduce((a, b) => a + (Number(b.lost_value) || 0), 0);
+    
+    // Tank metrics (placeholder - will be 0 until tank tracking is implemented)
+    const currentTanks = 0;
+    const customersLost = 0;
+    const customersGained = 0;
+    const tanksSet = 0;
+
     return {
       serviceDays, serviceCompletedRevenueByDay, serviceSeriesStatus,
       svcCompletedRevenue, svcPipelineRevenue, svcCounts,
@@ -486,6 +499,10 @@ export default function ExecutiveDashboard() {
       deliveriesTotals, deliveriesAvgPrice,
       avgMilesPerStop, totalMiles, deliveredStops, // miles per stop metrics
       allDays, combinedRevenueByDay, topTechs,
+      // Estimate metrics
+      estimatesCount, estimatesOpenValue, estimatesWonValue, estimatesLostValue,
+      // Tank metrics
+      currentTanks, customersLost, customersGained, tanksSet,
     };
   }, [serviceDaily, serviceTechs, tickets, delivGroup]);
 
@@ -544,6 +561,59 @@ export default function ExecutiveDashboard() {
         
         {/* Company Health Score Card */}
         <CompanyHealthCard />
+      </div>
+
+      {/* Estimate KPIs Row */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16, marginTop:16 }}>
+        <Card 
+          title="Open Estimates" 
+          value={usd(agg.estimatesOpenValue)} 
+          sub={`${num(agg.estimatesCount)} total estimates`}
+          style={{ background: "linear-gradient(135deg, #667EEA 0%, #764BA2 100%)", color: "white", border: "none" }}
+        />
+        
+        <Card 
+          title="Won Estimates" 
+          value={usd(agg.estimatesWonValue)} 
+          sub="Converted to jobs"
+          style={{ background: "linear-gradient(135deg, #16A34A 0%, #059669 100%)", color: "white", border: "none" }}
+        />
+        
+        <Card 
+          title="Lost Estimates" 
+          value={usd(agg.estimatesLostValue)} 
+          sub="Not converted"
+          style={{ background: "linear-gradient(135deg, #DC2626 0%, #991B1B 100%)", color: "white", border: "none" }}
+        />
+      </div>
+
+      {/* Tank KPIs Row */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16, marginTop:16 }}>
+        <Card 
+          title="Current Tanks" 
+          value={num(agg.currentTanks)} 
+          sub="In inventory"
+        />
+        
+        <Card 
+          title="Customers Lost" 
+          value={num(agg.customersLost)} 
+          sub="This period"
+          style={{ borderColor: "#FEE2E2" }}
+        />
+        
+        <Card 
+          title="Customers Gained" 
+          value={num(agg.customersGained)} 
+          sub="This period"
+          style={{ borderColor: "#DCFCE7" }}
+        />
+        
+        <Card 
+          title="Tanks Set" 
+          value={num(agg.tanksSet)} 
+          sub="Installed"
+        />
       </div>
 
       {/* Main Charts Row */}
