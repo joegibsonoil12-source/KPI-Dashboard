@@ -1,117 +1,61 @@
 // src/tabs/CStoresGallons.jsx
 import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
+import { importCStoreGallons } from "../lib/imports/cStoreGallonsImport";
+import { supabase } from "../lib/supabaseClient";
 
 /**
  * C-Stores (Gallons) Tab
  * 
  * Features:
- * - Upload weekly Excel/CSV files with gallons per c-store
+ * - Upload weekly Excel files with gallons per c-store (from NEW STORE SPREADSHEET format)
+ * - Parses each store sheet to extract Total Gallons and W/E Date
+ * - Saves to Supabase cstore_gallons table
  * - Display summary: total gallons, store count, top store
  * - Table view sorted by week ending (desc) then store (asc)
- * - Persists data in localStorage
- * 
- * Expected file format:
- * - First sheet only
- * - Header row: Store (or StoreName), StoreId (optional), WeekEnding, Gallons
- * - One row per store per week
  */
-
-const STORAGE_KEY = "cstore-gallons-v1";
 
 export default function CStoresGallons() {
   const [rows, setRows] = useState([]);
   const [lastUploadedAt, setLastUploadedAt] = useState(null);
   const [error, setError] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Load data from localStorage on mount
+  // Load data from Supabase on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setRows(parsed.rows || []);
-        setLastUploadedAt(parsed.lastUploadedAt || null);
-      }
-    } catch (err) {
-      console.error("Failed to load C-Stores data from localStorage:", err);
-    }
+    loadDataFromSupabase();
   }, []);
 
-  // Save data to localStorage whenever rows change
-  const saveData = (newRows) => {
+  const loadDataFromSupabase = async () => {
     try {
-      const now = new Date().toISOString();
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          rows: newRows,
-          lastUploadedAt: now,
-        })
-      );
-      setLastUploadedAt(now);
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('cstore_gallons')
+        .select('*')
+        .order('week_ending', { ascending: false });
+
+      if (error) {
+        console.error("Failed to load C-Stores data from Supabase:", error);
+        setError("Failed to load data: " + error.message);
+        return;
+      }
+
+      const formattedRows = (data || []).map(row => ({
+        id: `${row.store_id}-${row.week_ending}`,
+        store: row.store_id,
+        storeId: row.store_id,
+        weekEnding: row.week_ending,
+        gallons: Number(row.total_gallons) || 0,
+      }));
+
+      setRows(formattedRows);
     } catch (err) {
-      console.error("Failed to save C-Stores data to localStorage:", err);
-      setError("Failed to save data. Storage might be full.");
+      console.error("Failed to load C-Stores data:", err);
+      setError("Failed to load data: " + err.message);
+    } finally {
+      setLoading(false);
     }
-  };
-
-  // Parse CSV file
-  const parseCSV = (text) => {
-    const lines = text.split(/\r?\n/).filter((line) => line.trim());
-    if (lines.length < 2) {
-      throw new Error("CSV file must have at least a header row and one data row");
-    }
-
-    // Simple CSV parser - handles quoted values
-    const parseLine = (line) => {
-      const values = [];
-      let current = "";
-      let inQuotes = false;
-
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          if (inQuotes && line[i + 1] === '"') {
-            current += '"';
-            i++;
-          } else {
-            inQuotes = !inQuotes;
-          }
-        } else if (char === "," && !inQuotes) {
-          values.push(current.trim());
-          current = "";
-        } else {
-          current += char;
-        }
-      }
-      values.push(current.trim());
-      return values;
-    };
-
-    const headerRow = parseLine(lines[0]);
-    const dataRows = lines.slice(1).map(parseLine);
-
-    return { headers: headerRow, data: dataRows };
-  };
-
-  // Normalize column names (case-insensitive mapping)
-  const normalizeHeaders = (headers) => {
-    const normalized = {};
-    headers.forEach((header, index) => {
-      const lower = header.toLowerCase().trim();
-      if (lower === "store" || lower === "storename") {
-        normalized.store = index;
-      } else if (lower === "storeid") {
-        normalized.storeId = index;
-      } else if (lower === "weekending") {
-        normalized.weekEnding = index;
-      } else if (lower === "gallons") {
-        normalized.gallons = index;
-      }
-    });
-    return normalized;
   };
 
   // Process uploaded file
@@ -124,70 +68,19 @@ export default function CStoresGallons() {
 
     try {
       const fileName = file.name.toLowerCase();
-      let parsedData;
-
-      if (fileName.endsWith(".csv")) {
-        // Parse CSV
-        const text = await file.text();
-        parsedData = parseCSV(text);
-      } else if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
-        // Parse Excel
-        const arrayBuffer = await file.arrayBuffer();
-        const workbook = XLSX.read(arrayBuffer, { type: "array" });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        if (jsonData.length < 2) {
-          throw new Error("Excel file must have at least a header row and one data row");
-        }
-
-        parsedData = {
-          headers: jsonData[0],
-          data: jsonData.slice(1),
-        };
-      } else {
-        throw new Error("Unsupported file format. Please upload .xlsx, .xls, or .csv");
+      
+      if (!fileName.endsWith(".xlsx") && !fileName.endsWith(".xls")) {
+        throw new Error("Please upload an Excel file (.xlsx or .xls)");
       }
 
-      // Normalize headers
-      const colMap = normalizeHeaders(parsedData.headers);
+      // Parse Excel file using our C-Store import logic
+      const arrayBuffer = await file.arrayBuffer();
+      await importCStoreGallons(arrayBuffer);
 
-      // Validate required columns
-      if (colMap.store === undefined) {
-        throw new Error('Missing required column: "Store" or "StoreName"');
-      }
-      if (colMap.weekEnding === undefined) {
-        throw new Error('Missing required column: "WeekEnding"');
-      }
-      if (colMap.gallons === undefined) {
-        throw new Error('Missing required column: "Gallons"');
-      }
-
-      // Transform data rows
-      const newRows = parsedData.data
-        .filter((row) => row.length > 0 && row[colMap.store]) // Skip empty rows
-        .map((row) => {
-          const store = String(row[colMap.store] || "").trim();
-          const storeId = colMap.storeId !== undefined ? String(row[colMap.storeId] || "").trim() : "";
-          const weekEnding = String(row[colMap.weekEnding] || "").trim();
-          const gallons = Number(row[colMap.gallons]) || 0;
-
-          return {
-            id: `${store}-${weekEnding}`,
-            store,
-            storeId,
-            weekEnding,
-            gallons,
-          };
-        });
-
-      if (newRows.length === 0) {
-        throw new Error("No valid data rows found in file");
-      }
-
-      setRows(newRows);
-      saveData(newRows);
+      // Reload data from Supabase
+      await loadDataFromSupabase();
+      
+      setLastUploadedAt(new Date().toISOString());
       setError(null);
     } catch (err) {
       console.error("File upload error:", err);
@@ -272,34 +165,33 @@ export default function CStoresGallons() {
             Expected file format:
           </strong>
           <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: "#6B7280" }}>
-            <li>Excel (.xlsx, .xls) or CSV (.csv) file</li>
-            <li>
-              <strong>Required columns:</strong> Store (or StoreName), WeekEnding, Gallons
-            </li>
-            <li>
-              <strong>Optional column:</strong> StoreId
-            </li>
-            <li>One row per store for each week</li>
-            <li>First sheet only (for Excel files)</li>
+            <li>Excel file (.xlsx, .xls) - NEW STORE SPREADSHEET format</li>
+            <li>Each store has its own sheet (e.g., "Laurel Hill Food Mart", "Old Wire", etc.)</li>
+            <li>Each sheet contains a "Total Gallons" row with the numeric value</li>
+            <li>Each sheet has a "W/E Date" header with the week ending date</li>
+            <li>Data is automatically extracted and saved to database</li>
           </ul>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <input
             type="file"
-            accept=".xlsx,.xls,.csv"
+            accept=".xlsx,.xls"
             onChange={handleFileUpload}
-            disabled={uploading}
+            disabled={uploading || loading}
             style={{
               padding: "10px 12px",
               border: "1px solid #E5E7EB",
               borderRadius: 8,
-              cursor: uploading ? "not-allowed" : "pointer",
-              opacity: uploading ? 0.6 : 1,
+              cursor: uploading || loading ? "not-allowed" : "pointer",
+              opacity: uploading || loading ? 0.6 : 1,
             }}
           />
           {uploading && (
             <span style={{ fontSize: 14, color: "#6B7280" }}>Processing...</span>
+          )}
+          {loading && (
+            <span style={{ fontSize: 14, color: "#6B7280" }}>Loading data...</span>
           )}
         </div>
 
