@@ -119,6 +119,26 @@ function KpiEditor({ initial = {}, onClose = () => {}, onSave = null }) {
     customers_gained: initial.customers_gained || 0,
     tanks_set: initial.tanks_set || 0,
   });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  // Helper to safely parse number input
+  const parseNumber = (value) => {
+    const num = parseInt(value, 10);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      if (onSave) await onSave(vals);
+    } catch (error) {
+      console.error('[KpiEditor] Save failed:', error);
+      setSaveError(error.message || 'Failed to save KPIs. Please try again.');
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div style={{
@@ -142,13 +162,29 @@ function KpiEditor({ initial = {}, onClose = () => {}, onSave = null }) {
         boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
       }}>
         <h3 style={{ margin: '0 0 16px 0', fontSize: 18, fontWeight: 700 }}>Edit Dashboard KPIs</h3>
+        
+        {saveError && (
+          <div style={{
+            padding: '8px 12px',
+            marginBottom: 12,
+            background: '#FEE2E2',
+            color: '#991B1B',
+            borderRadius: 8,
+            fontSize: 12,
+          }}>
+            {saveError}
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>Current Tanks</span>
             <input
               type="number"
               value={vals.current_tanks}
-              onChange={e => setVals({ ...vals, current_tanks: Number(e.target.value) })}
+              onChange={e => setVals({ ...vals, current_tanks: parseNumber(e.target.value) })}
+              min="0"
+              step="1"
               style={{
                 padding: '8px 12px',
                 border: '1px solid #E5E7EB',
@@ -162,7 +198,9 @@ function KpiEditor({ initial = {}, onClose = () => {}, onSave = null }) {
             <input
               type="number"
               value={vals.customers_lost}
-              onChange={e => setVals({ ...vals, customers_lost: Number(e.target.value) })}
+              onChange={e => setVals({ ...vals, customers_lost: parseNumber(e.target.value) })}
+              min="0"
+              step="1"
               style={{
                 padding: '8px 12px',
                 border: '1px solid #E5E7EB',
@@ -176,7 +214,9 @@ function KpiEditor({ initial = {}, onClose = () => {}, onSave = null }) {
             <input
               type="number"
               value={vals.customers_gained}
-              onChange={e => setVals({ ...vals, customers_gained: Number(e.target.value) })}
+              onChange={e => setVals({ ...vals, customers_gained: parseNumber(e.target.value) })}
+              min="0"
+              step="1"
               style={{
                 padding: '8px 12px',
                 border: '1px solid #E5E7EB',
@@ -190,7 +230,9 @@ function KpiEditor({ initial = {}, onClose = () => {}, onSave = null }) {
             <input
               type="number"
               value={vals.tanks_set}
-              onChange={e => setVals({ ...vals, tanks_set: Number(e.target.value) })}
+              onChange={e => setVals({ ...vals, tanks_set: parseNumber(e.target.value) })}
+              min="0"
+              step="1"
               style={{
                 padding: '8px 12px',
                 border: '1px solid #E5E7EB',
@@ -204,34 +246,36 @@ function KpiEditor({ initial = {}, onClose = () => {}, onSave = null }) {
         <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button
             onClick={onClose}
+            disabled={isSaving}
             style={{
               padding: '8px 16px',
               border: '1px solid #E5E7EB',
               borderRadius: 8,
               background: 'white',
-              cursor: 'pointer',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
               fontSize: 14,
               fontWeight: 600,
+              opacity: isSaving ? 0.5 : 1,
             }}
           >
             Cancel
           </button>
           <button
-            onClick={async () => {
-              if (onSave) await onSave(vals);
-            }}
+            onClick={handleSave}
+            disabled={isSaving}
             style={{
               padding: '8px 16px',
               border: 'none',
               borderRadius: 8,
               background: '#0B6E99',
               color: 'white',
-              cursor: 'pointer',
+              cursor: isSaving ? 'not-allowed' : 'pointer',
               fontSize: 14,
               fontWeight: 600,
+              opacity: isSaving ? 0.5 : 1,
             }}
           >
-            Save
+            {isSaving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>
