@@ -7,6 +7,7 @@ import DashboardControls from "../DashboardControls";
 import CompanyHealthCard from "../CompanyHealthCard";
 import { fetchDashboardKpis, upsertDashboardKpis } from '../../lib/dashboardKpis';
 import { DASHBOARD_SQUARES } from '../../config/dashboardSquares';
+import { getBillboardSummary } from '../../lib/fetchMetricsClient';
 
 function Card({ title, value, sub, right, style, children, trend = null, trendColor = "#16A34A" }) {
   return (
@@ -375,11 +376,72 @@ export default function ExecutiveDashboard() {
   const [kpiEditorOpen, setKpiEditorOpen] = useState(false);
   // C-Store gallons data
   const [cStoreGallons, setCStoreGallons] = useState([]);
+  // Billboard data state (serverless aggregator)
+  const [billboardData, setBillboardData] = useState(null);
+  const [loadingBillboard, setLoadingBillboard] = useState(true);
 
   useEffect(() => { setFromTo(rangePreset(preset)); }, [preset]);
 
-  // Load dashboard KPIs on mount
+  // Load billboard summary from serverless aggregator on mount
   useEffect(() => {
+    let mounted = true;
+    async function loadBillboard() {
+      setLoadingBillboard(true);
+      try {
+        // 1) Prefer serverless aggregator via fetchMetricsClient
+        const { data: payload, error } = await getBillboardSummary();
+        if (payload && !error && mounted) {
+          // Store the billboard payload
+          setBillboardData(payload);
+          
+          // Update dashboard KPIs if present in payload
+          if (payload.dashboardKpis) {
+            setDashboardKpis(payload.dashboardKpis);
+          }
+          
+          // Update c-store gallons if present
+          if (payload.cStoreGallons) {
+            setCStoreGallons(payload.cStoreGallons);
+          }
+          
+          console.log('[ExecutiveDashboard] Billboard data loaded successfully', {
+            serviceRevenue: payload.serviceTracking?.completedRevenue,
+            deliveryRevenue: payload.deliveryTickets?.revenue,
+            cStoreCount: payload.cStoreGallons?.length,
+          });
+        } else {
+          console.warn('[ExecutiveDashboard] getBillboardSummary returned error or empty payload', error);
+          // Fallback: Load KPIs directly if billboard fails
+          try {
+            const k = await fetchDashboardKpis();
+            if (mounted) setDashboardKpis(k);
+          } catch (e) {
+            console.warn('[ExecutiveDashboard] fallback dashboard kpis load failed', e);
+          }
+        }
+      } catch (e) {
+        console.warn('[ExecutiveDashboard] Error loading billboard data:', e);
+        // Fallback: Load KPIs directly
+        try {
+          const k = await fetchDashboardKpis();
+          if (mounted) setDashboardKpis(k);
+        } catch (fallbackError) {
+          console.warn('[ExecutiveDashboard] fallback dashboard kpis load failed', fallbackError);
+        }
+      } finally {
+        if (mounted) setLoadingBillboard(false);
+      }
+    }
+
+    loadBillboard();
+    return () => { mounted = false; };
+  }, []); // Run once on mount
+
+  // Load dashboard KPIs on mount (fallback if billboard doesn't provide them)
+  useEffect(() => {
+    // Skip if we already have KPIs from billboard
+    if (dashboardKpis !== null) return;
+    
     async function loadKpis() {
       try {
         const k = await fetchDashboardKpis();
@@ -389,7 +451,7 @@ export default function ExecutiveDashboard() {
       }
     }
     loadKpis();
-  }, []);
+  }, [dashboardKpis]);
 
   useEffect(() => {
     let mounted = true;
@@ -714,23 +776,41 @@ export default function ExecutiveDashboard() {
   const grandRevenue = (agg.svcCompletedRevenue || 0) + (agg.deliveriesTotals?.revenue || 0);
 
   // Prepare data for DASHBOARD_SQUARES
-  const dashboardSquaresData = {
-    cStoreGallons: cStoreGallons.map(r => ({ 
-      storeId: r.store_id, 
-      weekEnding: r.week_ending, 
-      totalGallons: Number(r.total_gallons || 0),
-      total_gallons: Number(r.total_gallons || 0) // support both formats
-    })),
-    serviceTracking: {
-      completedRevenue: agg.svcCompletedRevenue || 0,
-    },
-    dashboardKpis: dashboardKpis || {
-      current_tanks: 0,
-      customers_lost: 0,
-      customers_gained: 0,
-      tanks_set: 0,
-    },
-  };
+  // Prefer billboard data (serverless aggregator) if available, otherwise use aggregated data
+  const dashboardSquaresData = useMemo(() => {
+    // Use billboard data if available (serverless aggregator provides this week's data)
+    if (billboardData) {
+      return {
+        cStoreGallons: billboardData.cStoreGallons || [],
+        serviceTracking: billboardData.serviceTracking || { completedRevenue: 0 },
+        dashboardKpis: billboardData.dashboardKpis || {
+          current_tanks: 0,
+          customers_lost: 0,
+          customers_gained: 0,
+          tanks_set: 0,
+        },
+      };
+    }
+    
+    // Fallback to aggregated data from date range queries
+    return {
+      cStoreGallons: cStoreGallons.map(r => ({ 
+        storeId: r.store_id, 
+        weekEnding: r.week_ending, 
+        totalGallons: Number(r.total_gallons || 0),
+        total_gallons: Number(r.total_gallons || 0) // support both formats
+      })),
+      serviceTracking: {
+        completedRevenue: agg.svcCompletedRevenue || 0,
+      },
+      dashboardKpis: dashboardKpis || {
+        current_tanks: 0,
+        customers_lost: 0,
+        customers_gained: 0,
+        tanks_set: 0,
+      },
+    };
+  }, [billboardData, cStoreGallons, agg.svcCompletedRevenue, dashboardKpis]);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
