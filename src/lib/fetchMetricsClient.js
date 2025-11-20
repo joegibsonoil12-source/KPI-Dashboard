@@ -214,12 +214,24 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
   };
 }
 
-/* Replace getBillboardSummary() with this implementation. It:
-   - tries serverless aggregator first (/.netlify/functions/billboard-summary)
-   - falls back to direct aggregation from service_jobs, delivery_tickets, cstore_gallons, dashboard_kpis
-   - returns the same JSON schema the UI expects
-*/
+/**
+ * Helper function to extract gallons from a delivery ticket record
+ * Prefers gallons_delivered field, falls back to qty if not available
+ * @param {Object} record - Delivery ticket record
+ * @returns {number} - Gallons value
+ */
+function getGallonsFromTicket(record) {
+  return Number(record.gallons_delivered != null ? record.gallons_delivered : record.qty || 0) || 0;
+}
 
+/**
+ * Get billboard summary (this week vs last week)
+ * 
+ * This function tries the serverless aggregator first, then falls back to direct aggregation
+ * from service_jobs, delivery_tickets, cstore_gallons, and dashboard_kpis.
+ * 
+ * @returns {Promise<Object>} - { data, error } where data contains the billboard payload
+ */
 export async function getBillboardSummary() {
   // Prefer serverless aggregator (resilient, has service role)
   try {
@@ -327,8 +339,7 @@ export async function getBillboardSummary() {
     let deliverySummary = { totalTickets: 0, totalGallons: 0, revenue: 0 };
     (deliveryRows || []).forEach(r => {
       deliverySummary.totalTickets += 1;
-      const gallons = Number(r.gallons_delivered != null ? r.gallons_delivered : r.qty || 0) || 0;
-      deliverySummary.totalGallons += gallons;
+      deliverySummary.totalGallons += getGallonsFromTicket(r);
       deliverySummary.revenue += Number(r.amount || 0) || 0;
     });
 
@@ -350,10 +361,10 @@ export async function getBillboardSummary() {
     // 4) Dashboard KPIs row (if present)
     let dashboardKpis = { current_tanks: 0, customers_lost: 0, customers_gained: 0, tanks_set: 0 };
     try {
-      const { data, error } = await supabase.from('dashboard_kpis').select('*').limit(1).single();
-      if (!error && data) {
-        dashboardKpis = data;
-      } else if (error) {
+      const { data, error } = await supabase.from('dashboard_kpis').select('*').limit(1);
+      if (!error && data && data.length > 0) {
+        dashboardKpis = data[0];
+      } else if (error && error.code !== 'PGRST116') {
         console.warn('[fetchMetricsClient] dashboard_kpis fetch warning:', error);
       }
     } catch (e) { console.warn('[fetchMetricsClient] dashboard_kpis fetch error:', e); }
@@ -365,54 +376,43 @@ export async function getBillboardSummary() {
     const lastWeekEnd = new Date(thisWeekEnd);
     lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
 
-    // last week summaries (reuse helpers by making queries again, but to keep it simple
-    // we approximate by running the same fetchServiceTrackingSummary / fetchDeliveryTicketsSummary helpers if present)
+    // last week summaries - use custom queries to handle gallons_delivered field
     let lastWeekService = { completed: 0, completedRevenue: 0, scheduledJobs: 0, scheduledRevenue: 0 };
     let lastWeekDelivery = { totalTickets: 0, totalGallons: 0, revenue: 0 };
     try {
-      // attempt helper functions if present
-      if (typeof fetchServiceTrackingSummary === 'function') {
-        lastWeekService = await fetchServiceTrackingSummary(lastWeekStart, lastWeekEnd);
-      } else {
-        // fallback - quick aggregation by querying table
-        const { data: sdata } = await supabase
-          .from('service_jobs')
-          .select('status, job_amount, job_date')
-          .gte('job_date', fmt(lastWeekStart))
-          .lte('job_date', fmt(lastWeekEnd));
-        const tmp = { completed:0, completedRevenue:0, scheduledJobs:0, scheduledRevenue:0 };
-        (sdata || []).forEach(r => {
-          const amount = Number(r.job_amount || 0) || 0;
-          const status = String(r.status || '').toLowerCase();
-          if (status === 'completed') {
-            tmp.completed += 1;
-            tmp.completedRevenue += amount;
-          } else if (['scheduled','assigned','confirmed','in_progress'].includes(status)) {
-            tmp.scheduledJobs += 1;
-            tmp.scheduledRevenue += amount;
-          }
-        });
-        lastWeekService = tmp;
-      }
+      // Service jobs for last week
+      const { data: sdata } = await supabase
+        .from('service_jobs')
+        .select('status, job_amount, job_date')
+        .gte('job_date', fmt(lastWeekStart))
+        .lte('job_date', fmt(lastWeekEnd));
+      
+      (sdata || []).forEach(r => {
+        const amount = Number(r.job_amount || 0) || 0;
+        const status = String(r.status || '').toLowerCase();
+        if (status === 'completed') {
+          lastWeekService.completed += 1;
+          lastWeekService.completedRevenue += amount;
+        } else if (status === 'scheduled' || status === 'assigned' || status === 'confirmed' || status === 'in_progress') {
+          lastWeekService.scheduledJobs += 1;
+          lastWeekService.scheduledRevenue += amount;
+        }
+      });
 
-      if (typeof fetchDeliveryTicketsSummary === 'function') {
-        lastWeekDelivery = await fetchDeliveryTicketsSummary(lastWeekStart, lastWeekEnd);
-      } else {
-        const { data: ddata } = await supabase
-          .from('delivery_tickets')
-          .select('qty, gallons_delivered, amount, date')
-          .gte('date', fmt(lastWeekStart))
-          .lte('date', fmt(lastWeekEnd));
-        const tmpd = { totalTickets:0, totalGallons:0, revenue:0 };
-        (ddata || []).forEach(r => {
-          tmpd.totalTickets += 1;
-          tmpd.totalGallons += Number(r.gallons_delivered != null ? r.gallons_delivered : r.qty || 0) || 0;
-          tmpd.revenue += Number(r.amount || 0) || 0;
-        });
-        lastWeekDelivery = tmpd;
-      }
+      // Delivery tickets for last week
+      const { data: ddata } = await supabase
+        .from('delivery_tickets')
+        .select('qty, gallons_delivered, amount, date')
+        .gte('date', fmt(lastWeekStart))
+        .lte('date', fmt(lastWeekEnd));
+      
+      (ddata || []).forEach(r => {
+        lastWeekDelivery.totalTickets += 1;
+        lastWeekDelivery.totalGallons += getGallonsFromTicket(r);
+        lastWeekDelivery.revenue += Number(r.amount || 0) || 0;
+      });
     } catch (e) {
-      console.warn('[fetchMetricsClient] lastWeek fallback error:', e);
+      console.warn('[fetchMetricsClient] lastWeek aggregation error:', e);
     }
 
     const thisWeekTotalRevenue = (serviceSummary.completedRevenue || 0) + (deliverySummary.revenue || 0);
