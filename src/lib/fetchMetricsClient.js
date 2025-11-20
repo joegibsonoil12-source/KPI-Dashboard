@@ -12,6 +12,9 @@
 
 import { supabase } from './supabaseClient';
 
+// PostgreSQL error code for "no rows returned" - acceptable for optional data
+const POSTGRES_NO_ROWS_ERROR = 'PGRST116';
+
 /**
  * Mock data for fallback when Supabase is unavailable
  */
@@ -227,6 +230,7 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
 
 /**
  * Helper function to check if a status should be counted as scheduled
+ * Includes: scheduled, assigned, confirmed, in_progress
  * @param {string} status - Job status (case-insensitive)
  * @returns {boolean} - True if status represents a scheduled job
  */
@@ -392,8 +396,8 @@ export async function getBillboardSummary() {
       const { data, error } = await supabase.from('dashboard_kpis').select('*').limit(1);
       if (!error && data && data.length > 0) {
         dashboardKpis = data[0];
-      } else if (error && error.code !== 'PGRST116') {
-        // PGRST116 = no rows returned, which is acceptable for optional data
+      } else if (error && error.code !== POSTGRES_NO_ROWS_ERROR) {
+        // POSTGRES_NO_ROWS_ERROR = no rows returned, which is acceptable for optional data
         console.warn('[fetchMetricsClient] dashboard_kpis fetch warning:', error);
       }
     } catch (e) { console.warn('[fetchMetricsClient] dashboard_kpis fetch error:', e); }
