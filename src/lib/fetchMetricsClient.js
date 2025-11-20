@@ -385,10 +385,10 @@ export async function getBillboardSummary() {
           const amount = Number(r.job_amount || 0) || 0;
           const status = String(r.status || '').toLowerCase();
           if (status === 'completed') {
-            tmp.completed ++;
+            tmp.completed += 1;
             tmp.completedRevenue += amount;
           } else if (['scheduled','assigned','confirmed','in_progress'].includes(status)) {
-            tmp.scheduledJobs ++;
+            tmp.scheduledJobs += 1;
             tmp.scheduledRevenue += amount;
           }
         });
