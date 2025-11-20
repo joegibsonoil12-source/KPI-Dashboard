@@ -30,8 +30,9 @@ export async function upsertJobsFromImport(rows, { findJobByExternalId, createJo
     const zip = (row.zip || row.postal_code || '').toString().trim();
 
     if (!existing) {
-      // New job - create with suggested date
-      const suggestedDate = recommendDate(zip, jobType);
+      // New job - create with suggested date (only if auto_schedule is enabled)
+      const autoSchedule = row.auto_schedule !== false; // Default to true
+      const suggestedDate = autoSchedule ? recommendDate(zip, jobType) : null;
       const job = await createJob({
         external_id: externalId,
         customer_name: row.customer_name || row.customer,
@@ -42,6 +43,7 @@ export async function upsertJobsFromImport(rows, { findJobByExternalId, createJo
         suggested_date: suggestedDate,
         status: 'unscheduled',
         is_estimate: jobType === 'estimate',
+        auto_schedule: autoSchedule,
       });
 
       if (!job.scheduled_date) newJobsNeedingSchedule.push(job);
@@ -70,8 +72,9 @@ export async function upsertJobsFromImport(rows, { findJobByExternalId, createJo
       }
       await updateJob(existing.id, updatedFields);
     } else {
-      // Not yet scheduled → safe to (re)compute suggestion
-      const suggestedDate = recommendDate(zip, jobType);
+      // Not yet scheduled → safe to (re)compute suggestion (only if auto_schedule is enabled)
+      const autoSchedule = existing.auto_schedule !== false; // Respect existing preference
+      const suggestedDate = autoSchedule ? recommendDate(zip, jobType) : null;
       await updateJob(existing.id, { ...updatedFields, suggested_date: suggestedDate });
       newJobsNeedingSchedule.push(await findJobById(existing.id));
     }
