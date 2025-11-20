@@ -5,6 +5,7 @@ import DonutChart from "../charts/DonutChart";
 import BarBreakdown from "../charts/BarBreakdown";
 import DashboardControls from "../DashboardControls";
 import CompanyHealthCard from "../CompanyHealthCard";
+import { fetchDashboardKpis, upsertDashboardKpis } from '../../lib/dashboardKpis';
 
 function Card({ title, value, sub, right, style, children, trend = null, trendColor = "#16A34A" }) {
   return (
@@ -110,6 +111,134 @@ function HBars({ rows = [] }) {
 
 function toISO(d) { return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
 
+// KPI Editor Modal Component
+function KpiEditor({ initial = {}, onClose = () => {}, onSave = null }) {
+  const [vals, setVals] = useState({
+    current_tanks: initial.current_tanks || 0,
+    customers_lost: initial.customers_lost || 0,
+    customers_gained: initial.customers_gained || 0,
+    tanks_set: initial.tanks_set || 0,
+  });
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+    }}>
+      <div style={{
+        background: 'white',
+        borderRadius: 12,
+        padding: 24,
+        maxWidth: 600,
+        width: '90%',
+        boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+      }}>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: 18, fontWeight: 700 }}>Edit Dashboard KPIs</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>Current Tanks</span>
+            <input
+              type="number"
+              value={vals.current_tanks}
+              onChange={e => setVals({ ...vals, current_tanks: Number(e.target.value) })}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #E5E7EB',
+                borderRadius: 8,
+                fontSize: 14,
+              }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>Customers Lost</span>
+            <input
+              type="number"
+              value={vals.customers_lost}
+              onChange={e => setVals({ ...vals, customers_lost: Number(e.target.value) })}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #E5E7EB',
+                borderRadius: 8,
+                fontSize: 14,
+              }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>Customers Gained</span>
+            <input
+              type="number"
+              value={vals.customers_gained}
+              onChange={e => setVals({ ...vals, customers_gained: Number(e.target.value) })}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #E5E7EB',
+                borderRadius: 8,
+                fontSize: 14,
+              }}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#6B7280' }}>Tanks Set</span>
+            <input
+              type="number"
+              value={vals.tanks_set}
+              onChange={e => setVals({ ...vals, tanks_set: Number(e.target.value) })}
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #E5E7EB',
+                borderRadius: 8,
+                fontSize: 14,
+              }}
+            />
+          </label>
+        </div>
+
+        <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '8px 16px',
+              border: '1px solid #E5E7EB',
+              borderRadius: 8,
+              background: 'white',
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={async () => {
+              if (onSave) await onSave(vals);
+            }}
+            style={{
+              padding: '8px 16px',
+              border: 'none',
+              borderRadius: 8,
+              background: '#0B6E99',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Normalize status values to standard set: completed, scheduled, in_progress, canceled
 function normalizeStatus(status) {
   if (!status) return "scheduled"; // default for empty status
@@ -196,8 +325,24 @@ export default function ExecutiveDashboard() {
   const [productData, setProductData] = useState([]);
   // NEW: grouping for deliveries chart
   const [delivGroup, setDelivGroup] = useState("day"); // 'day' | 'week' | 'month' | 'year'
+  // KPI editor state
+  const [dashboardKpis, setDashboardKpis] = useState(null);
+  const [kpiEditorOpen, setKpiEditorOpen] = useState(false);
 
   useEffect(() => { setFromTo(rangePreset(preset)); }, [preset]);
+
+  // Load dashboard KPIs on mount
+  useEffect(() => {
+    async function loadKpis() {
+      try {
+        const k = await fetchDashboardKpis();
+        setDashboardKpis(k);
+      } catch (e) {
+        console.warn('[ExecutiveDashboard] failed to load dashboard kpis', e);
+      }
+    }
+    loadKpis();
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -486,10 +631,10 @@ export default function ExecutiveDashboard() {
     const estimatesLostValue = estimates.reduce((a, b) => a + (Number(b.lost_value) || 0), 0);
     
     // Tank metrics (placeholder - will be 0 until tank tracking is implemented)
-    const currentTanks = 0;
-    const customersLost = 0;
-    const customersGained = 0;
-    const tanksSet = 0;
+    const currentTanks = dashboardKpis?.current_tanks || 0;
+    const customersLost = dashboardKpis?.customers_lost || 0;
+    const customersGained = dashboardKpis?.customers_gained || 0;
+    const tanksSet = dashboardKpis?.tanks_set || 0;
 
     return {
       serviceDays, serviceCompletedRevenueByDay, serviceSeriesStatus,
@@ -504,7 +649,7 @@ export default function ExecutiveDashboard() {
       // Tank metrics
       currentTanks, customersLost, customersGained, tanksSet,
     };
-  }, [serviceDaily, serviceTechs, tickets, delivGroup]);
+  }, [serviceDaily, serviceTechs, tickets, delivGroup, dashboardKpis]);
 
   const usd = (n) => "$" + Math.round(n||0).toLocaleString();
   const num = (n) => (n||0).toLocaleString();
@@ -588,32 +733,52 @@ export default function ExecutiveDashboard() {
       </div>
 
       {/* Tank KPIs Row */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16, marginTop:16 }}>
-        <Card 
-          title="Current Tanks" 
-          value={num(agg.currentTanks)} 
-          sub="In inventory"
-        />
-        
-        <Card 
-          title="Customers Lost" 
-          value={num(agg.customersLost)} 
-          sub="This period"
-          style={{ borderColor: "#FEE2E2" }}
-        />
-        
-        <Card 
-          title="Customers Gained" 
-          value={num(agg.customersGained)} 
-          sub="This period"
-          style={{ borderColor: "#DCFCE7" }}
-        />
-        
-        <Card 
-          title="Tanks Set" 
-          value={num(agg.tanksSet)} 
-          sub="Installed"
-        />
+      <div style={{ marginTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#6B7280' }}>Tank KPIs</h3>
+          <button
+            onClick={() => setKpiEditorOpen(true)}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #E5E7EB',
+              borderRadius: 8,
+              background: 'white',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+              color: '#0B6E99',
+            }}
+          >
+            Edit KPIs
+          </button>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16 }}>
+          <Card 
+            title="Current Tanks" 
+            value={num(agg.currentTanks)} 
+            sub="In inventory"
+          />
+          
+          <Card 
+            title="Customers Lost" 
+            value={num(agg.customersLost)} 
+            sub="This period"
+            style={{ borderColor: "#FEE2E2" }}
+          />
+          
+          <Card 
+            title="Customers Gained" 
+            value={num(agg.customersGained)} 
+            sub="This period"
+            style={{ borderColor: "#DCFCE7" }}
+          />
+          
+          <Card 
+            title="Tanks Set" 
+            value={num(agg.tanksSet)} 
+            sub="Installed"
+          />
+        </div>
       </div>
 
       {/* Main Charts Row */}
@@ -751,6 +916,20 @@ export default function ExecutiveDashboard() {
           </div>
         </Card>
       </Section>
+
+      {/* KPI Editor Modal */}
+      {kpiEditorOpen && (
+        <KpiEditor
+          initial={dashboardKpis || {}}
+          onClose={() => setKpiEditorOpen(false)}
+          onSave={async (vals) => {
+            await upsertDashboardKpis(vals);
+            const k = await fetchDashboardKpis();
+            setDashboardKpis(k);
+            setKpiEditorOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

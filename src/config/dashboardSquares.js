@@ -25,11 +25,32 @@ export const DASHBOARD_SQUARES = [
     compute: (data) => Number(data.serviceTracking?.completedRevenue || 0),
     format: 'currency',
   },
-  // Add your new custom squares here:
-  // {
-  //   key: 'myNewMetric',
-  //   label: 'My New Metric',
-  //   compute: data => ...,
-  //   format: 'number' | 'currency' | 'gallons'
-  // }
+
+  // KPI cards persisted in dashboard_kpis
+  {
+    key: 'currentTanks',
+    label: 'Current Tanks',
+    compute: (data) => (data.dashboardKpis?.current_tanks || 0),
+    format: 'number',
+  },
+  {
+    key: 'customersLost',
+    label: 'Customers Lost',
+    compute: (data) => (data.dashboardKpis?.customers_lost || 0),
+    format: 'number',
+  },
+  {
+    key: 'customersGained',
+    label: 'Customers Gained',
+    compute: (data) => (data.dashboardKpis?.customers_gained || 0),
+    format: 'number',
+  },
+  {
+    key: 'tanksSet',
+    label: 'Tanks Set',
+    compute: (data) => (data.dashboardKpis?.tanks_set || 0),
+    format: 'number',
+  },
+
+  // Add your new custom squares here...
 ];
