@@ -43,16 +43,8 @@ export async function fetchDashboardKpis() {
 
 /**
  * Upsert dashboard KPI values
- * Assumes a single-row table with a fixed ID (e.g., id=1) or uses upsert without conflict
  */
 export async function upsertDashboardKpis(values = {}) {
-  // First, try to get existing row to get its ID
-  const { data: existing } = await supabase
-    .from('dashboard_kpis')
-    .select('id')
-    .limit(1)
-    .single();
-
   const payload = {
     current_tanks: values.current_tanks || 0,
     customers_lost: values.customers_lost || 0,
@@ -61,15 +53,9 @@ export async function upsertDashboardKpis(values = {}) {
     updated_at: new Date().toISOString(),
   };
 
-  // If row exists, include ID for update; otherwise insert new row
-  if (existing?.id) {
-    payload.id = existing.id;
-  }
-
-  // Upsert (requires the DB table to exist)
   const { data, error } = await supabase
     .from('dashboard_kpis')
-    .upsert(payload);
+    .upsert(payload, { onConflict: ['id'] });
 
   if (error) {
     console.error('[dashboardKpis] upsert error', error);
