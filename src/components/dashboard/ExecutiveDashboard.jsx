@@ -438,12 +438,45 @@ export default function ExecutiveDashboard() {
         } else if (payload && !error && isEmptyBillboard(payload)) {
           // Billboard payload present but empty — force Supabase fallback
           console.warn('[ExecutiveDashboard] Billboard payload present but empty — forcing Supabase fallback');
-          // Fallback: Load KPIs directly if billboard is empty
+          
+          // Try the server-side API endpoint as fallback (uses service role for better permissions)
           try {
-            const k = await fetchDashboardKpis();
-            if (mounted) setDashboardKpis(k);
+            const fallbackResp = await fetch('/api/billboard-summary', { cache: 'no-store' });
+            if (fallbackResp && fallbackResp.ok) {
+              const fallbackPayload = await fallbackResp.json();
+              
+              if (fallbackPayload && !isEmptyBillboard(fallbackPayload) && mounted) {
+                console.log('[ExecutiveDashboard] Billboard loaded via Supabase fallback API');
+                setBillboardData(fallbackPayload);
+                
+                if (fallbackPayload.dashboardKpis) {
+                  setDashboardKpis(fallbackPayload.dashboardKpis);
+                }
+                
+                if (fallbackPayload.cStoreGallons) {
+                  setCStoreGallons(fallbackPayload.cStoreGallons);
+                }
+              } else {
+                // Fallback API also returned empty, load KPIs directly
+                console.warn('[ExecutiveDashboard] Supabase fallback API also returned empty, loading KPIs only');
+                const k = await fetchDashboardKpis();
+                if (mounted) setDashboardKpis(k);
+              }
+            } else {
+              // Fallback API failed, load KPIs directly
+              console.warn('[ExecutiveDashboard] Supabase fallback API failed, loading KPIs only');
+              const k = await fetchDashboardKpis();
+              if (mounted) setDashboardKpis(k);
+            }
           } catch (e) {
-            console.warn('[ExecutiveDashboard] fallback dashboard kpis load failed', e);
+            console.warn('[ExecutiveDashboard] Error calling Supabase fallback API:', e);
+            // Last resort: Load KPIs directly
+            try {
+              const k = await fetchDashboardKpis();
+              if (mounted) setDashboardKpis(k);
+            } catch (kpiErr) {
+              console.warn('[ExecutiveDashboard] fallback dashboard kpis load failed', kpiErr);
+            }
           }
         } else {
           console.warn('[ExecutiveDashboard] getBillboardSummary returned error or empty payload', error);
