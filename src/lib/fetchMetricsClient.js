@@ -87,6 +87,36 @@ const EMPTY_DATA = {
 };
 
 /**
+ * Detect if a billboard payload is empty (all zeros, no meaningful data)
+ * Used to determine if serverless function returned placeholder/empty data
+ * and fallback to Supabase aggregation is needed
+ * @param {Object} payload - Billboard payload to check
+ * @returns {boolean} - True if payload is empty/placeholder
+ */
+function isEmptyBillboard(payload) {
+  if (!payload) return true;
+  
+  // Check key numeric metrics - if all are zero, consider it empty
+  const numericChecks = [
+    Number(payload.serviceTracking?.completed || 0),
+    Number(payload.serviceTracking?.completedRevenue || 0),
+    Number(payload.deliveryTickets?.totalTickets || 0),
+    Number(payload.deliveryTickets?.totalGallons || 0),
+    Number(payload.deliveryTickets?.revenue || 0),
+  ];
+  
+  const allZero = numericChecks.every(val => val === 0);
+  const noCStoreData = !payload.cStoreGallons || payload.cStoreGallons.length === 0;
+  const noKpiData = !payload.dashboardKpis || 
+    (payload.dashboardKpis.current_tanks === 0 && 
+     payload.dashboardKpis.customers_lost === 0 && 
+     payload.dashboardKpis.customers_gained === 0 && 
+     payload.dashboardKpis.tanks_set === 0);
+  
+  return allZero && noCStoreData && noKpiData;
+}
+
+/**
  * Get start of week (Monday) for a given date
  * @param {Date} date - Reference date
  * @returns {Date} - Start of week (Monday at 00:00:00)
@@ -272,8 +302,14 @@ export async function getBillboardSummary() {
       const ct = resp.headers.get('content-type') || '';
       if (ct.includes('application/json')) {
         const payload = await resp.json();
+        // Check if payload has expected keys AND is not empty (all zeros)
         if (payload && (payload.serviceTracking || payload.deliveryTickets || payload.cStoreGallons)) {
-          return { data: payload, error: null };
+          // Verify payload contains actual data, not just empty structure
+          if (!isEmptyBillboard(payload)) {
+            return { data: payload, error: null };
+          } else {
+            console.warn('[fetchMetricsClient] serverless returned empty payload (all zeros), falling back to Supabase aggregation');
+          }
         } else {
           console.warn('[fetchMetricsClient] serverless payload missing expected keys, falling back', payload);
         }
