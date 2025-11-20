@@ -216,174 +216,59 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
 
 /**
  * Get billboard summary (this week vs last week)
- * Preference: use aggregate views (service_jobs_daily and delivery_tickets_daily) if available.
- * Falls back to per-table aggregation if views are missing or error.
+ * Preference: use serverless aggregator first, then fall back to Supabase direct aggregation.
  *
  * @returns {Promise<Object>} - { data, error }
  */
 export async function getBillboardSummary() {
+  // 1) Prefer the serverless aggregator which has appropriate DB access and is fault-tolerant.
   try {
-    // If Supabase is not configured, return mock data
+    const resp = await fetch('/.netlify/functions/billboard-summary', { cache: 'no-store' });
+    if (resp && resp.ok) {
+      const contentType = resp.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const payload = await resp.json();
+        if (payload && (payload.serviceTracking || payload.deliveryTickets || payload.cStoreGallons)) {
+          return { data: payload, error: null };
+        } else {
+          console.warn('[fetchMetricsClient] serverless payload did not contain expected properties, falling back to Supabase aggregation', payload);
+        }
+      } else {
+        console.warn('[fetchMetricsClient] serverless billboard returned non-json response, content-type=', contentType);
+      }
+    } else {
+      console.warn('[fetchMetricsClient] serverless billboard responded with status', resp && resp.status);
+    }
+  } catch (e) {
+    console.warn('[fetchMetricsClient] failed to fetch serverless billboard-summary (will fallback):', e);
+  }
+
+  // 2) Fallback: aggregate directly via Supabase (use existing helpers)
+  try {
     if (!supabase) {
       console.warn('[fetchMetricsClient] Supabase not configured, using mock data');
       return { data: MOCK_BILLBOARD_DATA, error: null };
     }
 
-    // compute week start (Monday) and end (Sunday) as YYYY-MM-DD
     const now = new Date();
     const thisWeekStartDate = getWeekStart(now);
     const thisWeekEndDate = getWeekEnd(now);
-    const thisWeekStart = thisWeekStartDate.toISOString().split('T')[0];
-    const thisWeekEnd = thisWeekEndDate.toISOString().split('T')[0];
 
-    // Try the aggregate views first
-    try {
-      const [
-        { data: svcRows = [], error: svcErr } = {},
-        { data: delRows = [], error: delErr } = {},
-      ] = await Promise.all([
-        supabase
-          .from('service_jobs_daily')
-          .select('day, job_count, revenue')
-          .gte('day', thisWeekStart)
-          .lte('day', thisWeekEnd),
-        supabase
-          .from('delivery_tickets_daily')
-          .select('day, ticket_count, total_gallons, revenue')
-          .gte('day', thisWeekStart)
-          .lte('day', thisWeekEnd),
-      ]);
+    // use helper functions already present in this file
+    const thisWeekService = await fetchServiceTrackingSummary(thisWeekStartDate, thisWeekEndDate);
+    const thisWeekDelivery = await fetchDeliveryTicketsSummary(thisWeekStartDate, thisWeekEndDate);
 
-      if (!svcErr && !delErr) {
-        // aggregate the week totals from the view rows
-        const thisWeekService = (svcRows || []).reduce(
-          (acc, r) => {
-            acc.completed = (acc.completed || 0) + (Number(r.job_count) || 0);
-            acc.completedRevenue = (acc.completedRevenue || 0) + (Number(r.revenue) || 0);
-            return acc;
-          },
-          { completed: 0, completedRevenue: 0 }
-        );
+    // compute last week
+    const lastWeekStart = new Date(thisWeekStartDate);
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+    const lastWeekEnd = new Date(thisWeekEndDate);
+    lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
 
-        const thisWeekDelivery = (delRows || []).reduce(
-          (acc, r) => {
-            acc.totalTickets = (acc.totalTickets || 0) + (Number(r.ticket_count) || 0);
-            acc.totalGallons = (acc.totalGallons || 0) + (Number(r.total_gallons) || 0);
-            acc.revenue = (acc.revenue || 0) + (Number(r.revenue) || 0);
-            return acc;
-          },
-          { totalTickets: 0, totalGallons: 0, revenue: 0 }
-        );
-
-        // last week range
-        const lastWeekStart = new Date(thisWeekStartDate);
-        lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-        const lastWeekEnd = new Date(thisWeekEndDate);
-        lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
-        const lastWeekStartStr = lastWeekStart.toISOString().split('T')[0];
-        const lastWeekEndStr = lastWeekEnd.toISOString().split('T')[0];
-
-        const [
-          { data: svcLastRows = [] } = {},
-          { data: delLastRows = [] } = {},
-        ] = await Promise.all([
-          supabase
-            .from('service_jobs_daily')
-            .select('day, job_count, revenue')
-            .gte('day', lastWeekStartStr)
-            .lte('day', lastWeekEndStr),
-          supabase
-            .from('delivery_tickets_daily')
-            .select('day, ticket_count, total_gallons, revenue')
-            .gte('day', lastWeekStartStr)
-            .lte('day', lastWeekEndStr),
-        ]);
-
-        const lastWeekService = (svcLastRows || []).reduce(
-          (acc, r) => {
-            acc.completed = (acc.completed || 0) + (Number(r.job_count) || 0);
-            acc.completedRevenue = (acc.completedRevenue || 0) + (Number(r.revenue) || 0);
-            return acc;
-          },
-          { completed: 0, completedRevenue: 0 }
-        );
-
-        const lastWeekDelivery = (delLastRows || []).reduce(
-          (acc, r) => {
-            acc.totalTickets = (acc.totalTickets || 0) + (Number(r.ticket_count) || 0);
-            acc.totalGallons = (acc.totalGallons || 0) + (Number(r.total_gallons) || 0);
-            acc.revenue = (acc.revenue || 0) + (Number(r.revenue) || 0);
-            return acc;
-          },
-          { totalTickets: 0, totalGallons: 0, revenue: 0 }
-        );
-
-        const thisWeekTotalRevenue = (thisWeekService.completedRevenue || 0) + (thisWeekDelivery.revenue || 0);
-        const lastWeekTotalRevenue = (lastWeekService.completedRevenue || 0) + (lastWeekDelivery.revenue || 0);
-
-        let percentChange = 0;
-        if (lastWeekTotalRevenue === 0) {
-          percentChange = thisWeekTotalRevenue > 0 ? 100 : 0;
-        } else {
-          percentChange = ((thisWeekTotalRevenue - lastWeekTotalRevenue) / lastWeekTotalRevenue) * 100;
-        }
-
-        const data = {
-          serviceTracking: thisWeekService,
-          deliveryTickets: thisWeekDelivery,
-          weekCompare: {
-            thisWeekTotalRevenue,
-            lastWeekTotalRevenue,
-            percentChange: parseFloat(percentChange.toFixed(1)),
-            scheduledJobs: thisWeekService.scheduledJobs || 0,
-            scheduledRevenue: thisWeekService.scheduledRevenue || 0,
-            lastWeekScheduledJobs: lastWeekService.scheduledJobs || 0,
-            lastWeekScheduledRevenue: lastWeekService.scheduledRevenue || 0,
-          },
-          lastUpdated: new Date().toISOString(),
-          debug: { usedView: true, viewRange: { start: thisWeekStart, end: thisWeekEnd } },
-        };
-
-        console.debug('[fetchMetricsClient] Billboard summary (view path):', {
-          scheduledJobs: data.weekCompare.scheduledJobs,
-          scheduledRevenue: data.weekCompare.scheduledRevenue,
-        });
-
-        return { data, error: null };
-      }
-
-      // If view query errors happened, fall back to per-table aggregator
-      console.warn('[fetchMetricsClient] One or both view queries returned errors, falling back to table-level summary', { svcErr, delErr });
-    } catch (err) {
-      // Views may not exist in DB; fall back
-      console.warn('[fetchMetricsClient] Error querying aggregate views, falling back to base table summaries', err);
-    }
-
-    // Fallback to the existing per-table aggregators
-    const nowDate = new Date();
-    const thisStart = getWeekStart(nowDate);
-    const thisEnd = getWeekEnd(nowDate);
-
-    const lastStart = new Date(thisStart);
-    lastStart.setDate(lastStart.getDate() - 7);
-    const lastEnd = new Date(thisEnd);
-    lastEnd.setDate(lastEnd.getDate() - 7);
-
-    const [
-      thisWeekService,
-      lastWeekService,
-      thisWeekDelivery,
-      lastWeekDelivery,
-    ] = await Promise.all([
-      fetchServiceTrackingSummary(thisStart, thisEnd),
-      fetchServiceTrackingSummary(lastStart, lastEnd),
-      fetchDeliveryTicketsSummary(thisStart, thisEnd),
-      fetchDeliveryTicketsSummary(lastStart, lastEnd),
-    ]);
+    const lastWeekService = await fetchServiceTrackingSummary(lastWeekStart, lastWeekEnd);
+    const lastWeekDelivery = await fetchDeliveryTicketsSummary(lastWeekStart, lastWeekEnd);
 
     const thisWeekTotalRevenue = (thisWeekService.completedRevenue || 0) + (thisWeekDelivery.revenue || 0);
     const lastWeekTotalRevenue = (lastWeekService.completedRevenue || 0) + (lastWeekDelivery.revenue || 0);
-
     let percentChange = 0;
     if (lastWeekTotalRevenue === 0) {
       percentChange = thisWeekTotalRevenue > 0 ? 100 : 0;
@@ -391,7 +276,31 @@ export async function getBillboardSummary() {
       percentChange = ((thisWeekTotalRevenue - lastWeekTotalRevenue) / lastWeekTotalRevenue) * 100;
     }
 
-    const data = {
+    // fetch c-store gallons and dashboard kpis to populate squares
+    let cStoreGallons = [];
+    try {
+      const { data: cData, error: cErr } = await supabase.from('cstore_gallons').select('store_id, week_ending, total_gallons');
+      if (!cErr && cData) cStoreGallons = (cData || []).map(r => ({ storeId: r.store_id, weekEnding: r.week_ending, totalGallons: Number(r.total_gallons || 0) }));
+      else if (cErr) console.warn('[fetchMetricsClient] cstore_gallons fetch error:', cErr);
+    } catch (e) {
+      console.warn('[fetchMetricsClient] error fetching cstore_gallons:', e);
+    }
+
+    let dashboardKpis = { current_tanks:0, customers_lost:0, customers_gained:0, tanks_set:0 };
+    try {
+      const { data: dk, error: ek } = await supabase.from('dashboard_kpis').select('*').limit(1).single();
+      if (!ek && dk) dashboardKpis = dk;
+      else if (ek) console.warn('[fetchMetricsClient] dashboard_kpis fetch warning:', ek);
+    } catch (e) {
+      console.warn('[fetchMetricsClient] error fetching dashboard_kpis:', e);
+    }
+
+    const dashboardSquares = {
+      totalGallonsAllStores: (cStoreGallons || []).reduce((s, r) => s + (Number(r.totalGallons) || 0), 0),
+      weeklyServiceRevenue: Number(thisWeekService?.completedRevenue || 0),
+    };
+
+    const payload = {
       serviceTracking: thisWeekService,
       deliveryTickets: thisWeekDelivery,
       weekCompare: {
@@ -403,31 +312,20 @@ export async function getBillboardSummary() {
         lastWeekScheduledJobs: lastWeekService.scheduledJobs || 0,
         lastWeekScheduledRevenue: lastWeekService.scheduledRevenue || 0,
       },
+      cStoreGallons,
+      dashboardSquares,
+      dashboardKpis,
       lastUpdated: new Date().toISOString(),
-      debug: { usedView: false, reason: 'fallback to per-table aggregators' },
     };
 
-    console.debug('[fetchMetricsClient] Billboard summary (fallback path):', {
-      scheduledJobs: data.weekCompare.scheduledJobs,
-      scheduledRevenue: data.weekCompare.scheduledRevenue,
-    });
-
-    return { data, error: null };
+    return { data: payload, error: null };
   } catch (error) {
-    console.error('[fetchMetricsClient] Error fetching billboard summary:', error);
-
+    console.error('[fetchMetricsClient] fallback aggregation error:', error);
     const errorMessage = error?.message || String(error || '');
-
-    // If the error is specifically about the missing is_estimate column,
-    // swallow it and return EMPTY_DATA with no error so the UI doesn't show
-    // the raw DB error string. This prevents the dashboard from being blocked
-    // while migrations are run.
     if (errorMessage.includes('is_estimate') || (errorMessage.includes('column') && errorMessage.includes('is_estimate'))) {
-      console.warn('[fetchMetricsClient] is_estimate related error detected; returning empty data until migration is applied');
+      console.warn('[fetchMetricsClient] is_estimate related error detected; returning EMPTY_DATA');
       return { data: EMPTY_DATA, error: null };
     }
-
-    // Otherwise return the error as before so the UI can show it.
     return { data: EMPTY_DATA, error: errorMessage };
   }
 }
