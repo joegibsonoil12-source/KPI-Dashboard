@@ -73,6 +73,7 @@ export async function upsertServiceJobs(rows, userId) {
     job_amount: row.job_amount || null,
     due_amount: row.due_amount || null,
     is_estimate: row.is_estimate || false,
+    auto_schedule: row.auto_schedule !== undefined ? row.auto_schedule : true, // Default to true for new jobs
     // Estimate-specific fields
     hcp_estimate_id: row.hcp_estimate_id || null,
     estimate_status: row.estimate_status || null,
