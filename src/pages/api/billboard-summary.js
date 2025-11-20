@@ -54,6 +54,8 @@ const EMPTY_DATA = {
     lastWeekScheduledJobs: 0,
     lastWeekScheduledRevenue: 0,
   },
+  cStoreGallons: [],
+  dashboardSquares: {},
   lastUpdated: new Date().toISOString(),
 };
 
@@ -123,6 +125,8 @@ function normalizeApiResponse(data) {
       lastWeekScheduledJobs: ensureNumber(data.weekCompare?.lastWeekScheduledJobs),
       lastWeekScheduledRevenue: ensureNumber(data.weekCompare?.lastWeekScheduledRevenue),
     },
+    cStoreGallons: Array.isArray(data.cStoreGallons) ? data.cStoreGallons : [],
+    dashboardSquares: data.dashboardSquares || {},
     lastUpdated: data.lastUpdated || new Date().toISOString(),
   };
 }

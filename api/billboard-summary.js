@@ -10,6 +10,32 @@ function safeNum(v, decimals = 0) {
   return decimals === 0 ? Math.round(n) : Number(n).toFixed(decimals);
 }
 
+/**
+ * Fetch C-Store gallons summary
+ */
+async function fetchCStoreGallonsSummary(supabase) {
+  try {
+    const { data, error } = await supabase
+      .from('cstore_gallons')
+      .select('store_id, week_ending, total_gallons')
+      .order('store_id', { ascending: true });
+
+    if (error) {
+      console.error('[Billboard] Error fetching c-store gallons:', error);
+      return [];
+    }
+
+    return (data || []).map(r => ({
+      storeId: r.store_id,
+      weekEnding: r.week_ending,
+      totalGallons: Number(r.total_gallons) || 0
+    }));
+  } catch (err) {
+    console.error('[Billboard] Exception fetching c-store gallons:', err);
+    return [];
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -17,7 +43,9 @@ export default async function handler(req, res) {
     return res.status(200).json({
       deliveryTickets: { totalTickets: 0, totalGallons: 0, revenue: 0 },
       serviceTracking: { completed: 0, completedRevenue: 0, pipelineRevenue: 0, scheduledJobs: 0, scheduledRevenue: 0 },
-      weekCompare: { percentChange: 0 }
+      weekCompare: { percentChange: 0 },
+      cStoreGallons: [],
+      dashboardSquares: {}
     });
   }
 
@@ -67,6 +95,9 @@ export default async function handler(req, res) {
     
     console.debug('[billboard-summary] Service data:', { scheduledJobs: service.scheduledJobs, scheduledRevenue: service.scheduledRevenue });
 
+    // Fetch C-Store gallons data
+    const cStoreGallons = await fetchCStoreGallonsSummary(supabase);
+
     const weekSql = `
       SELECT
         COALESCE(SUM(CASE WHEN DATE_TRUNC('week', created_at) = DATE_TRUNC('week', CURRENT_DATE) THEN amount ELSE 0 END),0) as this_week,
@@ -88,6 +119,12 @@ export default async function handler(req, res) {
       weekCompare.percentChange = Number(pct.toFixed(1));
     }
 
+    // Compute dashboard squares server-side
+    const dashboardSquares = {
+      totalGallonsAllStores: (cStoreGallons || []).reduce((s, r) => s + (Number(r.totalGallons) || 0), 0),
+      weeklyServiceRevenue: Number(service.completedRevenue || 0),
+    };
+
     const response = {
       deliveryTickets: {
         totalTickets: safeNum(delivery.totalTickets || 0, 0),
@@ -101,7 +138,9 @@ export default async function handler(req, res) {
         scheduledJobs: safeNum(service.scheduledJobs || 0, 0),
         scheduledRevenue: typeof service.scheduledRevenue === 'number' ? Number(service.scheduledRevenue.toFixed ? service.scheduledRevenue.toFixed(2) : Number(service.scheduledRevenue).toFixed(2)) : Number(safeNum(service.scheduledRevenue || 0, 2))
       },
-      weekCompare: { percentChange: Number(weekCompare.percentChange || 0) }
+      weekCompare: { percentChange: Number(weekCompare.percentChange || 0) },
+      cStoreGallons: cStoreGallons || [],
+      dashboardSquares: dashboardSquares || {}
     };
 
     return res.status(200).json(response);
@@ -110,7 +149,9 @@ export default async function handler(req, res) {
     return res.status(200).json({
       deliveryTickets: { totalTickets: 0, totalGallons: 0, revenue: 0 },
       serviceTracking: { completed: 0, completedRevenue: 0, pipelineRevenue: 0, scheduledJobs: 0, scheduledRevenue: 0 },
-      weekCompare: { percentChange: 0 }
+      weekCompare: { percentChange: 0 },
+      cStoreGallons: [],
+      dashboardSquares: {}
     });
   }
 }
