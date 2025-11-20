@@ -9,6 +9,30 @@ import { fetchDashboardKpis, upsertDashboardKpis } from '../../lib/dashboardKpis
 import { DASHBOARD_SQUARES } from '../../config/dashboardSquares';
 import { getBillboardSummary } from '../../lib/fetchMetricsClient';
 
+// Helper to detect empty/placeholder billboard payloads
+function isEmptyBillboard(payload) {
+  if (!payload) return true;
+  
+  // Quick heuristic: if key numeric metrics are all zero and cStore/dashboardKpis are empty, consider it empty
+  const numericChecks = [
+    Number(payload.serviceTracking?.completed || 0),
+    Number(payload.serviceTracking?.completedRevenue || 0),
+    Number(payload.deliveryTickets?.totalTickets || 0),
+    Number(payload.deliveryTickets?.totalGallons || 0),
+    Number(payload.deliveryTickets?.revenue || 0),
+  ];
+  
+  const allZero = numericChecks.every(val => val === 0);
+  const noCStoreData = !payload.cStoreGallons || payload.cStoreGallons.length === 0;
+  const noKpiData = !payload.dashboardKpis || 
+    (payload.dashboardKpis.current_tanks === 0 && 
+     payload.dashboardKpis.customers_lost === 0 && 
+     payload.dashboardKpis.customers_gained === 0 && 
+     payload.dashboardKpis.tanks_set === 0);
+  
+  return allZero && noCStoreData && noKpiData;
+}
+
 function Card({ title, value, sub, right, style, children, trend = null, trendColor = "#16A34A" }) {
   return (
     <div style={{ 
@@ -390,7 +414,9 @@ export default function ExecutiveDashboard() {
       try {
         // 1) Prefer serverless aggregator via fetchMetricsClient
         const { data: payload, error } = await getBillboardSummary();
-        if (payload && !error && mounted) {
+        
+        // Check if payload is empty/placeholder
+        if (payload && !error && !isEmptyBillboard(payload) && mounted) {
           // Store the billboard payload
           setBillboardData(payload);
           
@@ -409,6 +435,16 @@ export default function ExecutiveDashboard() {
             deliveryRevenue: payload.deliveryTickets?.revenue,
             cStoreCount: payload.cStoreGallons?.length,
           });
+        } else if (payload && !error && isEmptyBillboard(payload)) {
+          // Billboard payload present but empty — force Supabase fallback
+          console.warn('[ExecutiveDashboard] Billboard payload present but empty — forcing Supabase fallback');
+          // Fallback: Load KPIs directly if billboard is empty
+          try {
+            const k = await fetchDashboardKpis();
+            if (mounted) setDashboardKpis(k);
+          } catch (e) {
+            console.warn('[ExecutiveDashboard] fallback dashboard kpis load failed', e);
+          }
         } else {
           console.warn('[ExecutiveDashboard] getBillboardSummary returned error or empty payload', error);
           // Fallback: Load KPIs directly if billboard fails
