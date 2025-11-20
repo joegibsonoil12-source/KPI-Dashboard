@@ -314,6 +314,12 @@ async function aggregateBillboardData() {
     percentChange = ((thisWeekTotalRevenue - lastWeekTotalRevenue) / lastWeekTotalRevenue) * 100;
   }
 
+  // Compute dashboard squares server-side
+  const dashboardSquares = {
+    totalGallonsAllStores: (cStoreGallons || []).reduce((s, r) => s + (Number(r.totalGallons) || 0), 0),
+    weeklyServiceRevenue: Number(thisWeekService.completedRevenue || 0),
+  };
+
   return {
     serviceTracking: thisWeekService,
     deliveryTickets: thisWeekDelivery,
@@ -327,6 +333,7 @@ async function aggregateBillboardData() {
       lastWeekScheduledRevenue: lastWeekService.scheduledRevenue,
     },
     cStoreGallons,
+    dashboardSquares,
     lastUpdated: new Date().toISOString(),
   };
 }
