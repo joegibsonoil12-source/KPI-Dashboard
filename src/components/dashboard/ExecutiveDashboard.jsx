@@ -6,6 +6,7 @@ import BarBreakdown from "../charts/BarBreakdown";
 import DashboardControls from "../DashboardControls";
 import CompanyHealthCard from "../CompanyHealthCard";
 import { fetchDashboardKpis, upsertDashboardKpis } from '../../lib/dashboardKpis';
+import { DASHBOARD_SQUARES } from '../../config/dashboardSquares';
 
 function Card({ title, value, sub, right, style, children, trend = null, trendColor = "#16A34A" }) {
   return (
@@ -699,6 +700,20 @@ export default function ExecutiveDashboard() {
   const num = (n) => (n||0).toLocaleString();
   const grandRevenue = (agg.svcCompletedRevenue || 0) + (agg.deliveriesTotals?.revenue || 0);
 
+  // Prepare data for DASHBOARD_SQUARES
+  const dashboardSquaresData = {
+    cStoreGallons: [], // Placeholder - can be populated from c-store data if available
+    serviceTracking: {
+      completedRevenue: agg.svcCompletedRevenue || 0,
+    },
+    dashboardKpis: dashboardKpis || {
+      current_tanks: 0,
+      customers_lost: 0,
+      customers_gained: 0,
+      tanks_set: 0,
+    },
+  };
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
       {/* Date Range Controls */}
@@ -712,6 +727,46 @@ export default function ExecutiveDashboard() {
       />
 
       {err && <div style={{ color:"#b91c1c", fontSize:12, marginBottom:8, padding: 12, background: "#FEE2E2", borderRadius: 8 }}>{err}</div>}
+
+      {/* Dashboard Squares - Configurable KPI tiles */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#6B7280' }}>Key Performance Indicators</h3>
+          <button
+            onClick={() => setKpiEditorOpen(true)}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid #E5E7EB',
+              borderRadius: 8,
+              background: 'white',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: 600,
+              color: '#0B6E99',
+            }}
+          >
+            Edit KPIs
+          </button>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16 }}>
+          {DASHBOARD_SQUARES.map(square => {
+            const raw = square.compute(dashboardSquaresData);
+            const display = (() => {
+              switch (square.format) {
+                case 'currency':
+                  return `$${Number(raw || 0).toLocaleString()}`;
+                case 'gallons':
+                  return `${Number(raw || 0).toLocaleString()} gal`;
+                default:
+                  return Number(raw || 0).toLocaleString();
+              }
+            })();
+            return (
+              <Card key={square.key} title={square.label} value={display} />
+            );
+          })}
+        </div>
+      </div>
 
       {/* KPI Cards with Professional Styling */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16 }}>
@@ -774,55 +829,6 @@ export default function ExecutiveDashboard() {
           sub="Not converted"
           style={{ background: "linear-gradient(135deg, #DC2626 0%, #991B1B 100%)", color: "white", border: "none" }}
         />
-      </div>
-
-      {/* Tank KPIs Row */}
-      <div style={{ marginTop: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#6B7280' }}>Tank KPIs</h3>
-          <button
-            onClick={() => setKpiEditorOpen(true)}
-            style={{
-              padding: '6px 12px',
-              border: '1px solid #E5E7EB',
-              borderRadius: 8,
-              background: 'white',
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: 600,
-              color: '#0B6E99',
-            }}
-          >
-            Edit KPIs
-          </button>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:16 }}>
-          <Card 
-            title="Current Tanks" 
-            value={num(agg.currentTanks)} 
-            sub="In inventory"
-          />
-          
-          <Card 
-            title="Customers Lost" 
-            value={num(agg.customersLost)} 
-            sub="This period"
-            style={{ borderColor: "#FEE2E2" }}
-          />
-          
-          <Card 
-            title="Customers Gained" 
-            value={num(agg.customersGained)} 
-            sub="This period"
-            style={{ borderColor: "#DCFCE7" }}
-          />
-          
-          <Card 
-            title="Tanks Set" 
-            value={num(agg.tanksSet)} 
-            sub="Installed"
-          />
-        </div>
       </div>
 
       {/* Main Charts Row */}
