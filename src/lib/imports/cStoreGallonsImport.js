@@ -1,4 +1,11 @@
 // src/lib/imports/cStoreGallonsImport.js
+/**
+ * Robust C-Store gallons importer
+ * - Handles multiple week ending date patterns
+ * - Robust total gallons finder with fallbacks
+ * - Auto-slugs unmapped sheet names
+ * - Uses upsert to avoid duplicates on re-upload
+ */
 import * as XLSX from 'xlsx';
 import { findStoreBySheet } from '../../config/cStoreConfig';
 import { supabase } from '../supabaseClient';
