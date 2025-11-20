@@ -69,6 +69,17 @@ const EMPTY_DATA = {
     lastWeekScheduledJobs: 0,
     lastWeekScheduledRevenue: 0,
   },
+  cStoreGallons: [],
+  dashboardSquares: {
+    totalGallonsAllStores: 0,
+    weeklyServiceRevenue: 0,
+  },
+  dashboardKpis: {
+    current_tanks: 0,
+    customers_lost: 0,
+    customers_gained: 0,
+    tanks_set: 0,
+  },
   lastUpdated: new Date().toISOString(),
 };
 
@@ -221,7 +232,11 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
  * @returns {number} - Gallons value
  */
 function getGallonsFromTicket(record) {
-  return Number(record.gallons_delivered != null ? record.gallons_delivered : record.qty || 0) || 0;
+  // Prefer gallons_delivered if present, otherwise use qty
+  if (record.gallons_delivered != null) {
+    return Number(record.gallons_delivered) || 0;
+  }
+  return Number(record.qty) || 0;
 }
 
 /**
@@ -365,6 +380,7 @@ export async function getBillboardSummary() {
       if (!error && data && data.length > 0) {
         dashboardKpis = data[0];
       } else if (error && error.code !== 'PGRST116') {
+        // PGRST116 = no rows returned, which is acceptable for optional data
         console.warn('[fetchMetricsClient] dashboard_kpis fetch warning:', error);
       }
     } catch (e) { console.warn('[fetchMetricsClient] dashboard_kpis fetch error:', e); }
@@ -390,6 +406,7 @@ export async function getBillboardSummary() {
       (sdata || []).forEach(r => {
         const amount = Number(r.job_amount || 0) || 0;
         const status = String(r.status || '').toLowerCase();
+        // Use same status logic as current week for consistency
         if (status === 'completed') {
           lastWeekService.completed += 1;
           lastWeekService.completedRevenue += amount;
@@ -397,6 +414,7 @@ export async function getBillboardSummary() {
           lastWeekService.scheduledJobs += 1;
           lastWeekService.scheduledRevenue += amount;
         }
+        // Note: we don't track deferred/pipeline for lastWeek as it's only used for weekCompare
       });
 
       // Delivery tickets for last week
