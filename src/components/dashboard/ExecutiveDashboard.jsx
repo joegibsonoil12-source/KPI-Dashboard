@@ -373,6 +373,8 @@ export default function ExecutiveDashboard() {
   // KPI editor state
   const [dashboardKpis, setDashboardKpis] = useState(null);
   const [kpiEditorOpen, setKpiEditorOpen] = useState(false);
+  // C-Store gallons data
+  const [cStoreGallons, setCStoreGallons] = useState([]);
 
   useEffect(() => { setFromTo(rangePreset(preset)); }, [preset]);
 
@@ -479,6 +481,16 @@ export default function ExecutiveDashboard() {
           // Non-fatal - will compute client-side if view not available
         }
 
+        // Fetch C-Store gallons data
+        const { data: d7, error: e7 } = await supabase
+          .from('cstore_gallons')
+          .select('store_id, sheet_name, week_ending, total_gallons')
+          .order('store_id', { ascending: true });
+        if (e7) {
+          console.warn('Failed to load c-store gallons:', e7);
+          // Non-fatal - dashboard will still work without c-store data
+        }
+
         if (!mounted) return;
         
         // Filter tickets by date range (only used if we didn't get view data)
@@ -552,6 +564,7 @@ export default function ExecutiveDashboard() {
         setDeliveryDaily(Array.isArray(d4) ? d4 : []);
         setTruckData(trucks);
         setProductData(products);
+        setCStoreGallons(Array.isArray(d7) ? d7 : []);
       } catch (e) {
         console.error('Dashboard load error:', e);
         setErr(e?.message || String(e));
@@ -702,7 +715,12 @@ export default function ExecutiveDashboard() {
 
   // Prepare data for DASHBOARD_SQUARES
   const dashboardSquaresData = {
-    cStoreGallons: [], // Placeholder - can be populated from c-store data if available
+    cStoreGallons: cStoreGallons.map(r => ({ 
+      storeId: r.store_id, 
+      weekEnding: r.week_ending, 
+      totalGallons: Number(r.total_gallons || 0),
+      total_gallons: Number(r.total_gallons || 0) // support both formats
+    })),
     serviceTracking: {
       completedRevenue: agg.svcCompletedRevenue || 0,
     },

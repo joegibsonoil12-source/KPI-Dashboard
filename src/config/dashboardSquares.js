@@ -6,7 +6,11 @@
  * Each square:
  *  - has a key used in code
  *  - a label for the UI
- *  - and a `compute` function that pulls the value from the API payload
+ *  - a `compute` function that pulls the value from the API payload
+ *  - a format specifier: 'currency', 'gallons', 'number', etc.
+ * 
+ * Note: compute functions support both snake_case and camelCase field names
+ * for compatibility with different data sources.
  */
 
 export const DASHBOARD_SQUARES = [
@@ -15,7 +19,7 @@ export const DASHBOARD_SQUARES = [
     label: 'Total Gallons (All C-Stores)',
     compute: (data) => {
       const list = data.cStoreGallons || [];
-      return list.reduce((sum, row) => sum + (Number(row.totalGallons) || 0), 0);
+      return list.reduce((sum, row) => sum + (Number(row.totalGallons || row.total_gallons || 0)), 0);
     },
     format: 'gallons',
   },
