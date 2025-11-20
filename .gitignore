@@ -136,3 +136,4 @@ package-lock.json
 
 # Runtime config with secrets (generated from template)
 public/runtime-config.js
+push-branches.sh
