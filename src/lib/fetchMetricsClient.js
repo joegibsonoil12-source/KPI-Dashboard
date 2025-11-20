@@ -43,6 +43,36 @@ const MOCK_BILLBOARD_DATA = {
 };
 
 /**
+ * Empty data for when schema is incomplete (e.g., missing is_estimate column)
+ */
+const EMPTY_DATA = {
+  serviceTracking: {
+    completed: 0,
+    scheduled: 0,
+    deferred: 0,
+    completedRevenue: 0,
+    pipelineRevenue: 0,
+    scheduledJobs: 0,
+    scheduledRevenue: 0,
+  },
+  deliveryTickets: {
+    totalTickets: 0,
+    totalGallons: 0,
+    revenue: 0,
+  },
+  weekCompare: {
+    thisWeekTotalRevenue: 0,
+    lastWeekTotalRevenue: 0,
+    percentChange: 0,
+    scheduledJobs: 0,
+    scheduledRevenue: 0,
+    lastWeekScheduledJobs: 0,
+    lastWeekScheduledRevenue: 0,
+  },
+  lastUpdated: new Date().toISOString(),
+};
+
+/**
  * Get start of week (Monday) for a given date
  * @param {Date} date - Reference date
  * @returns {Date} - Start of week (Monday at 00:00:00)
@@ -384,8 +414,21 @@ export async function getBillboardSummary() {
 
     return { data, error: null };
   } catch (error) {
-    console.error('[fetchMetricsClient] Error in getBillboardSummary:', error);
-    return { data: MOCK_BILLBOARD_DATA, error: null };
+    console.error('[fetchMetricsClient] Error fetching billboard summary:', error);
+
+    const errorMessage = error?.message || String(error || '');
+
+    // If the error is specifically about the missing is_estimate column,
+    // swallow it and return EMPTY_DATA with no error so the UI doesn't show
+    // the raw DB error string. This prevents the dashboard from being blocked
+    // while migrations are run.
+    if (errorMessage.includes('is_estimate') || (errorMessage.includes('column') && errorMessage.includes('is_estimate'))) {
+      console.warn('[fetchMetricsClient] is_estimate related error detected; returning empty data until migration is applied');
+      return { data: EMPTY_DATA, error: null };
+    }
+
+    // Otherwise return the error as before so the UI can show it.
+    return { data: EMPTY_DATA, error: errorMessage };
   }
 }
 

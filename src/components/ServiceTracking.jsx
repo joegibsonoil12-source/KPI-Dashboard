@@ -8,6 +8,7 @@ import {
   getUniqueTechs,
   deleteServiceJob,
   checkServiceJobsTableExists,
+  checkServiceJobsHasIsEstimateColumn,
 } from "../lib/serviceHelpers";
 import ServiceUploadButton from "./Imports/ServiceUploadButton";
 
@@ -84,11 +85,31 @@ export default function ServiceTracking() {
     return data?.user?.id ?? null;
   }
   
-  // Load saved jobs from Supabase
+  // Load saved jobs from Supabase and normalize `is_estimate` when missing
   async function loadSaved() {
     const data = await fetchServiceJobs();
-    setJobs(data);
-    return data;
+
+    // Normalize rows so that even if the backend hasn't added the
+    // is_estimate column we still treat estimates correctly.
+    const normalized = (data || []).map(j => {
+      // If DB returned a boolean for is_estimate, keep it.
+      // Otherwise derive from the job_number prefix or presence of hcp_estimate_id.
+      let is_estimate;
+      if (typeof j.is_estimate === 'boolean') {
+        is_estimate = j.is_estimate;
+      } else {
+        const jobNum = String(j.job_number || '').toUpperCase();
+        is_estimate = jobNum.startsWith('EST-') || Boolean(j.hcp_estimate_id);
+      }
+
+      return {
+        ...j,
+        is_estimate,
+      };
+    });
+
+    setJobs(normalized);
+    return normalized;
   }
   
   // Handle reload: fetch jobs and summary
@@ -119,17 +140,26 @@ export default function ServiceTracking() {
       // Get current user
       const userId = await getCurrentUserId();
       setCurrentUserId(userId);
-      
+
       // Check if table exists
       const tableExists = await checkServiceJobsTableExists();
       if (!tableExists) {
         setSchemaError(true);
       }
-      
-      // Load jobs even if table doesn't exist (will show error if needed)
+
+      // Check for is_estimate column (if missing, we will still load rows but use
+      // client-side derivation so estimates show up)
+      const hasIsEstimate = await checkServiceJobsHasIsEstimateColumn();
+      if (!hasIsEstimate) {
+        // show a gentler banner telling operator to run migrations
+        setSchemaError(true);
+        console.warn('[ServiceTracking] is_estimate column not found; please run migration migrations/20251120_add_is_estimate_to_service_jobs.sql');
+      }
+
+      // Load jobs even if the schema is missing pieces; loadSaved() will normalize rows
       await handleReload();
     }
-    
+
     initialize();
   }, []);
   

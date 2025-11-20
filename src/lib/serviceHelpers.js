@@ -286,6 +286,40 @@ export async function checkServiceJobsTableExists() {
   }
 }
 
+// -----------------------------------------------------------------------------
+// New helper: check whether service_jobs has an `is_estimate` column.
+// This attempts a simple select of the column with limit 0; Postgres will
+// return an undefined_column error if the column doesn't exist. We catch that
+// and return false in that case.
+// -----------------------------------------------------------------------------
+export async function checkServiceJobsHasIsEstimateColumn() {
+  try {
+    const { data, error } = await supabase
+      .from('service_jobs')
+      .select('is_estimate')
+      .limit(0);
+
+    if (error) {
+      // Postgres error code 42703: undefined_column
+      if (error.code === '42703' || (error.message && error.message.includes('is_estimate'))) {
+        console.warn('[serviceHelpers] is_estimate column missing:', error.message || error);
+        return false;
+      }
+      // Re-throw other errors (permissions/auth, etc.)
+      throw error;
+    }
+
+    return true;
+  } catch (e) {
+    if (String(e?.message || '').includes('is_estimate')) {
+      console.warn('[serviceHelpers] is_estimate column missing (caught):', e.message);
+      return false;
+    }
+    console.warn('[serviceHelpers] Unexpected error checking is_estimate column:', e);
+    return false;
+  }
+}
+
 export default {
   dedupeByJobNumber,
   upsertServiceJobs,
@@ -294,4 +328,5 @@ export default {
   getUniqueTechs,
   deleteServiceJob,
   checkServiceJobsTableExists,
+  checkServiceJobsHasIsEstimateColumn,
 };
