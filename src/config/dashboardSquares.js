@@ -15,7 +15,7 @@ export const DASHBOARD_SQUARES = [
     label: 'Total Gallons (All C-Stores)',
     compute: (data) => {
       const list = data.cStoreGallons || [];
-      return list.reduce((sum, row) => sum + (Number(row.totalGallons) || 0), 0);
+      return list.reduce((sum, row) => sum + (Number(row.totalGallons || row.total_gallons || 0)), 0);
     },
     format: 'gallons',
   },
