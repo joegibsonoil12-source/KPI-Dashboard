@@ -226,6 +226,19 @@ async function fetchDeliveryTicketsSummary(startDate, endDate) {
 }
 
 /**
+ * Helper function to check if a status should be counted as scheduled
+ * @param {string} status - Job status (case-insensitive)
+ * @returns {boolean} - True if status represents a scheduled job
+ */
+function isScheduledStatus(status) {
+  const statusLower = String(status || '').toLowerCase();
+  return statusLower === 'scheduled' || 
+         statusLower === 'assigned' || 
+         statusLower === 'confirmed' || 
+         statusLower === 'in_progress';
+}
+
+/**
  * Helper function to extract gallons from a delivery ticket record
  * Prefers gallons_delivered field, falls back to qty if not available
  * @param {Object} record - Delivery ticket record
@@ -319,7 +332,7 @@ export async function getBillboardSummary() {
       if (status === 'completed') {
         serviceSummary.completed += 1;
         serviceSummary.completedRevenue += amount;
-      } else if (status === 'scheduled' || status === 'assigned' || status === 'confirmed' || status === 'in_progress') {
+      } else if (isScheduledStatus(status)) {
         serviceSummary.scheduled += 1;
         serviceSummary.pipelineRevenue += amount;
         serviceSummary.scheduledJobs += 1;
@@ -410,7 +423,7 @@ export async function getBillboardSummary() {
         if (status === 'completed') {
           lastWeekService.completed += 1;
           lastWeekService.completedRevenue += amount;
-        } else if (status === 'scheduled' || status === 'assigned' || status === 'confirmed' || status === 'in_progress') {
+        } else if (isScheduledStatus(status)) {
           lastWeekService.scheduledJobs += 1;
           lastWeekService.scheduledRevenue += amount;
         }
