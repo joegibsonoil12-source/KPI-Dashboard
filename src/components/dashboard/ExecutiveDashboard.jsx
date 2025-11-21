@@ -15,7 +15,7 @@ import { supabase } from "../../lib/supabaseClient";
  *
  * - Cards are draggable by their title bar; title follows drag.
  * - Sidebar allows toggling cards on/off and adding them to the layout.
- * - Layout persists to localStorage under key 'execdash_layout'.
+ * - Layout persists to localStorage under key 'execdash_layout_v1'.
  *
  * NOTE: This UI layer prefers aggregator-provided series. If series are missing
  * it falls back to a 30-day Supabase aggregation (same logic as earlier PR).
@@ -111,7 +111,7 @@ export default function ExecutiveDashboard() {
   }
 
   // simple label formatter
-  function fmtKeyLabel(k) {
+  function fmtKeyLabel(k, group) {
     if (!k && k !== 0) return "";
     if (typeof k === "string") return k;
     if (k instanceof Date) return k.toISOString().slice(0, 10);
@@ -374,15 +374,18 @@ export default function ExecutiveDashboard() {
 
   // --- Sidebar card picker handlers ---
   function toggleVisibility(cardId) {
+    const wasVisible = visible[cardId];
     setVisible(prev => ({ ...prev, [cardId]: !prev[cardId] }));
     // if becoming visible and not in layout, push to end
-    setLayout(prev => {
-      if (!prev.includes(cardId) && !visible[cardId]) {
-        return [...prev, cardId];
-      }
-      // if hiding, keep in layout (but we will not render it) — user may prefer complete removal.
-      return prev;
-    });
+    if (!wasVisible) {
+      setLayout(prev => {
+        if (!prev.includes(cardId)) {
+          return [...prev, cardId];
+        }
+        return prev;
+      });
+    }
+    // if hiding, keep in layout (but we will not render it) — user may prefer complete removal.
   }
 
   function removeCard(cardId) {
