@@ -374,18 +374,22 @@ export default function ExecutiveDashboard() {
 
   // --- Sidebar card picker handlers ---
   function toggleVisibility(cardId) {
-    const wasVisible = visible[cardId];
-    setVisible(prev => ({ ...prev, [cardId]: !prev[cardId] }));
-    // if becoming visible and not in layout, push to end
-    if (!wasVisible) {
-      setLayout(prev => {
-        if (!prev.includes(cardId)) {
-          return [...prev, cardId];
-        }
-        return prev;
-      });
-    }
-    // if hiding, keep in layout (but we will not render it) — user may prefer complete removal.
+    setVisible(prev => {
+      const newVisibility = !prev[cardId];
+      const wasVisible = prev[cardId];
+      
+      // if becoming visible and not in layout, push to end
+      if (!wasVisible && newVisibility) {
+        setLayout(prevLayout => {
+          if (!prevLayout.includes(cardId)) {
+            return [...prevLayout, cardId];
+          }
+          return prevLayout;
+        });
+      }
+      
+      return { ...prev, [cardId]: newVisibility };
+    });
   }
 
   function removeCard(cardId) {
