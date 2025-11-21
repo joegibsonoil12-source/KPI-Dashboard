@@ -338,7 +338,7 @@ export default function ExecutiveDashboard() {
     e.preventDefault();
     const fromIndex = dragIndexRef.current;
     const toIndex = index;
-    if (fromIndex == null || toIndex == null) {
+    if (fromIndex === null || toIndex === null) {
       // fallback: try reading dataTransfer
       const dt = e.dataTransfer.getData("text/plain");
       if (dt) {
@@ -616,13 +616,10 @@ export default function ExecutiveDashboard() {
                   aria-grabbed={isDragging}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden style={{ opacity: 0.6 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-label="Drag to reorder">
                       <path d="M10 6h.01M14 6h.01M10 12h.01M14 12h.01M10 18h.01M14 18h.01" stroke="#6B7280" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
                     <div style={{ fontWeight: 700 }}>{meta.title}</div>
-                    <div style={{ marginLeft: 8, fontSize: 12, color: "#6B7280" }}>
-                      {/* small hint */}
-                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
