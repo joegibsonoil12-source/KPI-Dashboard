@@ -171,6 +171,10 @@ export default function ExecutiveDashboard() {
     customers_gained: 0,
     tanks_set: 0
   };
+  
+  // Maximum number of entries to display in time-series charts
+  const MAX_CHART_ENTRIES = 30;
+  
   //
   // --- lightweight chart helpers & safe "agg" mapping ---
   //
@@ -417,10 +421,10 @@ export default function ExecutiveDashboard() {
         <Section title="Service Jobs by Status">
           <Card>
             <BarBreakdown
-              categories={(agg.serviceDays || []).slice(-30)}
+              categories={(agg.serviceDays || []).slice(-MAX_CHART_ENTRIES)}
               series={(agg.serviceSeriesStatus || []).map((s) => ({
                 name: s.name,
-                data: (s.values || s.data || []).slice(-30),
+                data: (s.values || s.data || []).slice(-MAX_CHART_ENTRIES),
               }))}
               height={280}
               stacked={true}
@@ -452,10 +456,10 @@ export default function ExecutiveDashboard() {
         >
           <Card>
             <BarBreakdown
-              categories={((agg.ticketsBuckets || []).map((k) => fmtKeyLabel(k, delivGroup))).slice(-30)}
+              categories={((agg.ticketsBuckets || []).map((k) => fmtKeyLabel(k, delivGroup))).slice(-MAX_CHART_ENTRIES)}
               series={(agg.deliveriesSeriesStatus || []).map((s) => ({
                 name: s.name,
-                data: (s.values || s.data || []).slice(-30),
+                data: (s.values || s.data || []).slice(-MAX_CHART_ENTRIES),
               }))}
               height={280}
               stacked={true}
